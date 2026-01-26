@@ -59,6 +59,13 @@ serial.no_ports_found: "未找到串口。请连接设备或使用 -p 参数指�
 serial.multiple_ports: "发现多个串口。请使用 -p 参数指定端口或禁用 --non-interactive 选项。"
 serial.no_ports_available: "没有可用的串口。"
 
+# 重试消息
+retry.connection_attempt: "连接尝试 %{attempt}/%{max}"
+retry.connection_failed: "连接失败 (第 %{attempt}/%{max} 次): %{error}"
+retry.download_failed: "%{name} 下载失败 (第 %{attempt}/%{max} 次): %{error}"
+retry.port_open_failed: "打开端口 %{port} 失败 (第 %{attempt}/%{max} 次): %{error}"
+retry.retrying: "重试中..."
+
 # 错误消息
 error.load_firmware: "加载固件失败: %{path}"
 error.crc_failed: "固件 CRC 校验失败"
@@ -66,3 +73,5 @@ error.read_loaderboot: "读取 LoaderBoot 失败: %{path}"
 error.read_binary: "读取二进制文件失败: %{path}"
 error.open_port: "打开串口失败: %{port}"
 error.serial_error: "串口错误"
+error.connection_exhausted: "经过 %{max} 次尝试后连接失败"
+error.download_exhausted: "经过 %{max} 次重试后下载失败"

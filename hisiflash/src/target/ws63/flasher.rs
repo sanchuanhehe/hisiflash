@@ -8,7 +8,7 @@ use crate::error::{Error, Result};
 use crate::image::fwpkg::Fwpkg;
 use crate::protocol::ymodem::{YmodemConfig, YmodemTransfer};
 use crate::target::ws63::protocol::{CommandFrame, DEFAULT_BAUD, contains_handshake_ack};
-use log::{debug, info, trace};
+use log::{debug, info, trace, warn};
 use std::io::{Read, Write};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -21,6 +21,18 @@ const COMMAND_DELAY: Duration = Duration::from_millis(50);
 
 /// Delay after changing baud rate.
 const BAUD_CHANGE_DELAY: Duration = Duration::from_millis(100);
+
+/// Maximum number of connection attempts.
+const MAX_CONNECT_ATTEMPTS: usize = 7;
+
+/// Maximum number of attempts to open serial port.
+const MAX_OPEN_PORT_ATTEMPTS: usize = 3;
+
+/// Delay between connection retry attempts.
+const CONNECT_RETRY_DELAY: Duration = Duration::from_millis(500);
+
+/// Maximum number of download retry attempts.
+const MAX_DOWNLOAD_RETRIES: usize = 3;
 
 /// WS63 flasher.
 pub struct Ws63Flasher {
@@ -38,8 +50,8 @@ impl Ws63Flasher {
     /// * `port_name` - Serial port name (e.g., "/dev/ttyUSB0" or "COM3")
     /// * `baud` - Target baud rate for data transfer
     pub fn new(port_name: &str, baud: u32) -> Result<Self> {
-        // Open port at default baud rate for handshake
-        let port = SerialPort::open(port_name, DEFAULT_BAUD)?;
+        // Open port at default baud rate for handshake, with retry
+        let port = Self::open_port_with_retry(port_name, DEFAULT_BAUD)?;
 
         Ok(Self {
             port,
@@ -47,6 +59,34 @@ impl Ws63Flasher {
             late_baud: false,
             verbose: 0,
         })
+    }
+
+    /// Open serial port with retry mechanism.
+    fn open_port_with_retry(port_name: &str, baud: u32) -> Result<SerialPort> {
+        let mut last_error = None;
+
+        for attempt in 1..=MAX_OPEN_PORT_ATTEMPTS {
+            match SerialPort::open(port_name, baud) {
+                Ok(port) => {
+                    if attempt > 1 {
+                        debug!("Port opened on attempt {attempt}");
+                    }
+                    return Ok(port);
+                }
+                Err(e) => {
+                    warn!(
+                        "Failed to open port {port_name} (attempt {attempt}/{MAX_OPEN_PORT_ATTEMPTS}): {e}"
+                    );
+                    last_error = Some(e);
+
+                    if attempt < MAX_OPEN_PORT_ATTEMPTS {
+                        thread::sleep(CONNECT_RETRY_DELAY);
+                    }
+                }
+            }
+        }
+
+        Err(last_error.unwrap_or(Error::DeviceNotFound))
     }
 
     /// Set late baud rate change mode.
@@ -69,11 +109,39 @@ impl Ws63Flasher {
     /// Connect to the device.
     ///
     /// This waits for the device to boot into download mode and performs
-    /// the initial handshake.
+    /// the initial handshake with retry mechanism.
     pub fn connect(&mut self) -> Result<()> {
         info!("Waiting for device on {}...", self.port.name());
         info!("Please reset the device to enter download mode.");
 
+        for attempt in 1..=MAX_CONNECT_ATTEMPTS {
+            if attempt > 1 {
+                info!("Connection attempt {attempt}/{MAX_CONNECT_ATTEMPTS}");
+            }
+
+            match self.try_connect() {
+                Ok(()) => {
+                    return Ok(());
+                }
+                Err(e) => {
+                    if attempt < MAX_CONNECT_ATTEMPTS {
+                        warn!("Connection failed (attempt {attempt}/{MAX_CONNECT_ATTEMPTS}): {e}");
+                        thread::sleep(CONNECT_RETRY_DELAY);
+                        self.port.clear()?;
+                    } else {
+                        return Err(e);
+                    }
+                }
+            }
+        }
+
+        Err(Error::Timeout(format!(
+            "Connection failed after {MAX_CONNECT_ATTEMPTS} attempts"
+        )))
+    }
+
+    /// Single connection attempt.
+    fn try_connect(&mut self) -> Result<()> {
         self.port.clear()?;
 
         let start = Instant::now();
@@ -241,9 +309,49 @@ impl Ws63Flasher {
         Ok(())
     }
 
-    /// Download a single binary to flash.
+    /// Download a single binary to flash with retry mechanism.
     #[allow(clippy::cast_possible_truncation)]
     fn download_binary<F>(
+        &mut self,
+        name: &str,
+        data: &[u8],
+        addr: u32,
+        progress: &mut F,
+    ) -> Result<()>
+    where
+        F: FnMut(&str, usize, usize),
+    {
+        let mut last_error = None;
+
+        for attempt in 1..=MAX_DOWNLOAD_RETRIES {
+            match self.try_download_binary(name, data, addr, progress) {
+                Ok(()) => {
+                    return Ok(());
+                }
+                Err(e) => {
+                    if attempt < MAX_DOWNLOAD_RETRIES {
+                        warn!(
+                            "Download failed for {name} (attempt {attempt}/{MAX_DOWNLOAD_RETRIES}): {e}"
+                        );
+                        warn!("Retrying...");
+                        last_error = Some(e);
+
+                        // Clear buffers and wait before retry
+                        let _ = self.port.clear();
+                        thread::sleep(CONNECT_RETRY_DELAY);
+                    } else {
+                        return Err(e);
+                    }
+                }
+            }
+        }
+
+        Err(last_error.unwrap_or(Error::Protocol("Download failed".into())))
+    }
+
+    /// Single attempt to download a binary.
+    #[allow(clippy::cast_possible_truncation)]
+    fn try_download_binary<F>(
         &mut self,
         name: &str,
         data: &[u8],

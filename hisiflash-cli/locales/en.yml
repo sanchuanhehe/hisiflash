@@ -59,6 +59,13 @@ serial.no_ports_found: "No serial ports found. Please connect a device or specif
 serial.multiple_ports: "Multiple serial ports found. Use -p to specify a port or disable --non-interactive."
 serial.no_ports_available: "No serial ports available."
 
+# Retry messages
+retry.connection_attempt: "Connection attempt %{attempt}/%{max}"
+retry.connection_failed: "Connection failed (attempt %{attempt}/%{max}): %{error}"
+retry.download_failed: "Download failed for %{name} (attempt %{attempt}/%{max}): %{error}"
+retry.port_open_failed: "Failed to open port %{port} (attempt %{attempt}/%{max}): %{error}"
+retry.retrying: "Retrying..."
+
 # Errors
 error.load_firmware: "Failed to load firmware: %{path}"
 error.crc_failed: "Firmware CRC verification failed"
@@ -66,3 +73,5 @@ error.read_loaderboot: "Failed to read LoaderBoot: %{path}"
 error.read_binary: "Failed to read binary: %{path}"
 error.open_port: "Failed to open serial port: %{port}"
 error.serial_error: "Serial port error"
+error.connection_exhausted: "Connection failed after %{max} attempts"
+error.download_exhausted: "Download failed after %{max} retries"

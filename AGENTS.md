@@ -105,9 +105,21 @@ hisiflash/
 | `protocol::ymodem` | YMODEM-1K file transfer protocol |
 | `connection::detect` | USB VID/PID based port auto-detection (CH340, CP210x, FTDI, etc.) |
 | `target::chip` | Chip family abstraction (WS63, BS2X, etc.) |
+| `target::ws63::flasher` | WS63 flasher with retry mechanisms |
 | `image::fwpkg` | FWPKG firmware package parser |
 | `cli::config` | TOML configuration loading/saving (local + global) |
 | `cli::serial` | Interactive serial port selection with dialoguer |
+
+### Retry Mechanism Constants
+
+Located in `hisiflash/src/target/ws63/flasher.rs`:
+
+| Constant | Value | Description |
+|----------|-------|-------------|
+| `MAX_CONNECT_ATTEMPTS` | 7 | Connection retry count |
+| `MAX_OPEN_PORT_ATTEMPTS` | 3 | Serial port open retry count |
+| `MAX_DOWNLOAD_RETRIES` | 3 | Download retry count |
+| `CONNECT_RETRY_DELAY` | 500ms | Delay between retries |
 
 ### SEBOOT Protocol Overview
 
