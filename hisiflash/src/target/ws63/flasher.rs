@@ -1,15 +1,46 @@
 //! WS63 flasher implementation.
 //!
 //! This module provides the main flasher interface for the WS63 chip.
+//!
+//! ## Generic Port Support
+//!
+//! The flasher uses a generic `Port` trait, allowing it to work with different
+//! serial port implementations:
+//!
+//! - **Native platforms**: Uses the `serialport` crate via `NativePort`
+//! - **WASM/Web**: Can use Web Serial API via `WebSerialPort` (experimental)
+//!
+//! ## Example
+//!
+//! ```rust,no_run
+//! use hisiflash::{Ws63Flasher, Fwpkg};
+//! use hisiflash::port::{NativePort, SerialConfig};
+//!
+//! fn main() -> Result<(), Box<dyn std::error::Error>> {
+//!     // Open serial port
+//!     let config = SerialConfig::new("/dev/ttyUSB0", 115200);
+//!     let port = NativePort::open(&config)?;
+//!     
+//!     // Create flasher
+//!     let mut flasher = Ws63Flasher::new(port, 921600);
+//!     flasher.connect()?;
+//!     
+//!     // Flash firmware
+//!     let fwpkg = Fwpkg::from_file("firmware.fwpkg")?;
+//!     flasher.flash_fwpkg(&fwpkg, None, |name, current, total| {
+//!         println!("Flashing {}: {}/{}", name, current, total);
+//!     })?;
+//!     
+//!     Ok(())
+//! }
+//! ```
 
-use crate::connection::ConnectionPort;
-use crate::connection::serial::SerialPort;
 use crate::error::{Error, Result};
 use crate::image::fwpkg::Fwpkg;
+use crate::port::Port;
 use crate::protocol::ymodem::{YmodemConfig, YmodemTransfer};
 use crate::target::ws63::protocol::{CommandFrame, DEFAULT_BAUD, contains_handshake_ack};
 use log::{debug, info, trace, warn};
-use std::io::{Read, Write};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -22,71 +53,41 @@ const COMMAND_DELAY: Duration = Duration::from_millis(50);
 /// Delay after changing baud rate.
 const BAUD_CHANGE_DELAY: Duration = Duration::from_millis(100);
 
-/// Maximum number of connection attempts.
-const MAX_CONNECT_ATTEMPTS: usize = 7;
-
-/// Maximum number of attempts to open serial port.
-const MAX_OPEN_PORT_ATTEMPTS: usize = 3;
-
 /// Delay between connection retry attempts.
 const CONNECT_RETRY_DELAY: Duration = Duration::from_millis(500);
+
+/// Maximum number of connection attempts.
+const MAX_CONNECT_ATTEMPTS: usize = 7;
 
 /// Maximum number of download retry attempts.
 const MAX_DOWNLOAD_RETRIES: usize = 3;
 
 /// WS63 flasher.
-pub struct Ws63Flasher {
-    port: SerialPort,
+///
+/// Generic over the port type `P`, which must implement the `Port` trait.
+/// This allows the flasher to work with different serial port implementations.
+pub struct Ws63Flasher<P: Port> {
+    port: P,
     target_baud: u32,
     late_baud: bool,
     verbose: u8,
 }
 
-impl Ws63Flasher {
-    /// Create a new WS63 flasher.
+// Implementation for any Port type
+impl<P: Port> Ws63Flasher<P> {
+    /// Create a new WS63 flasher with an existing port.
     ///
     /// # Arguments
     ///
-    /// * `port_name` - Serial port name (e.g., "/dev/ttyUSB0" or "COM3")
-    /// * `baud` - Target baud rate for data transfer
-    pub fn new(port_name: &str, baud: u32) -> Result<Self> {
-        // Open port at default baud rate for handshake, with retry
-        let port = Self::open_port_with_retry(port_name, DEFAULT_BAUD)?;
-
-        Ok(Self {
+    /// * `port` - An opened serial port implementing the `Port` trait
+    /// * `target_baud` - Target baud rate for data transfer
+    pub fn new(port: P, target_baud: u32) -> Self {
+        Self {
             port,
-            target_baud: baud,
+            target_baud,
             late_baud: false,
             verbose: 0,
-        })
-    }
-
-    /// Open serial port with retry mechanism.
-    fn open_port_with_retry(port_name: &str, baud: u32) -> Result<SerialPort> {
-        let mut last_error = None;
-
-        for attempt in 1..=MAX_OPEN_PORT_ATTEMPTS {
-            match SerialPort::open(port_name, baud) {
-                Ok(port) => {
-                    if attempt > 1 {
-                        debug!("Port opened on attempt {attempt}");
-                    }
-                    return Ok(port);
-                },
-                Err(e) => {
-                    warn!(
-                        "Failed to open port {port_name} (attempt {attempt}/{MAX_OPEN_PORT_ATTEMPTS}): {e}"
-                    );
-                    last_error = Some(e);
-
-                    if attempt < MAX_OPEN_PORT_ATTEMPTS {
-                        thread::sleep(CONNECT_RETRY_DELAY);
-                    }
-                },
-            }
         }
-
-        Err(last_error.unwrap_or(Error::DeviceNotFound))
     }
 
     /// Set late baud rate change mode.
@@ -104,6 +105,21 @@ impl Ws63Flasher {
     pub fn with_verbose(mut self, verbose: u8) -> Self {
         self.verbose = verbose;
         self
+    }
+
+    /// Get a reference to the underlying port.
+    pub fn port(&self) -> &P {
+        &self.port
+    }
+
+    /// Get a mutable reference to the underlying port.
+    pub fn port_mut(&mut self) -> &mut P {
+        &mut self.port
+    }
+
+    /// Consume the flasher and return the underlying port.
+    pub fn into_port(self) -> P {
+        self.port
     }
 
     /// Connect to the device.
@@ -127,7 +143,7 @@ impl Ws63Flasher {
                     if attempt < MAX_CONNECT_ATTEMPTS {
                         warn!("Connection failed (attempt {attempt}/{MAX_CONNECT_ATTEMPTS}): {e}");
                         thread::sleep(CONNECT_RETRY_DELAY);
-                        self.port.clear()?;
+                        self.port.clear_buffers()?;
                     } else {
                         return Err(e);
                     }
@@ -142,7 +158,7 @@ impl Ws63Flasher {
 
     /// Single connection attempt.
     fn try_connect(&mut self) -> Result<()> {
-        self.port.clear()?;
+        self.port.clear_buffers()?;
 
         let start = Instant::now();
         let handshake_frame = CommandFrame::handshake(self.target_baud);
@@ -205,7 +221,7 @@ impl Ws63Flasher {
 
         // Clear buffers
         thread::sleep(BAUD_CHANGE_DELAY);
-        self.port.clear()?;
+        self.port.clear_buffers()?;
 
         debug!("Baud rate changed to {baud}");
         Ok(())
@@ -337,7 +353,7 @@ impl Ws63Flasher {
                         last_error = Some(e);
 
                         // Clear buffers and wait before retry
-                        let _ = self.port.clear();
+                        let _ = self.port.clear_buffers();
                         thread::sleep(CONNECT_RETRY_DELAY);
                     } else {
                         return Err(e);
@@ -444,6 +460,60 @@ impl Ws63Flasher {
         self.send_command(&frame)?;
 
         Ok(())
+    }
+}
+
+// Native-specific convenience functions
+#[cfg(feature = "native")]
+mod native_impl {
+    use super::{DEFAULT_BAUD, Duration, Error, Result, Ws63Flasher, debug, thread, warn};
+    use crate::port::{NativePort, SerialConfig};
+
+    impl Ws63Flasher<NativePort> {
+        /// Create a new WS63 flasher by opening a serial port.
+        ///
+        /// This is a convenience function for native platforms that opens
+        /// the port with default settings.
+        ///
+        /// # Arguments
+        ///
+        /// * `port_name` - Serial port name (e.g., "/dev/ttyUSB0" or "COM3")
+        /// * `target_baud` - Target baud rate for data transfer
+        pub fn open(port_name: &str, target_baud: u32) -> Result<Self> {
+            Self::open_with_retry(port_name, target_baud)
+        }
+
+        /// Open serial port with retry mechanism.
+        fn open_with_retry(port_name: &str, target_baud: u32) -> Result<Self> {
+            const MAX_OPEN_PORT_ATTEMPTS: usize = 3;
+            const OPEN_RETRY_DELAY: Duration = Duration::from_millis(500);
+
+            let mut last_error = None;
+
+            for attempt in 1..=MAX_OPEN_PORT_ATTEMPTS {
+                let config = SerialConfig::new(port_name, DEFAULT_BAUD);
+                match NativePort::open(&config) {
+                    Ok(port) => {
+                        if attempt > 1 {
+                            debug!("Port opened on attempt {attempt}");
+                        }
+                        return Ok(Self::new(port, target_baud));
+                    },
+                    Err(e) => {
+                        warn!(
+                            "Failed to open port {port_name} (attempt {attempt}/{MAX_OPEN_PORT_ATTEMPTS}): {e}"
+                        );
+                        last_error = Some(e);
+
+                        if attempt < MAX_OPEN_PORT_ATTEMPTS {
+                            thread::sleep(OPEN_RETRY_DELAY);
+                        }
+                    },
+                }
+            }
+
+            Err(last_error.unwrap_or(Error::DeviceNotFound))
+        }
     }
 }
 

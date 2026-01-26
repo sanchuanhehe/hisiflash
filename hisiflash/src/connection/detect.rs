@@ -31,6 +31,8 @@
 //! ```
 
 use crate::error::{Error, Result};
+
+#[cfg(feature = "native")]
 use log::{debug, info, trace};
 
 /// Known USB VID/PID combinations for HiSilicon development boards.
@@ -153,6 +155,7 @@ impl DetectedPort {
 }
 
 /// Detect all available serial ports with USB device information.
+#[cfg(feature = "native")]
 pub fn detect_ports() -> Vec<DetectedPort> {
     let mut result = Vec::new();
 
@@ -195,6 +198,12 @@ pub fn detect_ports() -> Vec<DetectedPort> {
     result
 }
 
+/// Detect all available serial ports (WASM stub - always returns empty).
+#[cfg(not(feature = "native"))]
+pub fn detect_ports() -> Vec<DetectedPort> {
+    Vec::new()
+}
+
 /// Detect ports that are likely HiSilicon development boards.
 pub fn detect_hisilicon_ports() -> Vec<DetectedPort> {
     detect_ports()
@@ -207,6 +216,7 @@ pub fn detect_hisilicon_ports() -> Vec<DetectedPort> {
 ///
 /// Returns the first port that matches a known USB device type.
 /// Prioritizes HiSilicon native USB over generic USB-UART bridges.
+#[cfg(feature = "native")]
 pub fn auto_detect_port() -> Result<DetectedPort> {
     let ports = detect_ports();
 
@@ -245,7 +255,20 @@ pub fn auto_detect_port() -> Result<DetectedPort> {
     Err(Error::DeviceNotFound)
 }
 
+/// Auto-detect a single HiSilicon port (WASM stub - not supported).
+#[cfg(not(feature = "native"))]
+pub fn auto_detect_port() -> Result<DetectedPort> {
+    Err(Error::Unsupported(
+        "Auto-detection is not available in WASM. Use the Web Serial API to request a port."
+            .to_string(),
+    ))
+}
+
 /// Find a port by name pattern.
+///
+/// Note: On WASM, this always returns `DeviceNotFound` since port enumeration
+/// is not available. Use the Web Serial API to request a port instead.
+#[cfg(feature = "native")]
 pub fn find_port_by_pattern(pattern: &str) -> Result<DetectedPort> {
     let ports = detect_ports();
 
@@ -253,6 +276,15 @@ pub fn find_port_by_pattern(pattern: &str) -> Result<DetectedPort> {
         .into_iter()
         .find(|p| p.name.contains(pattern))
         .ok_or(Error::DeviceNotFound)
+}
+
+/// Find a port by name pattern (WASM stub - not supported).
+#[cfg(not(feature = "native"))]
+pub fn find_port_by_pattern(_pattern: &str) -> Result<DetectedPort> {
+    Err(Error::Unsupported(
+        "Port enumeration is not available in WASM. Use the Web Serial API to request a port."
+            .to_string(),
+    ))
 }
 
 /// Format a list of detected ports for display.
@@ -281,6 +313,9 @@ pub fn format_port_list(ports: &[DetectedPort]) -> Vec<String> {
 }
 
 /// List all serial ports in a user-friendly format.
+///
+/// Note: On WASM, this always returns an empty list since port enumeration
+/// is not available without user interaction.
 pub fn list_ports_pretty() -> Vec<String> {
     let ports = detect_ports();
     format_port_list(&ports)
@@ -396,6 +431,7 @@ mod tests {
         assert!(!port_unknown.is_likely_hisilicon());
     }
 
+    #[cfg(feature = "native")]
     #[test]
     fn test_detect_ports_does_not_panic() {
         // Just make sure it doesn't panic and returns a valid result
@@ -404,6 +440,7 @@ mod tests {
         let _ = ports.len();
     }
 
+    #[cfg(feature = "native")]
     #[test]
     fn test_detect_hisilicon_ports() {
         // Should not panic and return filtered results
@@ -414,6 +451,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "native")]
     #[test]
     fn test_auto_detect_port_does_not_panic() {
         // Should not panic even if no ports found

@@ -454,7 +454,7 @@ fn cmd_flash(
     }
 
     // Create flasher
-    let mut flasher = Ws63Flasher::new(&port, cli.baud)?
+    let mut flasher = Ws63Flasher::open(&port, cli.baud)?
         .with_late_baud(late_baud)
         .with_verbose(cli.verbose);
 
@@ -563,7 +563,7 @@ fn cmd_write(
         );
     }
 
-    let mut flasher = Ws63Flasher::new(&port, cli.baud)?
+    let mut flasher = Ws63Flasher::open(&port, cli.baud)?
         .with_late_baud(late_baud)
         .with_verbose(cli.verbose);
 
@@ -617,7 +617,7 @@ fn cmd_erase(cli: &Cli, config: &mut Config, all: bool) -> Result<()> {
         );
     }
 
-    let mut flasher = Ws63Flasher::new(&port, cli.baud)?.with_verbose(cli.verbose);
+    let mut flasher = Ws63Flasher::open(&port, cli.baud)?.with_verbose(cli.verbose);
 
     if !cli.quiet {
         println!("{} {}", style("⏳").yellow(), t!("common.waiting_device"));

@@ -1,10 +1,17 @@
 //! Serial port connection abstraction.
+//!
+//! This module provides legacy connection types for backward compatibility.
+//! New code should use the `port` module instead.
 
 pub mod detect;
+
+#[cfg(feature = "native")]
 pub mod serial;
 
 // Re-export for convenience
 pub use detect::{DetectedPort, UsbDevice};
+
+#[cfg(feature = "native")]
 pub use serial::SerialPort;
 
 use crate::error::Result;
@@ -12,6 +19,8 @@ use std::io::{Read, Write};
 use std::time::Duration;
 
 /// Trait for connection ports (serial, TCP, etc.)
+///
+/// **Deprecated**: Use `port::Port` trait instead.
 pub trait ConnectionPort: Read + Write + Send {
     /// Set the read/write timeout.
     fn set_timeout(&mut self, timeout: Duration) -> Result<()>;
@@ -33,6 +42,7 @@ pub trait ConnectionPort: Read + Write + Send {
 }
 
 /// List available serial ports.
+#[cfg(feature = "native")]
 pub fn list_ports() -> Result<Vec<String>> {
     Ok(serial::SerialPort::list_ports()?
         .into_iter()
@@ -41,6 +51,7 @@ pub fn list_ports() -> Result<Vec<String>> {
 }
 
 /// Find the first available serial port matching a pattern.
+#[cfg(feature = "native")]
 pub fn find_port(pattern: Option<&str>) -> Result<String> {
     let ports = list_ports()?;
 

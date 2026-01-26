@@ -16,13 +16,37 @@ workspace = true
 [dependencies]
 thiserror.workspace = true
 log.workspace = true
-serialport.workspace = true
 byteorder.workspace = true
 serde = { workspace = true, optional = true }
 
+# Native serial port (default on non-WASM targets)
+serialport = { workspace = true, optional = true }
+
+# WASM dependencies (for Web Serial API support)
+web-sys = { version = "0.3", optional = true, features = [
+    "Navigator",
+    "Serial",
+    "SerialPort",
+    "SerialOptions",
+    "SerialPortInfo",
+    "ReadableStream",
+    "ReadableStreamDefaultReader",
+    "WritableStream",
+    "WritableStreamDefaultWriter",
+] }
+wasm-bindgen = { version = "0.2", optional = true }
+wasm-bindgen-futures = { version = "0.4", optional = true }
+js-sys = { version = "0.3", optional = true }
+
 [features]
-default = []
+default = ["native"]
 serde = ["dep:serde"]
+
+# Native platform support (Linux, macOS, Windows)
+native = ["dep:serialport"]
+
+# WASM/Web support (experimental)
+wasm = ["dep:web-sys", "dep:wasm-bindgen", "dep:wasm-bindgen-futures", "dep:js-sys"]
 
 [dev-dependencies]
 env_logger.workspace = true
