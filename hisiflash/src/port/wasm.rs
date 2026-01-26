@@ -64,13 +64,20 @@ impl WebSerialPort {
     ///
     /// This is the primary way to create a WebSerialPort in WASM,
     /// as port selection must be done via JavaScript user interaction.
-    #[cfg(feature = "wasm")]
+    ///
+    /// Note: This function is only available when targeting WASM and
+    /// when the Web Serial API becomes stable in web-sys.
+    #[cfg(all(feature = "wasm", target_arch = "wasm32"))]
     pub fn from_js_port(
-        _js_port: web_sys::SerialPort,
+        _js_port: js_sys::Object, // Use generic Object for now until web-sys stabilizes SerialPort
         name: String,
         baud_rate: u32,
     ) -> Result<Self> {
-        // TODO: Implement when web-sys support is added
+        // TODO: Implement when web-sys Web Serial API support is stable
+        // The Web Serial API types (Serial, SerialPort, etc.) are not yet
+        // available in stable web-sys. When they become available, this
+        // function will accept web_sys::SerialPort directly.
+        let _ = (_js_port, &name, baud_rate);
         Err(Error::Unsupported(
             "Web Serial API support is not yet implemented.".to_string(),
         ))
@@ -187,7 +194,11 @@ impl PortEnumerator for WebSerialPortEnumerator {
 ///
 /// This trait provides an async interface more suitable for the
 /// inherently async Web Serial API.
+///
+/// Note: This trait is intended for internal use within this crate.
+/// The `async fn` in traits warning is suppressed as we control all implementations.
 #[cfg(feature = "wasm")]
+#[allow(async_fn_in_trait)]
 pub trait AsyncPort {
     /// Read bytes asynchronously.
     async fn read_async(&mut self, buf: &mut [u8]) -> Result<usize>;
