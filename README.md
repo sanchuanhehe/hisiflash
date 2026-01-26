@@ -2,7 +2,8 @@
 
 一个跨平台的 HiSilicon 芯片烧录工具，使用 Rust 编写。灵感来自 [espflash](https://github.com/esp-rs/espflash) 和 [esptool](https://github.com/espressif/esptool)。
 
-[![Rust](https://img.shields.io/badge/rust-1.75%2B-orange.svg)](https://www.rust-lang.org/)
+[![CI](https://github.com/sanchuanhehe/hisiflash/actions/workflows/ci.yml/badge.svg)](https://github.com/sanchuanhehe/hisiflash/actions/workflows/ci.yml)
+[![Rust](https://img.shields.io/badge/rust-1.85%2B-orange.svg)](https://www.rust-lang.org/)
 [![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue.svg)](LICENSE)
 
 ## 特性
