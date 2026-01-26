@@ -165,17 +165,14 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libudev-dev
 
       - name: Publish hisiflash (library)
-        run: cargo publish -p hisiflash --dry-run
+        run: cargo publish -p hisiflash
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 
-      # Note: Uncomment below to actually publish
-      # - name: Publish hisiflash
-      #   run: cargo publish -p hisiflash
-      #   env:
-      #     CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-      #
-      # - name: Publish hisiflash-cli
-      #   run: cargo publish -p hisiflash-cli
-      #   env:
-      #     CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+      - name: Wait for crates.io index update
+        run: sleep 30
+
+      - name: Publish hisiflash-cli
+        run: cargo publish -p hisiflash-cli
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
