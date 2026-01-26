@@ -44,11 +44,21 @@ WS63 和 BS2X 系列使用相同的 SEBOOT 烧录协议。
 
 ## 安装
 
+### 使用 Cargo 安装（推荐）
+
+```bash
+# 从 crates.io 安装（发布后可用）
+cargo install hisiflash
+
+# 或使用 cargo-binstall 安装预编译二进制（更快）
+cargo binstall hisiflash
+```
+
 ### 从源码编译
 
 ```bash
 # 克隆仓库
-git clone https://github.com/example/hisiflash.git
+git clone https://github.com/sanchuanhehe/hisiflash.git
 cd hisiflash
 
 # 编译 release 版本
@@ -60,7 +70,33 @@ cargo install --path hisiflash-cli
 
 ### 二进制下载
 
-从 [Releases](https://github.com/example/hisiflash/releases) 页面下载预编译的二进制文件。
+从 [Releases](https://github.com/sanchuanhehe/hisiflash/releases) 页面下载预编译的二进制文件。
+
+### 安装 Shell 补全（可选）
+
+安装后，生成 shell 补全脚本以获得更好的命令行体验：
+
+```bash
+# Bash
+hisiflash completions bash >> ~/.bashrc
+
+# Zsh (方式一：添加到 .zshrc)
+hisiflash completions zsh >> ~/.zshrc
+
+# Zsh (方式二：使用补全目录)
+mkdir -p ~/.zfunc
+hisiflash completions zsh > ~/.zfunc/_hisiflash
+# 确保 ~/.zfunc 在 fpath 中，在 .zshrc 中添加: fpath=(~/.zfunc $fpath)
+
+# Fish
+mkdir -p ~/.config/fish/completions
+hisiflash completions fish > ~/.config/fish/completions/hisiflash.fish
+
+# PowerShell
+hisiflash completions powershell >> $PROFILE
+```
+
+重新打开终端或执行 `source ~/.bashrc`（或对应的配置文件）使补全生效。
 
 ## 快速开始
 
@@ -236,17 +272,16 @@ pid = 0x7523
 
 ## Shell 补全
 
-生成 Shell 补全脚本：
+详见 [安装 Shell 补全](#安装-shell-补全可选) 章节。
+
+生成补全脚本的基本命令：
 
 ```bash
-# Bash
-hisiflash completions bash > ~/.local/share/bash-completion/completions/hisiflash
+# 查看支持的 shell
+hisiflash completions --help
 
-# Zsh
-hisiflash completions zsh > ~/.zfunc/_hisiflash
-
-# Fish
-hisiflash completions fish > ~/.config/fish/completions/hisiflash.fish
+# 生成指定 shell 的补全脚本
+hisiflash completions <bash|zsh|fish|powershell|elvish>
 
 # PowerShell
 hisiflash completions powershell > _hisiflash.ps1
