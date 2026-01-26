@@ -87,5 +87,4 @@ directories = "6"
 byteorder = "1.5"
 
 # Internal crates
-hisiflash = { path = "hisiflash" }
-
+hisiflash = { version = "0.1.0", path = "hisiflash" }
