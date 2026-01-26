@@ -18,12 +18,17 @@ on:
       - '.gitignore'
       - 'AGENTS.md'
 
+# Cancel in-progress runs for the same branch/PR
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
 
 jobs:
-  # Check formatting
+  # Check formatting (fastest, run first)
   fmt:
     name: Rustfmt
     runs-on: ubuntu-latest
@@ -35,9 +40,10 @@ jobs:
       - name: Check formatting
         run: cargo fmt --all -- --check
 
-  # Lint with clippy
+  # Lint with clippy (depends on fmt)
   clippy:
     name: Clippy
+    needs: fmt
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -50,9 +56,10 @@ jobs:
       - name: Run clippy
         run: cargo clippy --all-targets --all-features -- -D warnings -A clippy::pedantic
 
-  # Run tests
+  # Run tests (depends on clippy)
   test:
     name: Test (${{ matrix.os }})
+    needs: clippy
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -70,9 +77,10 @@ jobs:
       - name: Run tests
         run: cargo test --all-features --verbose
 
-  # Build release binaries
+  # Build release binaries (depends on test)
   build:
     name: Build (${{ matrix.target }})
+    needs: test
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -81,12 +89,20 @@ jobs:
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
             artifact: hisiflash
+
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
+            artifact: hisiflash
+            cross: true
+
           - target: x86_64-apple-darwin
             os: macos-latest
             artifact: hisiflash
+
           - target: aarch64-apple-darwin
             os: macos-latest
             artifact: hisiflash
+
           - target: x86_64-pc-windows-msvc
             os: windows-latest
             artifact: hisiflash.exe
@@ -97,12 +113,24 @@ jobs:
         with:
           targets: ${{ matrix.target }}
       - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
 
       - name: Install libudev (Linux)
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && !matrix.cross
         run: sudo apt-get update && sudo apt-get install -y libudev-dev
 
+      # Cross compilation for ARM64 Linux
+      - name: Install cross
+        if: matrix.cross
+        uses: taiki-e/install-action@cross
+
+      - name: Build with cross
+        if: matrix.cross
+        run: cross build --release --target ${{ matrix.target }}
+
       - name: Build release
+        if: ${{ !matrix.cross }}
         run: cargo build --release --target ${{ matrix.target }}
 
       - name: Upload artifact
@@ -111,9 +139,10 @@ jobs:
           name: hisiflash-${{ matrix.target }}
           path: target/${{ matrix.target }}/release/${{ matrix.artifact }}
 
-  # Documentation
+  # Documentation (can run in parallel with test)
   docs:
     name: Documentation
+    needs: clippy
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -126,21 +155,21 @@ jobs:
         env:
           RUSTDOCFLAGS: -D warnings
 
-  # Check for security vulnerabilities
+  # Check for security vulnerabilities (can run in parallel)
   security:
     name: Security Audit
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Install cargo-audit
-        run: cargo install cargo-audit
+      - uses: taiki-e/install-action@cargo-audit
       - name: Run security audit
         run: cargo audit --ignore RUSTSEC-2025-0119
         # RUSTSEC-2025-0119: number_prefix is unmaintained (indirect dep via indicatif)
 
-  # Minimum Supported Rust Version check
+  # Minimum Supported Rust Version check (depends on fmt)
   msrv:
     name: MSRV Check
+    needs: fmt
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -150,3 +179,4 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libudev-dev
       - name: Check MSRV
         run: cargo check --all-targets
+
