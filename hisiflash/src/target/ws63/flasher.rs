@@ -72,7 +72,7 @@ impl Ws63Flasher {
                         debug!("Port opened on attempt {attempt}");
                     }
                     return Ok(port);
-                }
+                },
                 Err(e) => {
                     warn!(
                         "Failed to open port {port_name} (attempt {attempt}/{MAX_OPEN_PORT_ATTEMPTS}): {e}"
@@ -82,7 +82,7 @@ impl Ws63Flasher {
                     if attempt < MAX_OPEN_PORT_ATTEMPTS {
                         thread::sleep(CONNECT_RETRY_DELAY);
                     }
-                }
+                },
             }
         }
 
@@ -122,7 +122,7 @@ impl Ws63Flasher {
             match self.try_connect() {
                 Ok(()) => {
                     return Ok(());
-                }
+                },
                 Err(e) => {
                     if attempt < MAX_CONNECT_ATTEMPTS {
                         warn!("Connection failed (attempt {attempt}/{MAX_CONNECT_ATTEMPTS}): {e}");
@@ -131,7 +131,7 @@ impl Ws63Flasher {
                     } else {
                         return Err(e);
                     }
-                }
+                },
             }
         }
 
@@ -327,7 +327,7 @@ impl Ws63Flasher {
             match self.try_download_binary(name, data, addr, progress) {
                 Ok(()) => {
                     return Ok(());
-                }
+                },
                 Err(e) => {
                     if attempt < MAX_DOWNLOAD_RETRIES {
                         warn!(
@@ -342,7 +342,7 @@ impl Ws63Flasher {
                     } else {
                         return Err(e);
                     }
-                }
+                },
             }
         }
 

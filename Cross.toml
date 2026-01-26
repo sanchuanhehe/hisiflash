@@ -2,21 +2,25 @@
 # See: https://github.com/cross-rs/cross
 
 [target.aarch64-unknown-linux-gnu]
+# Use a newer image that has a compatible GLIBC version
+image = "ghcr.io/cross-rs/aarch64-unknown-linux-gnu:main"
 pre-build = [
     "dpkg --add-architecture arm64",
-    "apt-get update",
-    "apt-get install -y libudev-dev:arm64"
+    "apt-get update && apt-get install -y libudev-dev:arm64"
 ]
 
 [target.armv7-unknown-linux-gnueabihf]
+image = "ghcr.io/cross-rs/armv7-unknown-linux-gnueabihf:main"
 pre-build = [
     "dpkg --add-architecture armhf",
-    "apt-get update",
-    "apt-get install -y libudev-dev:armhf"
+    "apt-get update && apt-get install -y libudev-dev:armhf"
 ]
 
 [target.x86_64-unknown-linux-gnu]
 pre-build = [
-    "apt-get update",
-    "apt-get install -y libudev-dev"
+    "apt-get update && apt-get install -y libudev-dev"
 ]
+
+[build]
+# Don't use pre-built runner binaries to avoid GLIBC issues
+pre-build = []
