@@ -1,8 +1,14 @@
-# Cross compilation configuration
+# Cross compilation configuration for local development
 # See: https://github.com/cross-rs/cross
+#
+# For CI/CD, we use cargo-zigbuild instead of cross to avoid GLIBC compatibility issues.
+# This file is mainly for local development with Docker.
+
+[build.env]
+passthrough = ["RUST_BACKTRACE", "RUST_LOG"]
 
 [target.aarch64-unknown-linux-gnu]
-# Use a newer image that has a compatible GLIBC version
+# Use Ubuntu 22.04 based image for newer GLIBC
 image = "ghcr.io/cross-rs/aarch64-unknown-linux-gnu:main"
 pre-build = [
     "dpkg --add-architecture arm64",
@@ -20,7 +26,3 @@ pre-build = [
 pre-build = [
     "apt-get update && apt-get install -y libudev-dev"
 ]
-
-[build]
-# Don't use pre-built runner binaries to avoid GLIBC issues
-pre-build = []
