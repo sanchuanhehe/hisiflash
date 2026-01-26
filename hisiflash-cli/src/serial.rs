@@ -15,6 +15,7 @@ use console::style;
 use dialoguer::{Confirm, Select, theme::ColorfulTheme};
 use hisiflash::connection::detect::{self, DetectedPort, UsbDevice};
 use log::{debug, error, info};
+use rust_i18n::t;
 
 /// Options for serial port selection.
 #[derive(Debug, Clone, Default)]
@@ -54,7 +55,7 @@ pub fn select_serial_port(options: &SerialOptions, config: &Config) -> Result<Se
     let ports = detect::detect_ports();
 
     if ports.is_empty() {
-        anyhow::bail!("No serial ports found. Please connect a device or specify a port with -p.");
+        anyhow::bail!("{}", t!("serial.no_ports_found"));
     }
 
     // Filter to known devices
@@ -75,9 +76,7 @@ pub fn select_serial_port(options: &SerialOptions, config: &Config) -> Result<Se
 
     // In non-interactive mode, fail if multiple ports
     if options.non_interactive && ports.len() > 1 {
-        anyhow::bail!(
-            "Multiple serial ports found. Use -p to specify a port or disable --non-interactive."
-        );
+        anyhow::bail!("{}", t!("serial.multiple_ports"));
     }
 
     // Interactive selection
@@ -102,7 +101,7 @@ pub fn select_serial_port(options: &SerialOptions, config: &Config) -> Result<Se
                 confirm_single_port(port, config)
             }
         },
-        Ordering::Less => anyhow::bail!("No serial ports available."),
+        Ordering::Less => anyhow::bail!("{}", t!("serial.no_ports_available")),
     }
 }
 
@@ -164,11 +163,11 @@ fn is_known_device(port: &DetectedPort, config: &Config) -> bool {
 /// Interactive port selection.
 fn select_port_interactive(mut ports: Vec<DetectedPort>, config: &Config) -> Result<SelectedPort> {
     println!(
-        "{} Detected {} serial port(s)",
+        "{} {}",
         style("ℹ").blue(),
-        ports.len()
+        t!("serial.detected_ports", count = ports.len())
     );
-    println!("{}", style("  Known devices are highlighted").dim());
+    println!("{}", style(t!("serial.known_devices_hint")).dim());
 
     // Sort: known devices first
     ports.sort_by_key(|p| !is_known_device(p, config));
@@ -211,7 +210,7 @@ fn select_port_interactive(mut ports: Vec<DetectedPort>, config: &Config) -> Res
     .ok(); // Ignore error if handler already set
 
     let selection = Select::with_theme(&ColorfulTheme::default())
-        .with_prompt("Select a serial port")
+        .with_prompt(t!("serial.select_prompt").to_string())
         .items(&port_names)
         .default(0)
         .interact_opt()
@@ -223,7 +222,7 @@ fn select_port_interactive(mut ports: Vec<DetectedPort>, config: &Config) -> Res
             let is_known = is_known_device(&port, config);
             Ok(SelectedPort { port, is_known })
         },
-        None => anyhow::bail!("Port selection cancelled"),
+        None => anyhow::bail!("{}", t!("serial.selection_cancelled")),
     }
 }
 
@@ -236,7 +235,14 @@ fn confirm_single_port(port: DetectedPort, _config: &Config) -> Result<SelectedP
         .unwrap_or_default();
 
     let confirmed = Confirm::with_theme(&ColorfulTheme::default())
-        .with_prompt(format!("Use serial port '{}'{}?", port.name, product_info))
+        .with_prompt(
+            t!(
+                "serial.confirm_use",
+                port = port.name.clone(),
+                info = product_info
+            )
+            .to_string(),
+        )
         .default(true)
         .interact_opt()
         .context("Failed to show confirmation")?
@@ -248,7 +254,7 @@ fn confirm_single_port(port: DetectedPort, _config: &Config) -> Result<SelectedP
             is_known: false,
         })
     } else {
-        anyhow::bail!("Port selection cancelled")
+        anyhow::bail!("{}", t!("serial.selection_cancelled"))
     }
 }
 
@@ -263,7 +269,7 @@ pub fn ask_remember_port(port: &DetectedPort, config: &mut Config) -> Result<()>
         }
 
         let confirmed = Confirm::with_theme(&ColorfulTheme::default())
-            .with_prompt("Remember this serial port for future use?")
+            .with_prompt(t!("serial.remember_prompt").to_string())
             .default(false)
             .interact_opt()
             .context("Failed to show confirmation")?

@@ -1,0 +1,68 @@
+# English translations for hisiflash CLI
+# Common messages
+common.using_port: "Using port: %{port} @ %{baud} baud"
+common.waiting_device: "Waiting for device... (reset to enter download mode)"
+common.connected: "Connected!"
+common.resetting: "Resetting device..."
+common.complete: "Complete!"
+
+# Flash command
+flash.loading_firmware: "Loading firmware: %{path}"
+flash.crc_passed: "CRC verification passed"
+flash.found_partitions: "Found %{count} partition(s):"
+flash.flashing: "Flashing %{name}"
+flash.completed: "Flashing completed successfully!"
+
+# Write command
+write.loading_loaderboot: "Loading LoaderBoot: %{path}"
+write.loading_binary: "Loading binary: %{path} -> 0x%{addr}"
+write.completed: "Write completed successfully!"
+
+# Erase command
+erase.need_all_flag: "Please specify --all to erase entire flash"
+erase.use_all_flag: "Use --all flag to confirm full erase"
+erase.erasing: "Erasing flash... This may take a while."
+erase.completed: "Erase completed!"
+
+# Info command
+info.header: "FWPKG Information"
+info.partitions_header: "Partitions"
+info.partitions: "Partitions: %{count}"
+info.total_size: "Total size: %{size} bytes"
+info.crc: "CRC: 0x%{crc}"
+info.crc_valid: "CRC Valid: %{status}"
+info.yes: "Yes"
+info.no: "No"
+info.type: "Type: %{type}"
+info.offset: "Offset: 0x%{offset}"
+info.length: "Length: %{length} bytes"
+info.burn_addr: "Burn Addr: 0x%{addr}"
+info.burn_size: "Burn Size: %{size} bytes"
+
+# List ports command
+list_ports.header: "Available Serial Ports"
+list_ports.no_ports: "No serial ports found"
+list_ports.auto_detected: "Auto-detected: %{port}"
+
+# Monitor command
+monitor.opening: "Opening monitor on %{port} @ %{baud} baud"
+monitor.exit_hint: "Press Ctrl+C to exit"
+
+# Serial port selection
+serial.detected_ports: "Detected %{count} serial port(s)"
+serial.known_devices_hint: "Known devices are highlighted"
+serial.select_prompt: "Select a serial port"
+serial.confirm_use: "Use serial port '%{port}'%{info}?"
+serial.selection_cancelled: "Port selection cancelled"
+serial.remember_prompt: "Remember this serial port for future use?"
+serial.no_ports_found: "No serial ports found. Please connect a device or specify a port with -p."
+serial.multiple_ports: "Multiple serial ports found. Use -p to specify a port or disable --non-interactive."
+serial.no_ports_available: "No serial ports available."
+
+# Errors
+error.load_firmware: "Failed to load firmware: %{path}"
+error.crc_failed: "Firmware CRC verification failed"
+error.read_loaderboot: "Failed to read LoaderBoot: %{path}"
+error.read_binary: "Failed to read binary: %{path}"
+error.open_port: "Failed to open serial port: %{port}"
+error.serial_error: "Serial port error"

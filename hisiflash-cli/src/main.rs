@@ -8,6 +8,7 @@
 //! - Interactive serial port selection
 //! - Shell completion generation
 //! - Environment variable support
+//! - Internationalization (i18n) support
 
 use anyhow::{Context, Result};
 use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
@@ -17,6 +18,7 @@ use env_logger::Env;
 use hisiflash::{ChipFamily, Fwpkg, Ws63Flasher};
 use indicatif::{ProgressBar, ProgressStyle};
 use log::{debug, error, warn};
+use rust_i18n::t;
 use std::io;
 use std::path::PathBuf;
 
@@ -27,6 +29,9 @@ mod serial;
 use config::Config;
 use serial::{SerialOptions, ask_remember_port, select_serial_port};
 
+// Initialize i18n with locale files from the locales directory
+rust_i18n::i18n!("locales", fallback = "en");
+
 /// hisiflash - A cross-platform tool for flashing HiSilicon chips.
 ///
 /// Environment variables:
@@ -35,6 +40,7 @@ use serial::{SerialOptions, ask_remember_port, select_serial_port};
 ///   HISIFLASH_CHIP    - Default chip type (ws63, bs2x, bs25)
 ///   HISIFLASH_BEFORE  - Reset mode before operation
 ///   HISIFLASH_AFTER   - Reset mode after operation
+///   HISIFLASH_LANG    - Language/locale (en, zh-CN)
 #[derive(Parser)]
 #[command(name = "hisiflash")]
 #[command(author, version, about, long_about = None)]
@@ -65,6 +71,10 @@ struct Cli {
         env = "HISIFLASH_CHIP"
     )]
     chip: Chip,
+
+    /// Language/locale for messages (e.g., en, zh-CN).
+    #[arg(long, global = true, env = "HISIFLASH_LANG")]
+    lang: Option<String>,
 
     /// Verbose output level (-v, -vv, -vvv for increasing detail).
     #[arg(short, long, global = true, action = clap::ArgAction::Count)]
@@ -224,8 +234,49 @@ fn parse_hex_u32(s: &str) -> Result<u32, String> {
     u32::from_str_radix(&s, 16).map_err(|e| format!("Invalid hex address: {e}"))
 }
 
+/// Supported locales for i18n
+const SUPPORTED_LOCALES: &[&str] = &["en", "zh-CN"];
+
+/// Detect the best matching locale from system settings.
+///
+/// This function tries to match the system locale to one of the supported locales.
+/// It handles various locale formats like:
+/// - `zh_CN.UTF-8` -> `zh-CN`
+/// - `zh-CN` -> `zh-CN`
+/// - `zh` -> `zh-CN`
+/// - `en_US.UTF-8` -> `en`
+/// - `C` or `POSIX` -> `en`
+fn detect_locale() -> String {
+    let system_locale = sys_locale::get_locale().unwrap_or_else(|| "en".to_string());
+
+    // Normalize the locale string
+    // Remove encoding suffix (e.g., .UTF-8)
+    let locale = system_locale.split('.').next().unwrap_or(&system_locale);
+
+    // Replace underscore with hyphen for BCP 47 format
+    let locale = locale.replace('_', "-");
+
+    // Try exact match first
+    if SUPPORTED_LOCALES.contains(&locale.as_str()) {
+        return locale;
+    }
+
+    // Try matching by language code (first part before hyphen)
+    let lang_code = locale.split('-').next().unwrap_or(&locale);
+
+    match lang_code.to_lowercase().as_str() {
+        "zh" => "zh-CN".to_string(), // Chinese -> Simplified Chinese
+        _ => "en".to_string(),       // English and all others fallback to English
+    }
+}
+
 fn main() -> Result<()> {
     let cli = Cli::parse();
+
+    // Initialize i18n locale
+    let locale = cli.lang.clone().unwrap_or_else(detect_locale);
+    rust_i18n::set_locale(&locale);
+    debug!("Using locale: {locale}");
 
     // Setup logging based on verbosity
     let log_level = if cli.quiet {
@@ -348,32 +399,32 @@ fn cmd_flash(
 ) -> Result<()> {
     if !cli.quiet {
         println!(
-            "{} Loading firmware: {}",
+            "{} {}",
             style("📦").cyan(),
-            firmware.display()
+            t!("flash.loading_firmware", path = firmware.display())
         );
     }
 
     // Load FWPKG
     let fwpkg = Fwpkg::from_file(firmware)
-        .with_context(|| format!("Failed to load firmware: {}", firmware.display()))?;
+        .with_context(|| t!("error.load_firmware", path = firmware.display().to_string()))?;
 
     // Verify CRC
     if !skip_verify {
         fwpkg
             .verify_crc()
-            .context("Firmware CRC verification failed")?;
+            .context(t!("error.crc_failed").to_string())?;
         if !cli.quiet {
-            println!("{} CRC verification passed", style("✓").green());
+            println!("{} {}", style("✓").green(), t!("flash.crc_passed"));
         }
     }
 
     // Show partition info
     if !cli.quiet {
         println!(
-            "{} Found {} partition(s):",
+            "{} {}",
             style("ℹ").blue(),
-            fwpkg.partition_count()
+            t!("flash.found_partitions", count = fwpkg.partition_count())
         );
         for bin in &fwpkg.bins {
             let type_str = if bin.is_loaderboot() {
@@ -396,10 +447,9 @@ fn cmd_flash(
     let port = get_port(cli, config)?;
     if !cli.quiet {
         println!(
-            "{} Using port: {} @ {} baud",
+            "{} {}",
             style("🔌").cyan(),
-            port,
-            cli.baud
+            t!("common.using_port", port = port, baud = cli.baud)
         );
     }
 
@@ -410,14 +460,11 @@ fn cmd_flash(
 
     // Connect
     if !cli.quiet {
-        println!(
-            "{} Waiting for device... (reset to enter download mode)",
-            style("⏳").yellow()
-        );
+        println!("{} {}", style("⏳").yellow(), t!("common.waiting_device"));
     }
     flasher.connect()?;
     if !cli.quiet {
-        println!("{} Connected!", style("✓").green());
+        println!("{} {}", style("✓").green(), t!("common.connected"));
     }
 
     // Create progress bar
@@ -444,26 +491,23 @@ fn cmd_flash(
     flasher.flash_fwpkg(&fwpkg, filter_slice, |name, current, total| {
         if name != current_partition {
             current_partition = name.to_string();
-            pb.set_message(format!("Flashing {name}"));
+            pb.set_message(t!("flash.flashing", name = name).to_string());
         }
         if total > 0 {
             pb.set_position((current * 100 / total) as u64);
         }
     })?;
 
-    pb.finish_with_message("Complete!");
+    pb.finish_with_message(t!("common.complete").to_string());
 
     // Reset device
     if !cli.quiet {
-        println!("{} Resetting device...", style("🔄").cyan());
+        println!("{} {}", style("🔄").cyan(), t!("common.resetting"));
     }
     flasher.reset()?;
 
     if !cli.quiet {
-        println!(
-            "\n{} Flashing completed successfully!",
-            style("🎉").green().bold()
-        );
+        println!("\n{} {}", style("🎉").green().bold(), t!("flash.completed"));
     }
 
     Ok(())
@@ -479,37 +523,43 @@ fn cmd_write(
 ) -> Result<()> {
     if !cli.quiet {
         println!(
-            "{} Loading LoaderBoot: {}",
+            "{} {}",
             style("📦").cyan(),
-            loaderboot.display()
+            t!("write.loading_loaderboot", path = loaderboot.display())
         );
     }
 
-    let lb_data = std::fs::read(loaderboot)
-        .with_context(|| format!("Failed to read LoaderBoot: {}", loaderboot.display()))?;
+    let lb_data = std::fs::read(loaderboot).with_context(|| {
+        t!(
+            "error.read_loaderboot",
+            path = loaderboot.display().to_string()
+        )
+    })?;
 
     let mut bin_data: Vec<(Vec<u8>, u32)> = Vec::new();
     for (path, addr) in bins {
         if !cli.quiet {
             println!(
-                "{} Loading binary: {} -> 0x{:08X}",
+                "{} {}",
                 style("📦").cyan(),
-                path.display(),
-                addr
+                t!(
+                    "write.loading_binary",
+                    path = path.display(),
+                    addr = format!("{:08X}", addr)
+                )
             );
         }
         let data = std::fs::read(path)
-            .with_context(|| format!("Failed to read binary: {}", path.display()))?;
+            .with_context(|| t!("error.read_binary", path = path.display().to_string()))?;
         bin_data.push((data, *addr));
     }
 
     let port = get_port(cli, config)?;
     if !cli.quiet {
         println!(
-            "{} Using port: {} @ {} baud",
+            "{} {}",
             style("🔌").cyan(),
-            port,
-            cli.baud
+            t!("common.using_port", port = port, baud = cli.baud)
         );
     }
 
@@ -518,11 +568,11 @@ fn cmd_write(
         .with_verbose(cli.verbose);
 
     if !cli.quiet {
-        println!("{} Waiting for device...", style("⏳").yellow());
+        println!("{} {}", style("⏳").yellow(), t!("common.waiting_device"));
     }
     flasher.connect()?;
     if !cli.quiet {
-        println!("{} Connected!", style("✓").green());
+        println!("{} {}", style("✓").green(), t!("common.connected"));
     }
 
     let bins_ref: Vec<(&[u8], u32)> = bin_data.iter().map(|(d, a)| (d.as_slice(), *a)).collect();
@@ -530,10 +580,7 @@ fn cmd_write(
 
     flasher.reset()?;
     if !cli.quiet {
-        println!(
-            "\n{} Write completed successfully!",
-            style("🎉").green().bold()
-        );
+        println!("\n{} {}", style("🎉").green().bold(), t!("write.completed"));
     }
 
     Ok(())
@@ -554,12 +601,9 @@ fn cmd_write_program(
 /// Erase command implementation.
 fn cmd_erase(cli: &Cli, config: &mut Config, all: bool) -> Result<()> {
     if !all {
-        error!("Please specify --all to erase entire flash");
+        error!("{}", t!("erase.need_all_flag"));
         if !cli.quiet {
-            println!(
-                "{} Use --all flag to confirm full erase",
-                style("⚠").yellow()
-            );
+            println!("{} {}", style("⚠").yellow(), t!("erase.use_all_flag"));
         }
         return Ok(());
     }
@@ -567,33 +611,29 @@ fn cmd_erase(cli: &Cli, config: &mut Config, all: bool) -> Result<()> {
     let port = get_port(cli, config)?;
     if !cli.quiet {
         println!(
-            "{} Using port: {} @ {} baud",
+            "{} {}",
             style("🔌").cyan(),
-            port,
-            cli.baud
+            t!("common.using_port", port = port, baud = cli.baud)
         );
     }
 
     let mut flasher = Ws63Flasher::new(&port, cli.baud)?.with_verbose(cli.verbose);
 
     if !cli.quiet {
-        println!("{} Waiting for device...", style("⏳").yellow());
+        println!("{} {}", style("⏳").yellow(), t!("common.waiting_device"));
     }
     flasher.connect()?;
     if !cli.quiet {
-        println!("{} Connected!", style("✓").green());
+        println!("{} {}", style("✓").green(), t!("common.connected"));
     }
 
     if !cli.quiet {
-        println!(
-            "{} Erasing flash... This may take a while.",
-            style("🗑").red()
-        );
+        println!("{} {}", style("🗑").red(), t!("erase.erasing"));
     }
     flasher.erase_all()?;
 
     if !cli.quiet {
-        println!("\n{} Erase completed!", style("✓").green().bold());
+        println!("\n{} {}", style("✓").green().bold(), t!("erase.completed"));
     }
 
     Ok(())
@@ -602,26 +642,41 @@ fn cmd_erase(cli: &Cli, config: &mut Config, all: bool) -> Result<()> {
 /// Info command implementation.
 fn cmd_info(firmware: &PathBuf) -> Result<()> {
     println!(
-        "{} Loading firmware: {}",
+        "{} {}",
         style("📦").cyan(),
-        firmware.display()
+        t!("flash.loading_firmware", path = firmware.display())
     );
 
     let fwpkg = Fwpkg::from_file(firmware)
-        .with_context(|| format!("Failed to load firmware: {}", firmware.display()))?;
+        .with_context(|| t!("error.load_firmware", path = firmware.display().to_string()))?;
 
-    println!("\n{}", style("FWPKG Information").bold().underlined());
-    println!("  Partitions: {}", fwpkg.partition_count());
-    println!("  Total size: {} bytes", fwpkg.header.len);
-    println!("  CRC: 0x{:04X}", fwpkg.header.crc);
+    println!("\n{}", style(t!("info.header")).bold().underlined());
+    println!(
+        "  {}",
+        t!("info.partitions", count = fwpkg.partition_count())
+    );
+    println!("  {}", t!("info.total_size", size = fwpkg.header.len));
+    println!(
+        "  {}",
+        t!("info.crc", crc = format!("{:04X}", fwpkg.header.crc))
+    );
 
     // Verify CRC
     match fwpkg.verify_crc() {
-        Ok(()) => println!("  CRC Valid: {}", style("Yes").green()),
-        Err(_) => println!("  CRC Valid: {}", style("No").red()),
+        Ok(()) => println!(
+            "  {}",
+            t!("info.crc_valid", status = t!("info.yes").to_string())
+        ),
+        Err(_) => println!(
+            "  {}",
+            t!("info.crc_valid", status = t!("info.no").to_string())
+        ),
     }
 
-    println!("\n{}", style("Partitions").bold().underlined());
+    println!(
+        "\n{}",
+        style(t!("info.partitions_header")).bold().underlined()
+    );
     for (i, bin) in fwpkg.bins.iter().enumerate() {
         let type_str = if bin.is_loaderboot() {
             style("LoaderBoot").yellow().to_string()
@@ -630,11 +685,17 @@ fn cmd_info(firmware: &PathBuf) -> Result<()> {
         };
 
         println!("\n  [{:2}] {}", i, style(&bin.name).cyan().bold());
-        println!("       Type:       {type_str}");
-        println!("       Offset:     0x{:08X}", bin.offset);
-        println!("       Length:     {} bytes", bin.length);
-        println!("       Burn Addr:  0x{:08X}", bin.burn_addr);
-        println!("       Burn Size:  {} bytes", bin.burn_size);
+        println!("       {}", t!("info.type", "type" = type_str));
+        println!(
+            "       {}",
+            t!("info.offset", offset = format!("{:08X}", bin.offset))
+        );
+        println!("       {}", t!("info.length", length = bin.length));
+        println!(
+            "       {}",
+            t!("info.burn_addr", addr = format!("{:08X}", bin.burn_addr))
+        );
+        println!("       {}", t!("info.burn_size", size = bin.burn_size));
     }
 
     Ok(())
@@ -642,12 +703,12 @@ fn cmd_info(firmware: &PathBuf) -> Result<()> {
 
 /// List ports command implementation.
 fn cmd_list_ports() {
-    println!("{}", style("Available Serial Ports").bold().underlined());
+    println!("{}", style(t!("list_ports.header")).bold().underlined());
 
     let detected = hisiflash::connection::detect::detect_ports();
 
     if detected.is_empty() {
-        println!("  {}", style("No serial ports found").dim());
+        println!("  {}", style(t!("list_ports.no_ports")).dim());
     } else {
         for port in &detected {
             let device_type = if port.device.is_known() {
@@ -680,9 +741,12 @@ fn cmd_list_ports() {
         // Show auto-detection result
         if let Ok(auto_port) = hisiflash::connection::detect::auto_detect_port() {
             println!(
-                "\n{} Auto-detected: {}",
+                "\n{} {}",
                 style("→").green().bold(),
-                style(&auto_port.name).cyan().bold()
+                t!(
+                    "list_ports.auto_detected",
+                    port = style(&auto_port.name).cyan().bold().to_string()
+                )
             );
         }
     }
@@ -695,18 +759,21 @@ fn cmd_monitor(cli: &Cli, config: &mut Config, monitor_baud: u32) -> Result<()> 
     let port = get_port(cli, config)?;
 
     println!(
-        "{} Opening monitor on {} @ {} baud",
+        "{} {}",
         style("📡").cyan(),
-        style(&port).green(),
-        monitor_baud
+        t!(
+            "monitor.opening",
+            port = style(&port).green().to_string(),
+            baud = monitor_baud
+        )
     );
-    println!("{}", style("Press Ctrl+C to exit").dim());
+    println!("{}", style(t!("monitor.exit_hint")).dim());
 
     // Simple serial monitor
     let mut serial = serialport::new(&port, monitor_baud)
         .timeout(std::time::Duration::from_millis(100))
         .open()
-        .with_context(|| format!("Failed to open serial port: {port}"))?;
+        .with_context(|| t!("error.open_port", port = port.clone()))?;
 
     let mut buf = [0u8; 1024];
     loop {
@@ -728,7 +795,7 @@ fn cmd_monitor(cli: &Cli, config: &mut Config, monitor_baud: u32) -> Result<()> 
                 // Timeout is expected, continue
             },
             Err(e) => {
-                return Err(e).context("Serial port error");
+                return Err(e).context(t!("error.serial_error").to_string());
             },
             _ => {},
         }
@@ -740,4 +807,57 @@ fn cmd_completions(shell: Shell) {
     let mut cmd = Cli::command();
     let name = cmd.get_name().to_string();
     generate(shell, &mut cmd, name, &mut io::stdout());
+}
+
+#[cfg(test)]
+mod locale_tests {
+    use super::*;
+
+    /// Helper to test locale matching logic without sys_locale
+    fn match_locale(locale: &str) -> String {
+        // Normalize the locale string
+        let locale = locale.split('.').next().unwrap_or(locale);
+        let locale = locale.replace('_', "-");
+
+        if SUPPORTED_LOCALES.contains(&locale.as_str()) {
+            return locale;
+        }
+
+        let lang_code = locale.split('-').next().unwrap_or(&locale);
+        match lang_code.to_lowercase().as_str() {
+            "zh" => "zh-CN".to_string(),
+            _ => "en".to_string(),
+        }
+    }
+
+    #[test]
+    fn test_locale_chinese_variants() {
+        assert_eq!(match_locale("zh_CN.UTF-8"), "zh-CN");
+        assert_eq!(match_locale("zh_CN"), "zh-CN");
+        assert_eq!(match_locale("zh-CN"), "zh-CN");
+        assert_eq!(match_locale("zh_TW.UTF-8"), "zh-CN"); // Taiwan -> Simplified (fallback)
+        assert_eq!(match_locale("zh"), "zh-CN");
+    }
+
+    #[test]
+    fn test_locale_english_variants() {
+        assert_eq!(match_locale("en_US.UTF-8"), "en");
+        assert_eq!(match_locale("en_GB.UTF-8"), "en");
+        assert_eq!(match_locale("en_US"), "en");
+        assert_eq!(match_locale("en"), "en");
+    }
+
+    #[test]
+    fn test_locale_posix_defaults() {
+        assert_eq!(match_locale("C"), "en");
+        assert_eq!(match_locale("POSIX"), "en");
+        assert_eq!(match_locale("C.UTF-8"), "en");
+    }
+
+    #[test]
+    fn test_locale_unsupported_fallback() {
+        assert_eq!(match_locale("de_DE.UTF-8"), "en"); // German -> English
+        assert_eq!(match_locale("ja_JP.UTF-8"), "en"); // Japanese -> English
+        assert_eq!(match_locale("fr_FR"), "en"); // French -> English
+    }
 }

@@ -150,6 +150,7 @@ Options:
   -p, --port <PORT>      串口设备 [env: HISIFLASH_PORT]
   -b, --baud <BAUD>      波特率 [default: 921600] [env: HISIFLASH_BAUD]
   -c, --chip <CHIP>      芯片类型 [default: ws63] [env: HISIFLASH_CHIP]
+      --lang <LANG>      语言/地区 (如 en, zh-CN) [env: HISIFLASH_LANG]
   -v, --verbose...       详细输出级别 (-v, -vv, -vvv)
   -q, --quiet            静默模式
       --non-interactive  非交互模式 [env: HISIFLASH_NON_INTERACTIVE]
@@ -166,8 +167,37 @@ Options:
 | `HISIFLASH_PORT` | 默认串口 | - |
 | `HISIFLASH_BAUD` | 默认波特率 | 921600 |
 | `HISIFLASH_CHIP` | 默认芯片类型 | ws63 |
+| `HISIFLASH_LANG` | 语言/地区 (如 en, zh-CN) | 自动检测 |
 | `HISIFLASH_NON_INTERACTIVE` | 非交互模式 | false |
 | `RUST_LOG` | 日志级别 | info |
+
+## 国际化 (i18n)
+
+hisiflash 支持多语言界面：
+
+- **自动检测**：默认自动检测系统语言
+- **手动设置**：使用 `--lang` 参数或 `HISIFLASH_LANG` 环境变量
+
+**支持的语言**：
+
+| 语言 | 代码 |
+|------|------|
+| English | `en` |
+| 简体中文 | `zh-CN` |
+
+**使用示例**：
+
+```bash
+# 使用英文界面
+hisiflash --lang en list-ports
+
+# 使用中文界面
+hisiflash --lang zh-CN list-ports
+
+# 通过环境变量设置
+export HISIFLASH_LANG=zh-CN
+hisiflash list-ports
+```
 
 ## 配置文件
 

@@ -33,3 +33,7 @@ console.workspace = true
 log.workspace = true
 env_logger.workspace = true
 serialport.workspace = true
+
+# Internationalization
+rust-i18n = "3"
+sys-locale = "0.3"

@@ -1,0 +1,68 @@
+# 简体中文翻译
+# 通用消息
+common.using_port: "使用端口: %{port} @ %{baud} 波特率"
+common.waiting_device: "等待设备... (复位以进入下载模式)"
+common.connected: "已连接!"
+common.resetting: "正在复位设备..."
+common.complete: "完成!"
+
+# 烧录命令
+flash.loading_firmware: "加载固件: %{path}"
+flash.crc_passed: "CRC 校验通过"
+flash.found_partitions: "发现 %{count} 个分区:"
+flash.flashing: "正在烧录 %{name}"
+flash.completed: "烧录完成!"
+
+# 写入命令
+write.loading_loaderboot: "加载 LoaderBoot: %{path}"
+write.loading_binary: "加载二进制文件: %{path} -> 0x%{addr}"
+write.completed: "写入完成!"
+
+# 擦除命令
+erase.need_all_flag: "请使用 --all 参数确认擦除整个 Flash"
+erase.use_all_flag: "使用 --all 参数确认全盘擦除"
+erase.erasing: "正在擦除 Flash... 这可能需要一些时间。"
+erase.completed: "擦除完成!"
+
+# 信息命令
+info.header: "FWPKG 信息"
+info.partitions_header: "分区"
+info.partitions: "分区数: %{count}"
+info.total_size: "总大小: %{size} 字节"
+info.crc: "CRC: 0x%{crc}"
+info.crc_valid: "CRC 有效: %{status}"
+info.yes: "是"
+info.no: "否"
+info.type: "类型: %{type}"
+info.offset: "偏移量: 0x%{offset}"
+info.length: "长度: %{length} 字节"
+info.burn_addr: "烧录地址: 0x%{addr}"
+info.burn_size: "烧录大小: %{size} 字节"
+
+# 端口列表命令
+list_ports.header: "可用串口"
+list_ports.no_ports: "未找到串口"
+list_ports.auto_detected: "自动检测: %{port}"
+
+# 监视器命令
+monitor.opening: "在 %{port} 打开监视器 @ %{baud} 波特率"
+monitor.exit_hint: "按 Ctrl+C 退出"
+
+# 串口选择
+serial.detected_ports: "检测到 %{count} 个串口"
+serial.known_devices_hint: "已知设备已高亮显示"
+serial.select_prompt: "选择串口"
+serial.confirm_use: "使用串口 '%{port}'%{info}?"
+serial.selection_cancelled: "已取消端口选择"
+serial.remember_prompt: "是否记住此串口以便将来使用?"
+serial.no_ports_found: "未找到串口。请连接设备或使用 -p 参数指定端口。"
+serial.multiple_ports: "发现多个串口。请使用 -p 参数指定端口或禁用 --non-interactive 选项。"
+serial.no_ports_available: "没有可用的串口。"
+
+# 错误消息
+error.load_firmware: "加载固件失败: %{path}"
+error.crc_failed: "固件 CRC 校验失败"
+error.read_loaderboot: "读取 LoaderBoot 失败: %{path}"
+error.read_binary: "读取二进制文件失败: %{path}"
+error.open_port: "打开串口失败: %{port}"
+error.serial_error: "串口错误"
