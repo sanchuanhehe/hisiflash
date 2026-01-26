@@ -187,7 +187,7 @@ impl FwpkgHeader {
         // Detect version based on magic
         let (name, version) = if magic == FWPKG_MAGIC_V1 {
             (String::new(), FwpkgVersion::V1)
-        } else if magic >= FWPKG_MAGIC_V2_MIN && magic <= FWPKG_MAGIC_V2_MAX {
+        } else if (FWPKG_MAGIC_V2_MIN..=FWPKG_MAGIC_V2_MAX).contains(&magic) {
             // V2: read the 260-byte name field
             let mut name_bytes = [0u8; NAME_SIZE_V2];
             reader.read_exact(&mut name_bytes)?;
@@ -215,7 +215,7 @@ impl FwpkgHeader {
     /// Check if the magic number is valid.
     pub fn is_valid(&self) -> bool {
         let valid_magic = self.magic == FWPKG_MAGIC_V1
-            || (self.magic >= FWPKG_MAGIC_V2_MIN && self.magic <= FWPKG_MAGIC_V2_MAX);
+            || (FWPKG_MAGIC_V2_MIN..=FWPKG_MAGIC_V2_MAX).contains(&self.magic);
         valid_magic && (self.cnt as usize) <= MAX_PARTITIONS
     }
 
@@ -642,8 +642,8 @@ mod tests {
         assert_eq!(FWPKG_MAGIC_V1, 0xEFBEADDF);
         assert_eq!(FWPKG_MAGIC_V2_MIN, 0xEFBEADD0);
         assert_eq!(FWPKG_MAGIC_V2_MAX, 0xEFBEADDE);
-        // V1 magic should be just above V2 range
-        assert!(FWPKG_MAGIC_V1 > FWPKG_MAGIC_V2_MAX);
+        // V1 magic should be just above V2 range (compile-time check)
+        const _: () = assert!(FWPKG_MAGIC_V1 > FWPKG_MAGIC_V2_MAX);
     }
 
     #[test]
