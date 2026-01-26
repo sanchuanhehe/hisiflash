@@ -55,26 +55,34 @@ pub enum UsbDevice {
 const KNOWN_USB_DEVICES: &[(u16, &[u16], UsbDevice)] = &[
     // CH340/CH341 family (WCH)
     // https://github.com/WCHSoftGroup
-    (0x1A86, &[0x7523, 0x7522, 0x5523, 0x5512, 0x55D4], UsbDevice::Ch340),
-    
+    (
+        0x1A86,
+        &[0x7523, 0x7522, 0x5523, 0x5512, 0x55D4],
+        UsbDevice::Ch340,
+    ),
     // Silicon Labs CP210x family
     // https://www.silabs.com/developers/usb-to-uart-bridge-vcp-drivers
     (0x10C4, &[0xEA60, 0xEA70, 0xEA71, 0xEA63], UsbDevice::Cp210x),
-    
     // FTDI family
     // https://ftdichip.com/drivers/vcp-drivers/
-    (0x0403, &[
-        0x6001, // FT232R
-        0x6010, // FT2232
-        0x6011, // FT4232
-        0x6014, // FT232H
-        0x6015, // FT231X
-    ], UsbDevice::Ftdi),
-    
+    (
+        0x0403,
+        &[
+            0x6001, // FT232R
+            0x6010, // FT2232
+            0x6011, // FT4232
+            0x6014, // FT232H
+            0x6015, // FT231X
+        ],
+        UsbDevice::Ftdi,
+    ),
     // Prolific PL2303 family
     // https://www.prolific.com.tw/US/index.aspx
-    (0x067B, &[0x2303, 0x23A3, 0x23C3, 0x23D3], UsbDevice::Prolific),
-    
+    (
+        0x067B,
+        &[0x2303, 0x23A3, 0x23C3, 0x23D3],
+        UsbDevice::Prolific,
+    ),
     // HiSilicon native USB
     (0x12D1, &[], UsbDevice::HiSilicon), // Empty PID list = match all PIDs
 ];
@@ -110,7 +118,7 @@ impl UsbDevice {
     pub fn is_known(&self) -> bool {
         !matches!(self, Self::Unknown)
     }
-    
+
     /// Check if this device is likely to be on a HiSilicon development board.
     /// This gives higher priority to certain device types during auto-detection.
     pub fn is_high_priority(&self) -> bool {
@@ -217,7 +225,7 @@ pub fn auto_detect_port() -> Result<DetectedPort> {
         );
         return Ok(port.clone());
     }
-    
+
     // Then, look for other known USB-UART bridges
     if let Some(port) = ports.iter().find(|p| p.device.is_known()) {
         info!(
@@ -290,31 +298,40 @@ mod tests {
         assert_eq!(UsbDevice::from_vid_pid(0x1A86, 0x5523), UsbDevice::Ch340);
         assert_eq!(UsbDevice::from_vid_pid(0x1A86, 0x5512), UsbDevice::Ch340);
         assert_eq!(UsbDevice::from_vid_pid(0x1A86, 0x55D4), UsbDevice::Ch340);
-        
+
         // CP210x variants
         assert_eq!(UsbDevice::from_vid_pid(0x10C4, 0xEA60), UsbDevice::Cp210x);
         assert_eq!(UsbDevice::from_vid_pid(0x10C4, 0xEA70), UsbDevice::Cp210x);
         assert_eq!(UsbDevice::from_vid_pid(0x10C4, 0xEA71), UsbDevice::Cp210x);
         assert_eq!(UsbDevice::from_vid_pid(0x10C4, 0xEA63), UsbDevice::Cp210x);
-        
+
         // FTDI variants
         assert_eq!(UsbDevice::from_vid_pid(0x0403, 0x6001), UsbDevice::Ftdi);
         assert_eq!(UsbDevice::from_vid_pid(0x0403, 0x6010), UsbDevice::Ftdi);
         assert_eq!(UsbDevice::from_vid_pid(0x0403, 0x6011), UsbDevice::Ftdi);
         assert_eq!(UsbDevice::from_vid_pid(0x0403, 0x6014), UsbDevice::Ftdi);
         assert_eq!(UsbDevice::from_vid_pid(0x0403, 0x6015), UsbDevice::Ftdi);
-        
+
         // Prolific variants
         assert_eq!(UsbDevice::from_vid_pid(0x067B, 0x2303), UsbDevice::Prolific);
         assert_eq!(UsbDevice::from_vid_pid(0x067B, 0x23A3), UsbDevice::Prolific);
         assert_eq!(UsbDevice::from_vid_pid(0x067B, 0x23C3), UsbDevice::Prolific);
         assert_eq!(UsbDevice::from_vid_pid(0x067B, 0x23D3), UsbDevice::Prolific);
-        
+
         // HiSilicon (any PID should match)
-        assert_eq!(UsbDevice::from_vid_pid(0x12D1, 0x1234), UsbDevice::HiSilicon);
-        assert_eq!(UsbDevice::from_vid_pid(0x12D1, 0x0000), UsbDevice::HiSilicon);
-        assert_eq!(UsbDevice::from_vid_pid(0x12D1, 0xFFFF), UsbDevice::HiSilicon);
-        
+        assert_eq!(
+            UsbDevice::from_vid_pid(0x12D1, 0x1234),
+            UsbDevice::HiSilicon
+        );
+        assert_eq!(
+            UsbDevice::from_vid_pid(0x12D1, 0x0000),
+            UsbDevice::HiSilicon
+        );
+        assert_eq!(
+            UsbDevice::from_vid_pid(0x12D1, 0xFFFF),
+            UsbDevice::HiSilicon
+        );
+
         // Unknown devices
         assert_eq!(UsbDevice::from_vid_pid(0x0000, 0x0000), UsbDevice::Unknown);
         assert_eq!(UsbDevice::from_vid_pid(0x1234, 0x5678), UsbDevice::Unknown);
@@ -333,7 +350,7 @@ mod tests {
         assert!(UsbDevice::HiSilicon.is_known());
         assert!(!UsbDevice::Unknown.is_known());
     }
-    
+
     #[test]
     fn test_usb_device_is_high_priority() {
         assert!(UsbDevice::HiSilicon.is_high_priority());
@@ -343,7 +360,7 @@ mod tests {
         assert!(!UsbDevice::Prolific.is_high_priority());
         assert!(!UsbDevice::Unknown.is_high_priority());
     }
-    
+
     #[test]
     fn test_usb_device_name() {
         assert_eq!(UsbDevice::Ch340.name(), "CH340/CH341");
@@ -353,7 +370,7 @@ mod tests {
         assert_eq!(UsbDevice::HiSilicon.name(), "HiSilicon");
         assert_eq!(UsbDevice::Unknown.name(), "Unknown");
     }
-    
+
     #[test]
     fn test_detected_port_is_likely_hisilicon() {
         let port_known = DetectedPort {
@@ -366,7 +383,7 @@ mod tests {
             serial: None,
         };
         assert!(port_known.is_likely_hisilicon());
-        
+
         let port_unknown = DetectedPort {
             name: "/dev/ttyS0".to_string(),
             device: UsbDevice::Unknown,
@@ -386,7 +403,7 @@ mod tests {
         // Verify it's a valid vector - the actual length depends on system
         let _ = ports.len();
     }
-    
+
     #[test]
     fn test_detect_hisilicon_ports() {
         // Should not panic and return filtered results
@@ -396,13 +413,13 @@ mod tests {
             assert!(port.device.is_known());
         }
     }
-    
+
     #[test]
     fn test_auto_detect_port_does_not_panic() {
         // Should not panic even if no ports found
         let _ = auto_detect_port();
     }
-    
+
     #[test]
     fn test_format_port_list() {
         let ports = vec![
@@ -425,7 +442,7 @@ mod tests {
                 serial: None,
             },
         ];
-        
+
         let formatted = format_port_list(&ports);
         assert_eq!(formatted.len(), 2);
         assert!(formatted[0].contains("/dev/ttyUSB0"));

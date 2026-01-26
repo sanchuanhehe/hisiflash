@@ -12,7 +12,7 @@ use std::cmp::Ordering;
 use crate::config::Config;
 use anyhow::{Context, Result};
 use console::style;
-use dialoguer::{theme::ColorfulTheme, Confirm, Select};
+use dialoguer::{Confirm, Select, theme::ColorfulTheme};
 use hisiflash::connection::detect::{self, DetectedPort, UsbDevice};
 use log::{debug, error, info};
 
@@ -52,7 +52,7 @@ pub fn select_serial_port(options: &SerialOptions, config: &Config) -> Result<Se
 
     // Detect available ports
     let ports = detect::detect_ports();
-    
+
     if ports.is_empty() {
         anyhow::bail!("No serial ports found. Please connect a device or specify a port with -p.");
     }
@@ -66,11 +66,7 @@ pub fn select_serial_port(options: &SerialOptions, config: &Config) -> Result<Se
     // If exactly one known port and not forcing confirmation, use it
     if known_ports.len() == 1 && !options.confirm_port {
         let port = known_ports[0].clone();
-        info!(
-            "Auto-selected port: {} [{}]",
-            port.name,
-            port.device.name()
-        );
+        info!("Auto-selected port: {} [{}]", port.name, port.device.name());
         return Ok(SelectedPort {
             port,
             is_known: true,
@@ -105,7 +101,7 @@ pub fn select_serial_port(options: &SerialOptions, config: &Config) -> Result<Se
             } else {
                 confirm_single_port(port, config)
             }
-        }
+        },
         Ordering::Less => anyhow::bail!("No serial ports available."),
     }
 }
@@ -113,7 +109,7 @@ pub fn select_serial_port(options: &SerialOptions, config: &Config) -> Result<Se
 /// Find a port by name.
 fn find_port_by_name(name: &str) -> SelectedPort {
     let ports = detect::detect_ports();
-    
+
     // Try exact match first
     if let Some(port) = ports.iter().find(|p| p.name == name) {
         return SelectedPort {
@@ -172,10 +168,7 @@ fn select_port_interactive(mut ports: Vec<DetectedPort>, config: &Config) -> Res
         style("ℹ").blue(),
         ports.len()
     );
-    println!(
-        "{}",
-        style("  Known devices are highlighted").dim()
-    );
+    println!("{}", style("  Known devices are highlighted").dim());
 
     // Sort: known devices first
     ports.sort_by_key(|p| !is_known_device(p, config));
@@ -229,7 +222,7 @@ fn select_port_interactive(mut ports: Vec<DetectedPort>, config: &Config) -> Res
             let port = ports.into_iter().nth(index).unwrap();
             let is_known = is_known_device(&port, config);
             Ok(SelectedPort { port, is_known })
-        }
+        },
         None => anyhow::bail!("Port selection cancelled"),
     }
 }

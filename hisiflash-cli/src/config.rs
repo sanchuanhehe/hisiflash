@@ -113,12 +113,12 @@ impl Config {
                 Err(e) => {
                     warn!("Failed to parse config file {}: {}", path.display(), e);
                     None
-                }
+                },
             },
             Err(e) => {
                 warn!("Failed to read config file {}: {}", path.display(), e);
                 None
-            }
+            },
         }
     }
 
@@ -185,12 +185,17 @@ impl Config {
 
     /// Save the port configuration (remembers serial port).
     #[allow(dead_code, clippy::unused_self)]
-    pub fn save_port(&self, serial: &str, vid: Option<u16>, pid: Option<u16>) -> anyhow::Result<()> {
+    pub fn save_port(
+        &self,
+        serial: &str,
+        vid: Option<u16>,
+        pid: Option<u16>,
+    ) -> anyhow::Result<()> {
         let path = Path::new("hisiflash_ports.toml");
-        
+
         let mut port_config = PortConfig::default();
         port_config.connection.serial = Some(serial.to_string());
-        
+
         if let (Some(vid), Some(pid)) = (vid, pid) {
             port_config.usb_device.push(UsbDevice { vid, pid });
         }
@@ -198,35 +203,36 @@ impl Config {
         let content = toml::to_string_pretty(&port_config)?;
         fs::write(path, content)?;
         info!("Saved port configuration to {}", path.display());
-        
+
         Ok(())
     }
 
     /// Save USB device for future auto-detection.
     pub fn remember_usb_device(&mut self, vid: u16, pid: u16) -> anyhow::Result<()> {
         let device = UsbDevice { vid, pid };
-        
+
         // Don't add duplicates
         if self.port.usb_device.contains(&device) {
             return Ok(());
         }
 
         // Try to save to local file first, fall back to global
-        let path = if Path::new("hisiflash_ports.toml").exists() || Path::new("hisiflash.toml").exists() {
-            PathBuf::from("hisiflash_ports.toml")
-        } else if let Some(global_dir) = Self::global_config_dir() {
-            fs::create_dir_all(&global_dir)?;
-            global_dir.join("ports.toml")
-        } else {
-            PathBuf::from("hisiflash_ports.toml")
-        };
+        let path =
+            if Path::new("hisiflash_ports.toml").exists() || Path::new("hisiflash.toml").exists() {
+                PathBuf::from("hisiflash_ports.toml")
+            } else if let Some(global_dir) = Self::global_config_dir() {
+                fs::create_dir_all(&global_dir)?;
+                global_dir.join("ports.toml")
+            } else {
+                PathBuf::from("hisiflash_ports.toml")
+            };
 
         self.port.usb_device.push(device);
-        
+
         let content = toml::to_string_pretty(&self.port)?;
         fs::write(&path, content)?;
         info!("Saved USB device to {}", path.display());
-        
+
         Ok(())
     }
 }
@@ -245,7 +251,10 @@ mod tests {
 
     #[test]
     fn test_usb_device_matches() {
-        let device = UsbDevice { vid: 0x1A86, pid: 0x7523 };
+        let device = UsbDevice {
+            vid: 0x1A86,
+            pid: 0x7523,
+        };
         assert!(device.matches(0x1A86, 0x7523));
         assert!(!device.matches(0x1A86, 0x7522));
         assert!(!device.matches(0x10C4, 0x7523));
@@ -257,10 +266,13 @@ mod tests {
         let mut other = Config::default();
         other.port.connection.serial = Some("/dev/ttyUSB0".to_string());
         other.flash.chip = Some("ws63".to_string());
-        
+
         base.merge(other);
-        
-        assert_eq!(base.port.connection.serial, Some("/dev/ttyUSB0".to_string()));
+
+        assert_eq!(
+            base.port.connection.serial,
+            Some("/dev/ttyUSB0".to_string())
+        );
         assert_eq!(base.flash.chip, Some("ws63".to_string()));
     }
 }

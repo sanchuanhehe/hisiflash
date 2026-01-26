@@ -47,11 +47,23 @@ struct Cli {
     port: Option<String>,
 
     /// Baud rate for data transfer.
-    #[arg(short, long, global = true, default_value = "921600", env = "HISIFLASH_BAUD")]
+    #[arg(
+        short,
+        long,
+        global = true,
+        default_value = "921600",
+        env = "HISIFLASH_BAUD"
+    )]
     baud: u32,
 
     /// Target chip type.
-    #[arg(short, long, global = true, default_value = "ws63", env = "HISIFLASH_CHIP")]
+    #[arg(
+        short,
+        long,
+        global = true,
+        default_value = "ws63",
+        env = "HISIFLASH_CHIP"
+    )]
     chip: Chip,
 
     /// Verbose output level (-v, -vv, -vvv for increasing detail).
@@ -227,7 +239,11 @@ fn main() -> Result<()> {
     };
     env_logger::Builder::from_env(Env::default().default_filter_or(log_level))
         .format_target(cli.verbose >= 2)
-        .format_timestamp(if cli.verbose >= 2 { Some(env_logger::TimestampPrecision::Millis) } else { None })
+        .format_timestamp(if cli.verbose >= 2 {
+            Some(env_logger::TimestampPrecision::Millis)
+        } else {
+            None
+        })
         .init();
 
     debug!(
@@ -247,42 +263,56 @@ fn main() -> Result<()> {
             skip_verify,
             monitor,
         } => {
-            cmd_flash(&cli, &mut config, firmware, filter.as_ref(), *late_baud, *skip_verify)?;
+            cmd_flash(
+                &cli,
+                &mut config,
+                firmware,
+                filter.as_ref(),
+                *late_baud,
+                *skip_verify,
+            )?;
             if *monitor {
                 // TODO: Implement monitor after flash
                 warn!("Monitor after flash not yet implemented");
             }
-        }
+        },
         Commands::Write {
             loaderboot,
             bins,
             late_baud,
         } => {
             cmd_write(&cli, &mut config, loaderboot, bins, *late_baud)?;
-        }
+        },
         Commands::WriteProgram {
             loaderboot,
             program,
             address,
             late_baud,
         } => {
-            cmd_write_program(&cli, &mut config, loaderboot, program.clone(), *address, *late_baud)?;
-        }
+            cmd_write_program(
+                &cli,
+                &mut config,
+                loaderboot,
+                program.clone(),
+                *address,
+                *late_baud,
+            )?;
+        },
         Commands::Erase { all } => {
             cmd_erase(&cli, &mut config, *all)?;
-        }
+        },
         Commands::Info { firmware } => {
             cmd_info(firmware)?;
-        }
+        },
         Commands::ListPorts => {
             cmd_list_ports();
-        }
+        },
         Commands::Monitor { monitor_baud } => {
             cmd_monitor(&cli, &mut config, *monitor_baud)?;
-        }
+        },
         Commands::Completions { shell } => {
             cmd_completions(*shell);
-        }
+        },
     }
 
     Ok(())
@@ -661,7 +691,7 @@ fn cmd_list_ports() {
 /// Monitor command implementation.
 fn cmd_monitor(cli: &Cli, config: &mut Config, monitor_baud: u32) -> Result<()> {
     use std::io::Write;
-    
+
     let port = get_port(cli, config)?;
 
     println!(
@@ -693,14 +723,14 @@ fn cmd_monitor(cli: &Cli, config: &mut Config, monitor_baud: u32) -> Result<()> 
                     }
                 }
                 io::stdout().flush().ok();
-            }
+            },
             Err(ref e) if e.kind() == std::io::ErrorKind::TimedOut => {
                 // Timeout is expected, continue
-            }
+            },
             Err(e) => {
                 return Err(e).context("Serial port error");
-            }
-            _ => {}
+            },
+            _ => {},
         }
     }
 }
