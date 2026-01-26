@@ -27,6 +27,8 @@ erase.completed: "Erase completed!"
 # Info command
 info.header: "FWPKG Information"
 info.partitions_header: "Partitions"
+info.format: "Format"
+info.package_name: "Package Name"
 info.partitions: "Partitions: %{count}"
 info.total_size: "Total size: %{size} bytes"
 info.crc: "CRC: 0x%{crc}"

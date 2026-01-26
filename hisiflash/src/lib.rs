@@ -66,7 +66,7 @@ pub mod target;
 
 // Re-exports for convenience
 pub use error::{Error, Result};
-pub use image::fwpkg::Fwpkg;
+pub use image::fwpkg::{Fwpkg, FwpkgBinInfo, FwpkgHeader, FwpkgVersion, PartitionType};
 pub use port::{Port, PortEnumerator, PortInfo, SerialConfig};
 pub use protocol::seboot::{
     CommandType, ImageType, SebootAck, SebootFrame, contains_handshake_ack,

@@ -15,7 +15,7 @@ use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
 use clap_complete::{Shell, generate};
 use console::style;
 use env_logger::Env;
-use hisiflash::{ChipFamily, Fwpkg, Ws63Flasher};
+use hisiflash::{ChipFamily, Fwpkg, FwpkgVersion, PartitionType, Ws63Flasher};
 use indicatif::{ProgressBar, ProgressStyle};
 use log::{debug, error, warn};
 use rust_i18n::t;
@@ -639,6 +639,30 @@ fn cmd_erase(cli: &Cli, config: &mut Config, all: bool) -> Result<()> {
     Ok(())
 }
 
+/// Format partition type for display.
+fn format_partition_type(pt: &PartitionType) -> String {
+    match pt {
+        PartitionType::Loader => style("Loader").yellow().to_string(),
+        PartitionType::Normal => "Normal".to_string(),
+        PartitionType::KvNv => style("KV-NV").magenta().to_string(),
+        PartitionType::Efuse => style("eFuse").red().to_string(),
+        PartitionType::Otp => style("OTP").red().to_string(),
+        PartitionType::Flashboot => style("FlashBoot").yellow().to_string(),
+        PartitionType::Factory => style("Factory").blue().to_string(),
+        PartitionType::Version => "Version".to_string(),
+        PartitionType::SecurityA => style("Security-A").red().to_string(),
+        PartitionType::SecurityB => style("Security-B").red().to_string(),
+        PartitionType::SecurityC => style("Security-C").red().to_string(),
+        PartitionType::ProtocolA => "Protocol-A".to_string(),
+        PartitionType::AppsA => "Apps-A".to_string(),
+        PartitionType::RadioConfig => "RadioConfig".to_string(),
+        PartitionType::Rom => "ROM".to_string(),
+        PartitionType::Emmc => "eMMC".to_string(),
+        PartitionType::Database => style("Database").dim().to_string(),
+        PartitionType::Unknown(v) => format!("Unknown({})", v),
+    }
+}
+
 /// Info command implementation.
 fn cmd_info(firmware: &PathBuf) -> Result<()> {
     println!(
@@ -651,6 +675,19 @@ fn cmd_info(firmware: &PathBuf) -> Result<()> {
         .with_context(|| t!("error.load_firmware", path = firmware.display().to_string()))?;
 
     println!("\n{}", style(t!("info.header")).bold().underlined());
+
+    // Show format version
+    let version_str = match fwpkg.version() {
+        FwpkgVersion::V1 => "V1 (32-byte names)",
+        FwpkgVersion::V2 => "V2 (260-byte names)",
+    };
+    println!("  {}: {}", t!("info.format"), version_str);
+
+    // Show package name for V2
+    if !fwpkg.package_name().is_empty() {
+        println!("  {}: {}", t!("info.package_name"), fwpkg.package_name());
+    }
+
     println!(
         "  {}",
         t!("info.partitions", count = fwpkg.partition_count())
@@ -678,11 +715,7 @@ fn cmd_info(firmware: &PathBuf) -> Result<()> {
         style(t!("info.partitions_header")).bold().underlined()
     );
     for (i, bin) in fwpkg.bins.iter().enumerate() {
-        let type_str = if bin.is_loaderboot() {
-            style("LoaderBoot").yellow().to_string()
-        } else {
-            "Normal".to_string()
-        };
+        let type_str = format_partition_type(&bin.partition_type);
 
         println!("\n  [{:2}] {}", i, style(&bin.name).cyan().bold());
         println!("       {}", t!("info.type", "type" = type_str));

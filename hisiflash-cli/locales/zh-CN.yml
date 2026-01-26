@@ -27,6 +27,8 @@ erase.completed: "擦除完成!"
 # 信息命令
 info.header: "FWPKG 信息"
 info.partitions_header: "分区"
+info.format: "格式"
+info.package_name: "包名"
 info.partitions: "分区数: %{count}"
 info.total_size: "总大小: %{size} 字节"
 info.crc: "CRC: 0x%{crc}"
