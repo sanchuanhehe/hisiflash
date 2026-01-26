@@ -54,9 +54,15 @@ single_match_else = "allow"
 [workspace.dependencies]
 # Serialization
 serde = { version = "1.0", features = ["derive"] }
+toml = "0.8"
 
 # CLI
 clap = { version = "4.5", features = ["derive", "env"] }
+clap_complete = "4.5"
+
+# Interactive prompts
+dialoguer = "0.11"
+ctrlc = "3.4"
 
 # Serial port
 serialport = "4.5"
@@ -70,6 +76,9 @@ indicatif = "0.17"
 console = "0.15"
 log = "0.4"
 env_logger = "0.11"
+
+# Directories for config files
+directories = "6"
 
 # Async (optional, for future features)
 # tokio = { version = "1", features = ["full"] }

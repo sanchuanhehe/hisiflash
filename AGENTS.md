@@ -92,6 +92,8 @@ hisiflash/
 └── hisiflash-cli/                # CLI application crate
     └── src/
         ├── main.rs               # CLI entry point
+        ├── config.rs             # Configuration file handling (TOML)
+        ├── serial.rs             # Interactive port selection
         └── commands/             # Subcommand implementations
 ```
 
@@ -101,9 +103,11 @@ hisiflash/
 |--------|---------|
 | `protocol::seboot` | Official HiSilicon SEBOOT protocol (0xDEADBEEF frames) |
 | `protocol::ymodem` | YMODEM-1K file transfer protocol |
-| `connection::detect` | USB VID/PID based port auto-detection |
+| `connection::detect` | USB VID/PID based port auto-detection (CH340, CP210x, FTDI, etc.) |
 | `target::chip` | Chip family abstraction (WS63, BS2X, etc.) |
 | `image::fwpkg` | FWPKG firmware package parser |
+| `cli::config` | TOML configuration loading/saving (local + global) |
+| `cli::serial` | Interactive serial port selection with dialoguer |
 
 ### SEBOOT Protocol Overview
 
@@ -185,9 +189,15 @@ cargo test -- --nocapture
 
 **CLI dependencies:**
 - `clap` - Command line parsing
+- `clap_complete` - Shell completion generation
+- `dialoguer` - Interactive prompts
 - `indicatif` - Progress bars
 - `console` - Terminal styling
 - `anyhow` - Error handling
+- `directories` - XDG config directories
+- `toml` - Configuration file parsing
+- `serde` - Serialization/deserialization
+- `ctrlc` - Ctrl-C handling
 
 ## Environment Variables
 
@@ -196,7 +206,31 @@ cargo test -- --nocapture
 | `HISIFLASH_PORT` | Default serial port |
 | `HISIFLASH_BAUD` | Default baud rate |
 | `HISIFLASH_CHIP` | Default chip type |
+| `HISIFLASH_NON_INTERACTIVE` | Disable interactive prompts |
 | `RUST_LOG` | Logging level (debug, info, warn, error) |
+
+## Configuration Files
+
+hisiflash supports TOML configuration files:
+
+**Local config (project directory):** `hisiflash.toml` or `hisiflash_ports.toml`
+
+**Global config:** `~/.config/hisiflash/config.toml`
+
+Example configuration:
+```toml
+[connection]
+serial = "/dev/ttyUSB0"
+baud = 921600
+
+[flash]
+late_baud = false
+
+# Known USB devices for auto-detection
+[[usb_device]]
+vid = 0x1A86
+pid = 0x7523
+```
 
 ## Debugging Tips
 

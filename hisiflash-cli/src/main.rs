@@ -1,37 +1,78 @@
 //! hisiflash CLI - Command-line tool for flashing HiSilicon chips.
+//!
+//! ## Features
+//!
+//! - Flash FWPKG firmware packages
+//! - Write raw binary files to flash
+//! - Erase flash memory
+//! - Interactive serial port selection
+//! - Shell completion generation
+//! - Environment variable support
 
 use anyhow::{Context, Result};
-use clap::{Parser, Subcommand, ValueEnum};
+use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
+use clap_complete::{Shell, generate};
 use console::style;
 use env_logger::Env;
 use hisiflash::{ChipFamily, Fwpkg, Ws63Flasher};
 use indicatif::{ProgressBar, ProgressStyle};
-use log::error;
+use log::{debug, error, warn};
+use std::io;
 use std::path::PathBuf;
 
 mod commands;
+mod config;
+mod serial;
+
+use config::Config;
+use serial::{SerialOptions, ask_remember_port, select_serial_port};
 
 /// hisiflash - A cross-platform tool for flashing HiSilicon chips.
+///
+/// Environment variables:
+///   HISIFLASH_PORT    - Default serial port
+///   HISIFLASH_BAUD    - Default baud rate (default: 921600)
+///   HISIFLASH_CHIP    - Default chip type (ws63, bs2x, bs25)
+///   HISIFLASH_BEFORE  - Reset mode before operation
+///   HISIFLASH_AFTER   - Reset mode after operation
 #[derive(Parser)]
 #[command(name = "hisiflash")]
 #[command(author, version, about, long_about = None)]
 #[command(propagate_version = true)]
+#[command(after_help = "For more information, visit: https://github.com/sanchuanhehe/hisiflash")]
+#[allow(clippy::struct_excessive_bools)]
 struct Cli {
     /// Serial port to use (auto-detected if not specified).
-    #[arg(short, long, env = "HISIFLASH_PORT")]
+    #[arg(short, long, global = true, env = "HISIFLASH_PORT")]
     port: Option<String>,
 
     /// Baud rate for data transfer.
-    #[arg(short, long, default_value = "921600", env = "HISIFLASH_BAUD")]
+    #[arg(short, long, global = true, default_value = "921600", env = "HISIFLASH_BAUD")]
     baud: u32,
 
     /// Target chip type.
-    #[arg(short, long, default_value = "ws63", env = "HISIFLASH_CHIP")]
+    #[arg(short, long, global = true, default_value = "ws63", env = "HISIFLASH_CHIP")]
     chip: Chip,
 
-    /// Verbose output level (-v, -vv, -vvv).
-    #[arg(short, long, action = clap::ArgAction::Count)]
+    /// Verbose output level (-v, -vv, -vvv for increasing detail).
+    #[arg(short, long, global = true, action = clap::ArgAction::Count)]
     verbose: u8,
+
+    /// Quiet mode (suppress non-essential output).
+    #[arg(short, long, global = true)]
+    quiet: bool,
+
+    /// Non-interactive mode (fail instead of prompting).
+    #[arg(long, global = true, env = "HISIFLASH_NON_INTERACTIVE")]
+    non_interactive: bool,
+
+    /// Confirm port selection even for auto-detected ports.
+    #[arg(long, global = true)]
+    confirm_port: bool,
+
+    /// List all available ports (including unknown types).
+    #[arg(long, global = true)]
+    list_all_ports: bool,
 
     #[command(subcommand)]
     command: Commands,
@@ -77,6 +118,10 @@ enum Commands {
         /// Skip CRC verification.
         #[arg(long)]
         skip_verify: bool,
+
+        /// Open serial monitor after flashing.
+        #[arg(short = 'M', long)]
+        monitor: bool,
     },
 
     /// Write raw binary files to flash.
@@ -127,6 +172,20 @@ enum Commands {
 
     /// List available serial ports.
     ListPorts,
+
+    /// Open serial monitor.
+    Monitor {
+        /// Baud rate for monitoring (default: 115200).
+        #[arg(short = 'B', long, default_value = "115200")]
+        monitor_baud: u32,
+    },
+
+    /// Generate shell completion scripts.
+    Completions {
+        /// Shell type for completions.
+        #[arg(value_enum)]
+        shell: Shell,
+    },
 }
 
 /// Parse binary argument in format "file:address".
@@ -144,22 +203,41 @@ fn parse_bin_arg(s: &str) -> Result<(PathBuf, u32), String> {
     Ok((path, addr))
 }
 
-/// Parse hexadecimal address.
+/// Parse hexadecimal address (supports 0x prefix and underscores).
 fn parse_hex_u32(s: &str) -> Result<u32, String> {
+    let s = s.trim();
     let s = s.trim_start_matches("0x").trim_start_matches("0X");
-    u32::from_str_radix(s, 16).map_err(|e| format!("Invalid hex address: {e}"))
+    // Support underscore separators like 0x00_80_00_00
+    let s: String = s.chars().filter(|c| *c != '_').collect();
+    u32::from_str_radix(&s, 16).map_err(|e| format!("Invalid hex address: {e}"))
 }
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
 
-    // Setup logging
-    let log_level = match cli.verbose {
-        0 => "info",
-        1 => "debug",
-        _ => "trace",
+    // Setup logging based on verbosity
+    let log_level = if cli.quiet {
+        "warn"
+    } else {
+        match cli.verbose {
+            0 => "info",
+            1 => "debug",
+            _ => "trace",
+        }
     };
-    env_logger::Builder::from_env(Env::default().default_filter_or(log_level)).init();
+    env_logger::Builder::from_env(Env::default().default_filter_or(log_level))
+        .format_target(cli.verbose >= 2)
+        .format_timestamp(if cli.verbose >= 2 { Some(env_logger::TimestampPrecision::Millis) } else { None })
+        .init();
+
+    debug!(
+        "hisiflash v{} (verbose level: {})",
+        env!("CARGO_PKG_VERSION"),
+        cli.verbose
+    );
+
+    // Load configuration
+    let mut config = Config::load();
 
     match &cli.command {
         Commands::Flash {
@@ -167,51 +245,84 @@ fn main() -> Result<()> {
             filter,
             late_baud,
             skip_verify,
+            monitor,
         } => {
-            cmd_flash(&cli, firmware, filter.as_ref(), *late_baud, *skip_verify)?;
-        },
+            cmd_flash(&cli, &mut config, firmware, filter.as_ref(), *late_baud, *skip_verify)?;
+            if *monitor {
+                // TODO: Implement monitor after flash
+                warn!("Monitor after flash not yet implemented");
+            }
+        }
         Commands::Write {
             loaderboot,
             bins,
             late_baud,
         } => {
-            cmd_write(&cli, loaderboot, bins, *late_baud)?;
-        },
+            cmd_write(&cli, &mut config, loaderboot, bins, *late_baud)?;
+        }
         Commands::WriteProgram {
             loaderboot,
             program,
             address,
             late_baud,
         } => {
-            cmd_write_program(&cli, loaderboot, program.clone(), *address, *late_baud)?;
-        },
+            cmd_write_program(&cli, &mut config, loaderboot, program.clone(), *address, *late_baud)?;
+        }
         Commands::Erase { all } => {
-            cmd_erase(&cli, *all)?;
-        },
+            cmd_erase(&cli, &mut config, *all)?;
+        }
         Commands::Info { firmware } => {
             cmd_info(firmware)?;
-        },
+        }
         Commands::ListPorts => {
             cmd_list_ports();
-        },
+        }
+        Commands::Monitor { monitor_baud } => {
+            cmd_monitor(&cli, &mut config, *monitor_baud)?;
+        }
+        Commands::Completions { shell } => {
+            cmd_completions(*shell);
+        }
     }
 
     Ok(())
 }
 
+/// Get serial port from CLI args or interactive selection.
+fn get_port(cli: &Cli, config: &mut Config) -> Result<String> {
+    let options = SerialOptions {
+        port: cli.port.clone(),
+        list_all_ports: cli.list_all_ports,
+        non_interactive: cli.non_interactive,
+        confirm_port: cli.confirm_port,
+    };
+
+    let selected = select_serial_port(&options, config)?;
+
+    // Ask to remember if not a known device and interactive mode
+    if !selected.is_known && !cli.non_interactive {
+        ask_remember_port(&selected.port, config)?;
+    }
+
+    Ok(selected.port.name)
+}
+
 /// Flash command implementation.
 fn cmd_flash(
     cli: &Cli,
+    config: &mut Config,
     firmware: &PathBuf,
     filter: Option<&String>,
     late_baud: bool,
     skip_verify: bool,
 ) -> Result<()> {
-    println!(
-        "{} Loading firmware: {}",
-        style("📦").cyan(),
-        firmware.display()
-    );
+    if !cli.quiet {
+        println!(
+            "{} Loading firmware: {}",
+            style("📦").cyan(),
+            firmware.display()
+        );
+    }
 
     // Load FWPKG
     let fwpkg = Fwpkg::from_file(firmware)
@@ -222,39 +333,45 @@ fn cmd_flash(
         fwpkg
             .verify_crc()
             .context("Firmware CRC verification failed")?;
-        println!("{} CRC verification passed", style("✓").green());
+        if !cli.quiet {
+            println!("{} CRC verification passed", style("✓").green());
+        }
     }
 
     // Show partition info
-    println!(
-        "{} Found {} partition(s):",
-        style("ℹ").blue(),
-        fwpkg.partition_count()
-    );
-    for bin in &fwpkg.bins {
-        let type_str = if bin.is_loaderboot() {
-            "(LoaderBoot)"
-        } else {
-            ""
-        };
+    if !cli.quiet {
         println!(
-            "    {} {} @ 0x{:08X} ({} bytes) {}",
-            style("•").dim(),
-            bin.name,
-            bin.burn_addr,
-            bin.length,
-            style(type_str).yellow()
+            "{} Found {} partition(s):",
+            style("ℹ").blue(),
+            fwpkg.partition_count()
         );
+        for bin in &fwpkg.bins {
+            let type_str = if bin.is_loaderboot() {
+                "(LoaderBoot)"
+            } else {
+                ""
+            };
+            println!(
+                "    {} {} @ 0x{:08X} ({} bytes) {}",
+                style("•").dim(),
+                bin.name,
+                bin.burn_addr,
+                bin.length,
+                style(type_str).yellow()
+            );
+        }
     }
 
     // Get port
-    let port = get_port(cli)?;
-    println!(
-        "{} Using port: {} @ {} baud",
-        style("🔌").cyan(),
-        port,
-        cli.baud
-    );
+    let port = get_port(cli, config)?;
+    if !cli.quiet {
+        println!(
+            "{} Using port: {} @ {} baud",
+            style("🔌").cyan(),
+            port,
+            cli.baud
+        );
+    }
 
     // Create flasher
     let mut flasher = Ws63Flasher::new(&port, cli.baud)?
@@ -262,22 +379,31 @@ fn cmd_flash(
         .with_verbose(cli.verbose);
 
     // Connect
-    println!(
-        "{} Waiting for device... (reset to enter download mode)",
-        style("⏳").yellow()
-    );
+    if !cli.quiet {
+        println!(
+            "{} Waiting for device... (reset to enter download mode)",
+            style("⏳").yellow()
+        );
+    }
     flasher.connect()?;
-    println!("{} Connected!", style("✓").green());
+    if !cli.quiet {
+        println!("{} Connected!", style("✓").green());
+    }
 
     // Create progress bar
-    let pb = ProgressBar::new(100);
-    #[allow(clippy::unwrap_used)] // Static template string, unwrap is safe
-    pb.set_style(
-        ProgressStyle::default_bar()
-            .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}% {msg}")
-            .unwrap()
-            .progress_chars("#>-"),
-    );
+    let pb = if cli.quiet {
+        ProgressBar::hidden()
+    } else {
+        let pb = ProgressBar::new(100);
+        #[allow(clippy::unwrap_used)] // Static template string
+        pb.set_style(
+            ProgressStyle::default_bar()
+                .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}% {msg}")
+                .unwrap()
+                .progress_chars("#>-"),
+        );
+        pb
+    };
 
     // Flash
     let filter_names: Option<Vec<&str>> = filter.as_ref().map(|f| f.split(',').collect());
@@ -298,13 +424,17 @@ fn cmd_flash(
     pb.finish_with_message("Complete!");
 
     // Reset device
-    println!("{} Resetting device...", style("🔄").cyan());
+    if !cli.quiet {
+        println!("{} Resetting device...", style("🔄").cyan());
+    }
     flasher.reset()?;
 
-    println!(
-        "\n{} Flashing completed successfully!",
-        style("🎉").green().bold()
-    );
+    if !cli.quiet {
+        println!(
+            "\n{} Flashing completed successfully!",
+            style("🎉").green().bold()
+        );
+    }
 
     Ok(())
 }
@@ -312,56 +442,69 @@ fn cmd_flash(
 /// Write command implementation.
 fn cmd_write(
     cli: &Cli,
+    config: &mut Config,
     loaderboot: &PathBuf,
     bins: &[(PathBuf, u32)],
     late_baud: bool,
 ) -> Result<()> {
-    println!(
-        "{} Loading LoaderBoot: {}",
-        style("📦").cyan(),
-        loaderboot.display()
-    );
+    if !cli.quiet {
+        println!(
+            "{} Loading LoaderBoot: {}",
+            style("📦").cyan(),
+            loaderboot.display()
+        );
+    }
 
     let lb_data = std::fs::read(loaderboot)
         .with_context(|| format!("Failed to read LoaderBoot: {}", loaderboot.display()))?;
 
     let mut bin_data: Vec<(Vec<u8>, u32)> = Vec::new();
     for (path, addr) in bins {
-        println!(
-            "{} Loading binary: {} -> 0x{:08X}",
-            style("📦").cyan(),
-            path.display(),
-            addr
-        );
+        if !cli.quiet {
+            println!(
+                "{} Loading binary: {} -> 0x{:08X}",
+                style("📦").cyan(),
+                path.display(),
+                addr
+            );
+        }
         let data = std::fs::read(path)
             .with_context(|| format!("Failed to read binary: {}", path.display()))?;
         bin_data.push((data, *addr));
     }
 
-    let port = get_port(cli)?;
-    println!(
-        "{} Using port: {} @ {} baud",
-        style("🔌").cyan(),
-        port,
-        cli.baud
-    );
+    let port = get_port(cli, config)?;
+    if !cli.quiet {
+        println!(
+            "{} Using port: {} @ {} baud",
+            style("🔌").cyan(),
+            port,
+            cli.baud
+        );
+    }
 
     let mut flasher = Ws63Flasher::new(&port, cli.baud)?
         .with_late_baud(late_baud)
         .with_verbose(cli.verbose);
 
-    println!("{} Waiting for device...", style("⏳").yellow());
+    if !cli.quiet {
+        println!("{} Waiting for device...", style("⏳").yellow());
+    }
     flasher.connect()?;
-    println!("{} Connected!", style("✓").green());
+    if !cli.quiet {
+        println!("{} Connected!", style("✓").green());
+    }
 
     let bins_ref: Vec<(&[u8], u32)> = bin_data.iter().map(|(d, a)| (d.as_slice(), *a)).collect();
     flasher.write_bins(&lb_data, &bins_ref)?;
 
     flasher.reset()?;
-    println!(
-        "\n{} Write completed successfully!",
-        style("🎉").green().bold()
-    );
+    if !cli.quiet {
+        println!(
+            "\n{} Write completed successfully!",
+            style("🎉").green().bold()
+        );
+    }
 
     Ok(())
 }
@@ -369,46 +512,59 @@ fn cmd_write(
 /// Write program command implementation.
 fn cmd_write_program(
     cli: &Cli,
+    config: &mut Config,
     loaderboot: &PathBuf,
     program: PathBuf,
     address: u32,
     late_baud: bool,
 ) -> Result<()> {
-    cmd_write(cli, loaderboot, &[(program, address)], late_baud)
+    cmd_write(cli, config, loaderboot, &[(program, address)], late_baud)
 }
 
 /// Erase command implementation.
-fn cmd_erase(cli: &Cli, all: bool) -> Result<()> {
+fn cmd_erase(cli: &Cli, config: &mut Config, all: bool) -> Result<()> {
     if !all {
         error!("Please specify --all to erase entire flash");
-        println!(
-            "{} Use --all flag to confirm full erase",
-            style("⚠").yellow()
-        );
+        if !cli.quiet {
+            println!(
+                "{} Use --all flag to confirm full erase",
+                style("⚠").yellow()
+            );
+        }
         return Ok(());
     }
 
-    let port = get_port(cli)?;
-    println!(
-        "{} Using port: {} @ {} baud",
-        style("🔌").cyan(),
-        port,
-        cli.baud
-    );
+    let port = get_port(cli, config)?;
+    if !cli.quiet {
+        println!(
+            "{} Using port: {} @ {} baud",
+            style("🔌").cyan(),
+            port,
+            cli.baud
+        );
+    }
 
     let mut flasher = Ws63Flasher::new(&port, cli.baud)?.with_verbose(cli.verbose);
 
-    println!("{} Waiting for device...", style("⏳").yellow());
+    if !cli.quiet {
+        println!("{} Waiting for device...", style("⏳").yellow());
+    }
     flasher.connect()?;
-    println!("{} Connected!", style("✓").green());
+    if !cli.quiet {
+        println!("{} Connected!", style("✓").green());
+    }
 
-    println!(
-        "{} Erasing flash... This may take a while.",
-        style("🗑").red()
-    );
+    if !cli.quiet {
+        println!(
+            "{} Erasing flash... This may take a while.",
+            style("🗑").red()
+        );
+    }
     flasher.erase_all()?;
 
-    println!("\n{} Erase completed!", style("✓").green().bold());
+    if !cli.quiet {
+        println!("\n{} Erase completed!", style("✓").green().bold());
+    }
 
     Ok(())
 }
@@ -502,26 +658,56 @@ fn cmd_list_ports() {
     }
 }
 
-/// Get serial port from CLI args or auto-detect.
-fn get_port(cli: &Cli) -> Result<String> {
-    match &cli.port {
-        Some(p) => Ok(p.clone()),
-        None => {
-            // Try to auto-detect using VID/PID
-            if let Ok(port) = hisiflash::connection::detect::auto_detect_port() {
-                println!(
-                    "{} Auto-detected port: {} [{}]",
-                    style("🔍").cyan(),
-                    style(&port.name).green(),
-                    port.device.name()
-                );
-                Ok(port.name)
-            } else {
-                // Fall back to first available port
-                hisiflash::connection::find_port(None).context(
-                    "No serial port specified and auto-detection failed. Use -p to specify a port.",
-                )
+/// Monitor command implementation.
+fn cmd_monitor(cli: &Cli, config: &mut Config, monitor_baud: u32) -> Result<()> {
+    use std::io::Write;
+    
+    let port = get_port(cli, config)?;
+
+    println!(
+        "{} Opening monitor on {} @ {} baud",
+        style("📡").cyan(),
+        style(&port).green(),
+        monitor_baud
+    );
+    println!("{}", style("Press Ctrl+C to exit").dim());
+
+    // Simple serial monitor
+    let mut serial = serialport::new(&port, monitor_baud)
+        .timeout(std::time::Duration::from_millis(100))
+        .open()
+        .with_context(|| format!("Failed to open serial port: {port}"))?;
+
+    let mut buf = [0u8; 1024];
+    loop {
+        match serial.read(&mut buf) {
+            Ok(n) if n > 0 => {
+                // Print received data
+                let data = &buf[..n];
+                if let Ok(s) = std::str::from_utf8(data) {
+                    print!("{s}");
+                } else {
+                    // Hex dump for non-UTF8 data
+                    for byte in data {
+                        print!("{byte:02X} ");
+                    }
+                }
+                io::stdout().flush().ok();
             }
-        },
+            Err(ref e) if e.kind() == std::io::ErrorKind::TimedOut => {
+                // Timeout is expected, continue
+            }
+            Err(e) => {
+                return Err(e).context("Serial port error");
+            }
+            _ => {}
+        }
     }
+}
+
+/// Generate shell completions.
+fn cmd_completions(shell: Shell) {
+    let mut cmd = Cli::command();
+    let name = cmd.get_name().to_string();
+    generate(shell, &mut cmd, name, &mut io::stdout());
 }
