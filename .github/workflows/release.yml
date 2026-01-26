@@ -58,26 +58,26 @@ jobs:
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
             artifact: hisiflash
-            archive: tar.gz
+            archive: zip
 
           # Linux ARM64
           - target: aarch64-unknown-linux-gnu
             os: ubuntu-latest
             artifact: hisiflash
-            archive: tar.gz
+            archive: zip
             cross: true
 
           # macOS x86_64
           - target: x86_64-apple-darwin
             os: macos-latest
             artifact: hisiflash
-            archive: tar.gz
+            archive: zip
 
           # macOS ARM64 (Apple Silicon)
           - target: aarch64-apple-darwin
             os: macos-latest
             artifact: hisiflash
-            archive: tar.gz
+            archive: zip
 
           # Windows x86_64
           - target: x86_64-pc-windows-msvc
@@ -98,9 +98,13 @@ jobs:
           key: ${{ matrix.target }}
 
       # Linux dependencies
-      - name: Install libudev (Linux)
+      - name: Install dependencies (Linux)
         if: runner.os == 'Linux' && !matrix.cross
-        run: sudo apt-get update && sudo apt-get install -y libudev-dev
+        run: sudo apt-get update && sudo apt-get install -y libudev-dev zip
+
+      - name: Install dependencies (Linux cross)
+        if: runner.os == 'Linux' && matrix.cross
+        run: sudo apt-get update && sudo apt-get install -y zip
 
       # Cross compilation for ARM64 Linux
       - name: Install cross
@@ -120,21 +124,21 @@ jobs:
         if: runner.os != 'Windows'
         run: |
           cd target/${{ matrix.target }}/release
-          tar czvf ../../../hisiflash-${{ needs.create-release.outputs.version }}-${{ matrix.target }}.tar.gz ${{ matrix.artifact }}
+          zip ../../../hisiflash-cli-${{ matrix.target }}.zip ${{ matrix.artifact }}
 
       - name: Create archive (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           cd target/${{ matrix.target }}/release
-          Compress-Archive -Path ${{ matrix.artifact }} -DestinationPath ../../../hisiflash-${{ needs.create-release.outputs.version }}-${{ matrix.target }}.zip
+          Compress-Archive -Path ${{ matrix.artifact }} -DestinationPath ../../../hisiflash-cli-${{ matrix.target }}.zip
 
       # Upload to release
       - name: Upload release asset
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.create-release.outputs.version }}
-          files: hisiflash-${{ needs.create-release.outputs.version }}-${{ matrix.target }}.${{ matrix.archive }}
+          files: hisiflash-cli-${{ matrix.target }}.${{ matrix.archive }}
 
   # Publish to crates.io (optional, manual trigger)
   publish-crates:

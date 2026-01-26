@@ -10,6 +10,11 @@ description = "Command-line tool for flashing HiSilicon chips"
 keywords = ["hisilicon", "flash", "ws63", "embedded", "cli"]
 categories = ["command-line-utilities", "development-tools"]
 
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ target }.{ archive-format }"
+bin-dir = "{ bin }{ binary-ext }"
+pkg-fmt = "zip"
+
 [lints]
 workspace = true
 
