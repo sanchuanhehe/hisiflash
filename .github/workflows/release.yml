@@ -104,26 +104,16 @@ jobs:
 
       - name: Install dependencies (Linux cross)
         if: runner.os == 'Linux' && matrix.cross
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y zip
-          # Install cross-compilation dependencies
-          sudo dpkg --add-architecture arm64
-          sudo apt-get update
-          sudo apt-get install -y libudev-dev:arm64 gcc-aarch64-linux-gnu
+        run: sudo apt-get update && sudo apt-get install -y zip
 
-      # Cross compilation for ARM64 Linux using cargo-zigbuild
-      - name: Install cargo-zigbuild
+      # Cross compilation for ARM64 Linux using cross
+      - name: Install cross
         if: matrix.cross
-        uses: taiki-e/install-action@cargo-zigbuild
+        uses: taiki-e/install-action@cross
 
-      - name: Build with cargo-zigbuild
+      - name: Build with cross
         if: matrix.cross
-        run: |
-          # Set up pkg-config for cross-compilation
-          export PKG_CONFIG_ALLOW_CROSS=1
-          export PKG_CONFIG_PATH=/usr/lib/aarch64-linux-gnu/pkgconfig
-          cargo zigbuild --release --target ${{ matrix.target }}
+        run: cross build --release --target ${{ matrix.target }}
 
       - name: Build release
         if: ${{ !matrix.cross }}
