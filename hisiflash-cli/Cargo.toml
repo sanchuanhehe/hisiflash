@@ -1,0 +1,28 @@
+[package]
+name = "hisiflash-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Command-line tool for flashing HiSilicon chips"
+keywords = ["hisilicon", "flash", "ws63", "embedded", "cli"]
+categories = ["command-line-utilities", "development-tools"]
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "hisiflash"
+path = "src/main.rs"
+
+[dependencies]
+hisiflash.workspace = true
+clap.workspace = true
+thiserror.workspace = true
+anyhow.workspace = true
+indicatif.workspace = true
+console.workspace = true
+log.workspace = true
+env_logger.workspace = true

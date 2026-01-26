@@ -1,0 +1,28 @@
+[package]
+name = "hisiflash"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Library for flashing HiSilicon chips"
+keywords = ["hisilicon", "flash", "ws63", "embedded", "serial"]
+categories = ["development-tools", "embedded"]
+
+[lints]
+workspace = true
+
+[dependencies]
+thiserror.workspace = true
+log.workspace = true
+serialport.workspace = true
+byteorder.workspace = true
+serde = { workspace = true, optional = true }
+
+[features]
+default = []
+serde = ["dep:serde"]
+
+[dev-dependencies]
+env_logger.workspace = true

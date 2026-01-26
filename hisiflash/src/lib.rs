@@ -1,0 +1,62 @@
+//! # hisiflash
+//!
+//! A library for flashing HiSilicon chips.
+//!
+//! This crate provides the core functionality for communicating with HiSilicon
+//! chips via serial port, including:
+//!
+//! - FWPKG firmware package parsing
+//! - WS63 protocol implementation
+//! - YMODEM file transfer
+//! - CRC16-XMODEM checksum calculation
+//!
+//! ## Supported Chips
+//!
+//! - WS63 (primary support)
+//! - More chips coming in future releases
+//!
+//! ## Example
+//!
+//! ```rust,no_run
+//! use hisiflash::{Ws63Flasher, Fwpkg};
+//!
+//! fn main() -> Result<(), Box<dyn std::error::Error>> {
+//!     // Parse firmware package
+//!     let fwpkg = Fwpkg::from_file("firmware.fwpkg")?;
+//!     
+//!     // Create flasher and connect
+//!     let mut flasher = Ws63Flasher::new("/dev/ttyUSB0", 115200)?;
+//!     flasher.connect()?;
+//!     
+//!     // Flash the firmware
+//!     flasher.flash_fwpkg(&fwpkg, None, |name, current, total| {
+//!         println!("Flashing {}: {}/{}", name, current, total);
+//!     })?;
+//!     
+//!     // Reset the device
+//!     flasher.reset()?;
+//!     
+//!     Ok(())
+//! }
+//! ```
+
+#![warn(missing_docs)]
+#![warn(clippy::all)]
+
+pub mod connection;
+pub mod error;
+pub mod image;
+pub mod protocol;
+pub mod target;
+
+// Re-exports for convenience
+pub use connection::ConnectionPort;
+pub use connection::detect::{DetectedPort, UsbDevice};
+pub use connection::serial::SerialPort;
+pub use error::{Error, Result};
+pub use image::fwpkg::Fwpkg;
+pub use protocol::seboot::{
+    CommandType, ImageType, SebootAck, SebootFrame, contains_handshake_ack,
+};
+pub use target::ws63::flasher::Ws63Flasher;
+pub use target::{ChipConfig, ChipFamily, ChipOps};
