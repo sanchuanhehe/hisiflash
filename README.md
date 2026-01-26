@@ -8,13 +8,29 @@
 
 ## 特性
 
+### 核心功能
 - 🚀 **高性能**：原生 Rust 实现，启动快速
 - 🔧 **跨平台**：支持 Linux、macOS、Windows
 - 📦 **FWPKG 支持**：完整支持 HiSilicon FWPKG 固件包格式
-- 🔌 **智能检测**：通过 USB VID/PID 自动检测串口设备（支持 CH340/CP210x/FTDI）
-- 📊 **进度显示**：友好的烧录进度条
-- 🛠️ **库 + CLI**：既可作为库使用，也可作为命令行工具
 - 🔄 **SEBOOT 协议**：兼容官方 fbb_burntool 协议
+- 🛠️ **库 + CLI**：既可作为库使用，也可作为命令行工具
+
+### 智能检测
+- 🔌 **USB VID/PID 自动检测**：支持 CH340/CP210x/FTDI/PL2303/HiSilicon 原生 USB
+- 🎯 **交互式串口选择**：多串口时自动提示选择，已知设备高亮显示
+- 💾 **串口记忆功能**：可保存常用串口到配置文件
+
+### 用户体验
+- 📊 **彩色进度条**：友好的烧录进度显示
+- 🔇 **静默模式**：`-q/--quiet` 抑制非必要输出
+- 📝 **分级详细模式**：`-v/-vv/-vvv` 三级调试输出
+- 🤖 **非交互模式**：`--non-interactive` 支持 CI/CD 环境
+
+### 配置与扩展
+- ⚙️ **TOML 配置文件**：支持本地 (`hisiflash.toml`) 和全局 (`~/.config/hisiflash/`) 配置
+- 🌍 **环境变量**：完整的环境变量支持 (HISIFLASH_PORT/BAUD/CHIP 等)
+- 🐚 **Shell 补全**：支持 Bash/Zsh/Fish/PowerShell 自动补全
+- 📡 **串口监控**：内置 `monitor` 命令查看设备输出
 
 ## 支持的芯片
 
@@ -126,6 +142,8 @@ Commands:
   erase          擦除 Flash
   info           显示固件信息
   list-ports     列出可用串口
+  monitor        串口监控
+  completions    生成 Shell 补全脚本
   help           显示帮助信息
 
 Options:
@@ -133,6 +151,10 @@ Options:
   -b, --baud <BAUD>      波特率 [default: 921600] [env: HISIFLASH_BAUD]
   -c, --chip <CHIP>      芯片类型 [default: ws63] [env: HISIFLASH_CHIP]
   -v, --verbose...       详细输出级别 (-v, -vv, -vvv)
+  -q, --quiet            静默模式
+      --non-interactive  非交互模式 [env: HISIFLASH_NON_INTERACTIVE]
+      --confirm-port     强制确认端口选择
+      --list-all-ports   列出所有端口（包括未知类型）
   -h, --help             显示帮助
   -V, --version          显示版本
 ```
@@ -144,6 +166,48 @@ Options:
 | `HISIFLASH_PORT` | 默认串口 | - |
 | `HISIFLASH_BAUD` | 默认波特率 | 921600 |
 | `HISIFLASH_CHIP` | 默认芯片类型 | ws63 |
+| `HISIFLASH_NON_INTERACTIVE` | 非交互模式 | false |
+| `RUST_LOG` | 日志级别 | info |
+
+## 配置文件
+
+hisiflash 支持 TOML 格式的配置文件：
+
+**本地配置** (当前目录): `hisiflash.toml` 或 `hisiflash_ports.toml`
+
+**全局配置**: `~/.config/hisiflash/config.toml`
+
+```toml
+[connection]
+serial = "/dev/ttyUSB0"
+baud = 921600
+
+[flash]
+late_baud = false
+
+# 自定义 USB 设备用于自动检测
+[[usb_device]]
+vid = 0x1A86
+pid = 0x7523
+```
+
+## Shell 补全
+
+生成 Shell 补全脚本：
+
+```bash
+# Bash
+hisiflash completions bash > ~/.local/share/bash-completion/completions/hisiflash
+
+# Zsh
+hisiflash completions zsh > ~/.zfunc/_hisiflash
+
+# Fish
+hisiflash completions fish > ~/.config/fish/completions/hisiflash.fish
+
+# PowerShell
+hisiflash completions powershell > _hisiflash.ps1
+```
 
 ## 作为库使用
 
@@ -188,8 +252,9 @@ hisiflash/
 ├── docs/                   # 文档
 │   ├── REQUIREMENTS.md     # 需求文档
 │   ├── ARCHITECTURE.md     # 架构设计
+│   ├── COMPARISON.md       # 功能对比分析
 │   └── protocols/          # 协议文档
-│       └── WS63_PROTOCOL.md
+│       └── PROTOCOL.md     # SEBOOT 协议规范
 ├── hisiflash/              # 核心库
 │   ├── Cargo.toml
 │   └── src/
@@ -197,7 +262,8 @@ hisiflash/
 │       ├── error.rs        # 错误类型
 │       ├── connection/     # 连接抽象
 │       │   ├── mod.rs
-│       │   └── serial.rs
+│       │   ├── serial.rs
+│       │   └── detect.rs   # USB VID/PID 检测
 │       ├── protocol/       # 协议实现
 │       │   ├── mod.rs
 │       │   ├── crc.rs      # CRC16-XMODEM
@@ -215,6 +281,8 @@ hisiflash/
     ├── Cargo.toml
     └── src/
         ├── main.rs
+        ├── config.rs       # 配置文件支持
+        ├── serial.rs       # 交互式串口选择
         └── commands/
 ```
 
