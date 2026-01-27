@@ -47,11 +47,11 @@ WS63 和 BS2X 系列使用相同的 SEBOOT 烧录协议。
 ### 使用 Cargo 安装（推荐）
 
 ```bash
-# 从 crates.io 安装（发布后可用）
-cargo install hisiflash
+# 从 crates.io 安装
+cargo install hisiflash-cli
 
 # 或使用 cargo-binstall 安装预编译二进制（更快）
-cargo binstall hisiflash
+cargo binstall hisiflash-cli
 ```
 
 ### 从源码编译
