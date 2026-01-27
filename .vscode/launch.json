@@ -1,0 +1,82 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug: hisiflash flash",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=hisiflash",
+                    "--package=hisiflash-cli"
+                ],
+                "filter": {
+                    "name": "hisiflash",
+                    "kind": "bin"
+                }
+            },
+            "args": [
+                "flash",
+                "-p", "/dev/ttyUSB0",
+                "firmware.fwpkg"
+            ],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug: hisiflash list-ports",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=hisiflash",
+                    "--package=hisiflash-cli"
+                ],
+                "filter": {
+                    "name": "hisiflash",
+                    "kind": "bin"
+                }
+            },
+            "args": ["list-ports"],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug: hisiflash --help",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=hisiflash",
+                    "--package=hisiflash-cli"
+                ],
+                "filter": {
+                    "name": "hisiflash",
+                    "kind": "bin"
+                }
+            },
+            "args": ["--help"],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug: Unit Tests",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--lib",
+                    "--package=hisiflash"
+                ],
+                "filter": {
+                    "name": "hisiflash",
+                    "kind": "lib"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        }
+    ]
+}
