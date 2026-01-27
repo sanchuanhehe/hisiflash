@@ -5,10 +5,12 @@ This document provides essential information for coding agents working on the hi
 ## Repository Overview
 
 **What hisiflash does:** hisiflash is a Rust-based, cross-platform tool for flashing HiSilicon chips (WS63, BS2X series). Inspired by [espflash](https://github.com/esp-rs/espflash) and [esptool](https://github.com/espressif/esptool), it provides:
+
 - `hisiflash` CLI tool for flashing, erasing, and managing HiSilicon devices
 - `hisiflash` library crate for programmatic access
 
 **Project type:** Rust workspace with two crates:
+
 - `hisiflash/` - Core library crate
 - `hisiflash-cli/` - CLI application crate
 
@@ -19,26 +21,31 @@ This document provides essential information for coding agents working on the hi
 ### Essential Commands
 
 1. **Build the project:**
+
    ```bash
    cargo build --release
    ```
 
 2. **Run tests:**
+
    ```bash
    cargo test
    ```
 
 3. **Run linter:**
+
    ```bash
    cargo clippy --all-targets --all-features -- -D warnings
    ```
 
 4. **Format code:**
+
    ```bash
    cargo fmt --all
    ```
 
 5. **Check without building:**
+
    ```bash
    cargo check --all-targets
    ```
@@ -124,6 +131,7 @@ Located in `hisiflash/src/target/ws63/flasher.rs`:
 ### SEBOOT Protocol Overview
 
 All commands use the same frame format:
+
 ```
 +------------+--------+------+-------+---------------+--------+
 |   Magic    | Length | Type | ~Type |     Data      | CRC16  |
@@ -133,6 +141,7 @@ All commands use the same frame format:
 ```
 
 Key command types:
+
 - `0xF0` - Handshake
 - `0xD2` - Download Flash Image
 - `0x87` - Reset
@@ -142,16 +151,19 @@ Key command types:
 ## Testing
 
 **Run all tests:**
+
 ```bash
 cargo test
 ```
 
 **Run specific test:**
+
 ```bash
 cargo test test_handshake_frame
 ```
 
 **Run tests with output:**
+
 ```bash
 cargo test -- --nocapture
 ```
@@ -194,12 +206,14 @@ cargo test -- --nocapture
 ## Dependencies
 
 **Runtime dependencies:**
+
 - `serialport` - Serial port communication
 - `byteorder` - Byte order handling
 - `thiserror` - Error definitions
 - `log` - Logging facade
 
 **CLI dependencies:**
+
 - `clap` - Command line parsing
 - `clap_complete` - Shell completion generation
 - `dialoguer` - Interactive prompts
@@ -230,6 +244,7 @@ hisiflash supports TOML configuration files:
 **Global config:** `~/.config/hisiflash/config.toml`
 
 Example configuration:
+
 ```toml
 [connection]
 serial = "/dev/ttyUSB0"
@@ -247,17 +262,20 @@ pid = 0x7523
 ## Debugging Tips
 
 1. **Enable debug logging:**
+
    ```bash
    RUST_LOG=debug ./target/release/hisiflash list-ports
    ```
 
 2. **Check serial port permissions:**
+
    ```bash
    sudo usermod -a -G dialout $USER
    # Then log out and back in
    ```
 
 3. **Monitor serial traffic:**
+
    ```bash
    # Use another terminal to monitor
    cat /dev/ttyUSB0 | hexdump -C
@@ -272,6 +290,7 @@ pid = 0x7523
 ## Trust These Instructions
 
 These instructions are validated against the current codebase. When in doubt:
+
 1. Run `cargo check` to verify compilation
 2. Run `cargo test` to verify functionality
 3. Run `cargo clippy` to check code quality
