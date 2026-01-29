@@ -104,21 +104,6 @@ impl<P: Port> Ws63Flasher<P> {
         self
     }
 
-    /// Get a reference to the underlying port.
-    pub fn port(&self) -> &P {
-        &self.port
-    }
-
-    /// Get a mutable reference to the underlying port.
-    pub fn port_mut(&mut self) -> &mut P {
-        &mut self.port
-    }
-
-    /// Consume the flasher and return the underlying port.
-    pub fn into_port(self) -> P {
-        self.port
-    }
-
     /// Connect to the device.
     ///
     /// This waits for the device to boot into download mode and performs
@@ -464,7 +449,7 @@ impl<P: Port> Ws63Flasher<P> {
 #[cfg(feature = "native")]
 mod native_impl {
     use super::{DEFAULT_BAUD, Duration, Error, Result, Ws63Flasher, debug, thread, warn};
-    use crate::port::{NativePort, SerialConfig};
+    use crate::port::NativePort;
 
     impl Ws63Flasher<NativePort> {
         /// Create a new WS63 flasher by opening a serial port.
@@ -480,6 +465,50 @@ mod native_impl {
             Self::open_with_retry(port_name, target_baud)
         }
 
+        /// Open a serial port with full configuration (P0: 完整配置支持).
+        ///
+        /// This allows customization of all serial port parameters.
+        ///
+        /// # Arguments
+        ///
+        /// * `config` - Serial port configuration
+        pub fn open_with_config(config: crate::port::SerialConfig) -> Result<Self> {
+            Self::open_with_config_retry(config)
+        }
+
+        /// Open serial port with full config and retry mechanism.
+        #[allow(clippy::needless_pass_by_value)]
+        fn open_with_config_retry(config: crate::port::SerialConfig) -> Result<Self> {
+            const MAX_OPEN_PORT_ATTEMPTS: usize = 3;
+            const OPEN_RETRY_DELAY: Duration = Duration::from_millis(500);
+
+            let mut last_error = None;
+
+            for attempt in 1..=MAX_OPEN_PORT_ATTEMPTS {
+                match NativePort::open(&config) {
+                    Ok(port) => {
+                        if attempt > 1 {
+                            debug!("Port opened on attempt {attempt}");
+                        }
+                        return Ok(Self::new(port, config.baud_rate));
+                    },
+                    Err(e) => {
+                        warn!(
+                            "Failed to open port {} (attempt {}/{}): {e}",
+                            config.port_name, attempt, MAX_OPEN_PORT_ATTEMPTS
+                        );
+                        last_error = Some(e);
+
+                        if attempt < MAX_OPEN_PORT_ATTEMPTS {
+                            thread::sleep(OPEN_RETRY_DELAY);
+                        }
+                    },
+                }
+            }
+
+            Err(last_error.unwrap_or(Error::DeviceNotFound))
+        }
+
         /// Open serial port with retry mechanism.
         fn open_with_retry(port_name: &str, target_baud: u32) -> Result<Self> {
             const MAX_OPEN_PORT_ATTEMPTS: usize = 3;
@@ -488,7 +517,7 @@ mod native_impl {
             let mut last_error = None;
 
             for attempt in 1..=MAX_OPEN_PORT_ATTEMPTS {
-                let config = SerialConfig::new(port_name, DEFAULT_BAUD);
+                let config = crate::port::SerialConfig::new(port_name, DEFAULT_BAUD);
                 match NativePort::open(&config) {
                     Ok(port) => {
                         if attempt > 1 {

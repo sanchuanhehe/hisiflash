@@ -5,7 +5,7 @@
 
 use crate::error::{Error, Result};
 use crate::image::fwpkg::Fwpkg;
-use crate::port::Port;
+use crate::port::{Port, SerialConfig};
 use std::fmt;
 
 /// Supported chip families.
@@ -255,6 +255,47 @@ impl ChipFamily {
             _ => Err(Error::Unsupported(format!(
                 "Unsupported chip family for generic port: {self}"
             ))),
+        }
+    }
+
+    /// Create a flasher with full serial configuration (P0: 完整配置支持).
+    ///
+    /// This allows customization of all serial port parameters including
+    /// baud rate, data bits, parity, stop bits, and flow control.
+    ///
+    /// # Arguments
+    ///
+    /// * `config` - Serial port configuration
+    /// * `late_baud` - Use late baud rate switch (after LoaderBoot)
+    /// * `verbose` - Verbose output level
+    ///
+    /// # Returns
+    ///
+    /// A boxed flasher instance implementing the `Flasher` trait
+    #[cfg(feature = "native")]
+    pub fn create_flasher_with_config(
+        &self,
+        config: SerialConfig,
+        late_baud: bool,
+        verbose: u8,
+    ) -> Result<Box<dyn Flasher>> {
+        match self {
+            Self::Ws63 => {
+                let flasher =
+                    super::ws63::flasher::Ws63Flasher::open_with_config(config)?
+                        .with_late_baud(late_baud)
+                        .with_verbose(verbose);
+                Ok(Box::new(flasher))
+            }
+            Self::Bs2x | Self::Bs25 => {
+                Err(Error::Unsupported("BS2X series support coming soon".into()))
+            }
+            Self::Ws53 | Self::Sw39 => Err(Error::Unsupported(format!(
+                "{self} series support coming soon"
+            ))),
+            Self::Generic => Err(Error::Unsupported(
+                "Cannot create flasher for generic chip family".into(),
+            )),
         }
     }
 }
