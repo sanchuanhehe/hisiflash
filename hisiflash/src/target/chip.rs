@@ -217,8 +217,7 @@ impl ChipFamily {
         match self {
             Self::Ws63 => {
                 // Ws63Flasher struct implements the Flasher trait
-                let flasher = super::ws63::flasher::Ws63Flasher::open(port_name, target_baud)
-                    .map_err(|e| Error::from(e))?
+                let flasher = super::ws63::flasher::Ws63Flasher::open(port_name, target_baud)?
                     .with_late_baud(late_baud)
                     .with_verbose(verbose);
                 Ok(Box::new(flasher))
@@ -227,8 +226,7 @@ impl ChipFamily {
                 Err(Error::Unsupported("BS2X series support coming soon".into()))
             },
             Self::Ws53 | Self::Sw39 => Err(Error::Unsupported(format!(
-                "{} series support coming soon",
-                self
+                "{self} series support coming soon"
             ))),
             Self::Generic => Err(Error::Unsupported(
                 "Cannot create flasher for generic chip family".into(),
@@ -255,8 +253,7 @@ impl ChipFamily {
                 Ok(Box::new(flasher))
             },
             _ => Err(Error::Unsupported(format!(
-                "Unsupported chip family for generic port: {}",
-                self
+                "Unsupported chip family for generic port: {self}"
             ))),
         }
     }

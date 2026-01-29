@@ -643,7 +643,7 @@ fn cmd_erase(cli: &Cli, config: &mut Config, all: bool) -> Result<()> {
 }
 
 /// Format partition type for display.
-fn format_partition_type(pt: &PartitionType) -> String {
+fn format_partition_type(pt: PartitionType) -> String {
     match pt {
         PartitionType::Loader => style("Loader").yellow().to_string(),
         PartitionType::Normal => "Normal".to_string(),
@@ -662,7 +662,7 @@ fn format_partition_type(pt: &PartitionType) -> String {
         PartitionType::Rom => "ROM".to_string(),
         PartitionType::Emmc => "eMMC".to_string(),
         PartitionType::Database => style("Database").dim().to_string(),
-        PartitionType::Unknown(v) => format!("Unknown({})", v),
+        PartitionType::Unknown(v) => format!("Unknown({v})"),
     }
 }
 
@@ -718,7 +718,7 @@ fn cmd_info(firmware: &PathBuf) -> Result<()> {
         style(t!("info.partitions_header")).bold().underlined()
     );
     for (i, bin) in fwpkg.bins.iter().enumerate() {
-        let type_str = format_partition_type(&bin.partition_type);
+        let type_str = format_partition_type(bin.partition_type);
 
         println!("\n  [{:2}] {}", i, style(&bin.name).cyan().bold());
         println!("       {}", t!("info.type", "type" = type_str));
