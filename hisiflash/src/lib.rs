@@ -29,27 +29,28 @@
 //! ## Example
 //!
 //! ```rust,no_run
-//! use hisiflash::{Ws63Flasher, Fwpkg};
+//! use hisiflash::{ChipFamily, Fwpkg};
 //!
 //! fn main() -> Result<(), Box<dyn std::error::Error>> {
 //!     // Parse firmware package
 //!     let fwpkg = Fwpkg::from_file("firmware.fwpkg")?;
-//!     
+//!
 //!     // Create flasher and connect (native only)
 //!     #[cfg(feature = "native")]
 //!     {
-//!         let mut flasher = Ws63Flasher::open("/dev/ttyUSB0", 921600)?;
+//!         let chip = ChipFamily::Ws63;
+//!         let mut flasher = chip.create_flasher("/dev/ttyUSB0", 921600, false, 0)?;
 //!         flasher.connect()?;
-//!         
+//!
 //!         // Flash the firmware
-//!         flasher.flash_fwpkg(&fwpkg, None, |name, current, total| {
+//!         flasher.flash_fwpkg(&fwpkg, None, &mut |name, current, total| {
 //!             println!("Flashing {}: {}/{}", name, current, total);
 //!         })?;
-//!         
+//!
 //!         // Reset the device
 //!         flasher.reset()?;
 //!     }
-//!     
+//!
 //!     Ok(())
 //! }
 //! ```
@@ -71,7 +72,7 @@ pub use port::{Port, PortEnumerator, PortInfo, SerialConfig};
 pub use protocol::seboot::{
     CommandType, ImageType, SebootAck, SebootFrame, contains_handshake_ack,
 };
-pub use target::ws63::flasher::Ws63Flasher;
+// Ws63Flasher 不直接导出，只通过 Flasher trait 访问
 pub use target::{ChipConfig, ChipFamily, ChipOps, Flasher};
 
 // Native-specific re-exports

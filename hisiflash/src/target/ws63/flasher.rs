@@ -13,24 +13,21 @@
 //! ## Example
 //!
 //! ```rust,no_run
-//! use hisiflash::{Ws63Flasher, Fwpkg};
-//! use hisiflash::port::{NativePort, SerialConfig};
+//! use hisiflash::{ChipFamily, Fwpkg};
 //!
 //! fn main() -> Result<(), Box<dyn std::error::Error>> {
-//!     // Open serial port
-//!     let config = SerialConfig::new("/dev/ttyUSB0", 115200);
-//!     let port = NativePort::open(&config)?;
-//!     
-//!     // Create flasher
-//!     let mut flasher = Ws63Flasher::new(port, 921600);
+//!     // Create flasher using chip abstraction
+//!     let mut flasher = ChipFamily::Ws63.create_flasher("/dev/ttyUSB0", 921600, false, 0)?;
+//!
+//!     // Connect to device
 //!     flasher.connect()?;
-//!     
+//!
 //!     // Flash firmware
 //!     let fwpkg = Fwpkg::from_file("firmware.fwpkg")?;
-//!     flasher.flash_fwpkg(&fwpkg, None, |name, current, total| {
+//!     flasher.flash_fwpkg(&fwpkg, None, &mut |name, current, total| {
 //!         println!("Flashing {}: {}/{}", name, current, total);
 //!     })?;
-//!     
+//!
 //!     Ok(())
 //! }
 //! ```

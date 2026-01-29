@@ -15,7 +15,7 @@ use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
 use clap_complete::{Shell, generate};
 use console::style;
 use env_logger::Env;
-use hisiflash::{ChipFamily, Fwpkg, FwpkgVersion, PartitionType, Ws63Flasher};
+use hisiflash::{ChipFamily, Fwpkg, FwpkgVersion, PartitionType};
 use indicatif::{ProgressBar, ProgressStyle};
 use log::{debug, error, warn};
 use rust_i18n::t;
@@ -566,9 +566,8 @@ fn cmd_write(
         );
     }
 
-    let mut flasher = Ws63Flasher::open(&port, cli.baud)?
-        .with_late_baud(late_baud)
-        .with_verbose(cli.verbose);
+    let chip: ChipFamily = cli.chip.into();
+    let mut flasher = chip.create_flasher(&port, cli.baud, late_baud, cli.verbose)?;
 
     if !cli.quiet {
         println!("{} {}", style("⏳").yellow(), t!("common.waiting_device"));
@@ -620,7 +619,8 @@ fn cmd_erase(cli: &Cli, config: &mut Config, all: bool) -> Result<()> {
         );
     }
 
-    let mut flasher = Ws63Flasher::open(&port, cli.baud)?.with_verbose(cli.verbose);
+    let chip: ChipFamily = cli.chip.into();
+    let mut flasher = chip.create_flasher(&port, cli.baud, false, cli.verbose)?;
 
     if !cli.quiet {
         println!("{} {}", style("⏳").yellow(), t!("common.waiting_device"));
