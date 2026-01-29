@@ -362,8 +362,9 @@ impl<P: Port> Ws63Flasher<P> {
         F: FnMut(&str, usize, usize),
     {
         // Check for oversized data that would truncate
-        let len = u32::try_from(data.len())
-            .map_err(|_| Error::Protocol(format!("Firmware too large ({} bytes > 4GB)", data.len())))?;
+        let len = u32::try_from(data.len()).map_err(|_| {
+            Error::Protocol(format!("Firmware too large ({} bytes > 4GB)", data.len()))
+        })?;
 
         debug!(
             "Downloading {} ({} bytes) to 0x{:08X}",
@@ -510,9 +511,12 @@ mod native_impl {
                 }
             }
 
-            Err(last_error.unwrap_or_else(||
-                Error::Config(format!("Failed to open port after {} attempts", MAX_OPEN_PORT_ATTEMPTS))
-            ))
+            Err(last_error.unwrap_or_else(|| {
+                Error::Config(format!(
+                    "Failed to open port after {} attempts",
+                    MAX_OPEN_PORT_ATTEMPTS
+                ))
+            }))
         }
 
         /// Open serial port with retry mechanism.
@@ -544,9 +548,12 @@ mod native_impl {
                 }
             }
 
-            Err(last_error.unwrap_or_else(||
-                Error::Config(format!("Failed to open port {} after {} attempts", port_name, MAX_OPEN_PORT_ATTEMPTS))
-            ))
+            Err(last_error.unwrap_or_else(|| {
+                Error::Config(format!(
+                    "Failed to open port {} after {} attempts",
+                    port_name, MAX_OPEN_PORT_ATTEMPTS
+                ))
+            }))
         }
     }
 }
@@ -705,9 +712,10 @@ mod tests {
 
     impl Read for MockPort {
         fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-            let mut read_buf = self.read_buffer.lock().map_err(|e| {
-                std::io::Error::other(format!("mutex poisoned: {e}"))
-            })?;
+            let mut read_buf = self
+                .read_buffer
+                .lock()
+                .map_err(|e| std::io::Error::other(format!("mutex poisoned: {e}")))?;
 
             if read_buf.is_empty() {
                 return Err(std::io::Error::new(
@@ -725,9 +733,10 @@ mod tests {
 
     impl Write for MockPort {
         fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-            let mut write_buf = self.write_buffer.lock().map_err(|e| {
-                std::io::Error::other(format!("mutex poisoned: {e}"))
-            })?;
+            let mut write_buf = self
+                .write_buffer
+                .lock()
+                .map_err(|e| std::io::Error::other(format!("mutex poisoned: {e}")))?;
             write_buf.extend_from_slice(buf);
             Ok(buf.len())
         }

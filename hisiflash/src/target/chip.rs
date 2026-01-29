@@ -288,15 +288,14 @@ impl ChipFamily {
     ) -> Result<Box<dyn Flasher>> {
         match self {
             Self::Ws63 => {
-                let flasher =
-                    super::ws63::flasher::Ws63Flasher::open_with_config(config)?
-                        .with_late_baud(late_baud)
-                        .with_verbose(verbose);
+                let flasher = super::ws63::flasher::Ws63Flasher::open_with_config(config)?
+                    .with_late_baud(late_baud)
+                    .with_verbose(verbose);
                 Ok(Box::new(flasher))
-            }
+            },
             Self::Bs2x | Self::Bs25 => {
                 Err(Error::Unsupported("BS2X series support coming soon".into()))
-            }
+            },
             Self::Ws53 | Self::Sw39 => Err(Error::Unsupported(format!(
                 "{self} series support coming soon"
             ))),

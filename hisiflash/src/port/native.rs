@@ -118,7 +118,8 @@ impl Port for NativePort {
 
 impl Read for NativePort {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        self.port.as_mut()
+        self.port
+            .as_mut()
             .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotConnected, "port closed"))
             .and_then(|p| p.read(buf))
     }
@@ -126,13 +127,15 @@ impl Read for NativePort {
 
 impl Write for NativePort {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        self.port.as_mut()
+        self.port
+            .as_mut()
             .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotConnected, "port closed"))
             .and_then(|p| p.write(buf))
     }
 
     fn flush(&mut self) -> std::io::Result<()> {
-        self.port.as_mut()
+        self.port
+            .as_mut()
             .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotConnected, "port closed"))
             .and_then(|p| p.flush())
     }
