@@ -188,7 +188,10 @@ impl SebootFrame {
     pub fn handshake(baud_rate: u32) -> Self {
         let mut frame = Self::new(CommandType::Handshake);
         // Writing to Vec<u8> with byteorder never fails - Vec will grow as needed
-        frame.data.write_u32::<LittleEndian>(baud_rate).expect("Vec<u8> write cannot fail");
+        frame
+            .data
+            .write_u32::<LittleEndian>(baud_rate)
+            .expect("Vec<u8> write cannot fail");
         frame.data.push(8); // DataBits = 8
         frame.data.push(1); // StopBits = 1
         frame.data.push(0); // Parity = None
@@ -200,9 +203,13 @@ impl SebootFrame {
     pub fn set_baud_rate(baud_rate: u32) -> Self {
         let mut frame = Self::new(CommandType::SetBaudRate);
         // Writing to Vec<u8> with byteorder never fails - Vec will grow as needed
-        frame.data.write_u32::<LittleEndian>(baud_rate).expect("Vec<u8> write cannot fail");
+        frame
+            .data
+            .write_u32::<LittleEndian>(baud_rate)
+            .expect("Vec<u8> write cannot fail");
         // Magic constant for baud rate change command
-        frame.data
+        frame
+            .data
             .write_u32::<LittleEndian>(0x0108)
             .expect("Vec<u8> write cannot fail");
         frame
@@ -224,13 +231,16 @@ impl SebootFrame {
     pub fn download_flash_image(addr: u32, len: u32, erase_size: u32, is_rom: bool) -> Self {
         let mut frame = Self::new(CommandType::DownloadFlashImage);
         // Writing to Vec<u8> with byteorder never fails - Vec will grow as needed
-        frame.data
+        frame
+            .data
             .write_u32::<LittleEndian>(addr)
             .expect("Vec<u8> write cannot fail");
-        frame.data
+        frame
+            .data
             .write_u32::<LittleEndian>(len)
             .expect("Vec<u8> write cannot fail");
-        frame.data
+        frame
+            .data
             .write_u32::<LittleEndian>(erase_size)
             .expect("Vec<u8> write cannot fail");
         let formal = u8::from(is_rom);

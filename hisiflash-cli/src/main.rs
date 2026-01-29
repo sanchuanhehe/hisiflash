@@ -453,10 +453,9 @@ fn cmd_flash(
         );
     }
 
-    // Create flasher
-    let mut flasher = Ws63Flasher::open(&port, cli.baud)?
-        .with_late_baud(late_baud)
-        .with_verbose(cli.verbose);
+    // Create flasher using chip abstraction
+    let chip: ChipFamily = cli.chip.into();
+    let mut flasher = chip.create_flasher(&port, cli.baud, late_baud, cli.verbose)?;
 
     // Connect
     if !cli.quiet {
@@ -488,15 +487,19 @@ fn cmd_flash(
 
     let mut current_partition = String::new();
 
-    flasher.flash_fwpkg(&fwpkg, filter_slice, |name, current, total| {
-        if name != current_partition {
-            current_partition = name.to_string();
-            pb.set_message(t!("flash.flashing", name = name).to_string());
-        }
-        if total > 0 {
-            pb.set_position((current * 100 / total) as u64);
-        }
-    })?;
+    flasher.flash_fwpkg(
+        &fwpkg,
+        filter_slice,
+        &mut |name: &str, current: usize, total: usize| {
+            if name != current_partition {
+                current_partition = name.to_string();
+                pb.set_message(t!("flash.flashing", name = name).to_string());
+            }
+            if total > 0 {
+                pb.set_position((current * 100 / total) as u64);
+            }
+        },
+    )?;
 
     pb.finish_with_message(t!("common.complete").to_string());
 

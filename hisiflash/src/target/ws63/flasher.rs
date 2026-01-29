@@ -517,6 +517,43 @@ mod native_impl {
     }
 }
 
+impl<P: Port> crate::target::Flasher for Ws63Flasher<P> {
+    fn connect(&mut self) -> Result<()> {
+        self.connect()
+    }
+
+    fn flash_fwpkg(
+        &mut self,
+        fwpkg: &Fwpkg,
+        filter: Option<&[&str]>,
+        progress: &mut dyn FnMut(&str, usize, usize),
+    ) -> Result<()> {
+        self.flash_fwpkg(fwpkg, filter, |name, current, total| {
+            progress(name, current, total);
+        })
+    }
+
+    fn write_bins(&mut self, loaderboot: &[u8], bins: &[(&[u8], u32)]) -> Result<()> {
+        self.write_bins(loaderboot, bins)
+    }
+
+    fn erase_all(&mut self) -> Result<()> {
+        self.erase_all()
+    }
+
+    fn reset(&mut self) -> Result<()> {
+        self.reset()
+    }
+
+    fn connection_baud(&self) -> u32 {
+        DEFAULT_BAUD
+    }
+
+    fn target_baud(&self) -> Option<u32> {
+        Some(self.target_baud)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     // Integration tests would require actual hardware

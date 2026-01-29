@@ -72,7 +72,7 @@ pub use protocol::seboot::{
     CommandType, ImageType, SebootAck, SebootFrame, contains_handshake_ack,
 };
 pub use target::ws63::flasher::Ws63Flasher;
-pub use target::{ChipConfig, ChipFamily, ChipOps};
+pub use target::{ChipConfig, ChipFamily, ChipOps, Flasher};
 
 // Native-specific re-exports
 #[cfg(feature = "native")]

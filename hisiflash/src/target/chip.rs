@@ -3,7 +3,9 @@
 //! This module provides a trait-based abstraction for different chip families,
 //! allowing the same codebase to support WS63, BS2X, and other HiSilicon chips.
 
-use crate::error::Result;
+use crate::error::{Error, Result};
+use crate::image::fwpkg::Fwpkg;
+use crate::port::Port;
 use std::fmt;
 
 /// Supported chip families.
@@ -148,6 +150,115 @@ impl ChipConfig {
 impl Default for ChipConfig {
     fn default() -> Self {
         Self::new(ChipFamily::default())
+    }
+}
+
+/// Trait for flashing operations across all chip families.
+///
+/// This trait provides a unified interface for flashing firmware,
+/// allowing the CLI to work with any chip family through a common API.
+pub trait Flasher {
+    /// Connect to the device and perform handshake.
+    fn connect(&mut self) -> Result<()>;
+
+    /// Flash a complete FWPKG firmware package.
+    ///
+    /// # Arguments
+    ///
+    /// * `fwpkg` - The firmware package to flash
+    /// * `filter` - Optional filter for partition names (None = flash all)
+    /// * `progress` - Progress callback (partition_name, current_bytes, total_bytes)
+    fn flash_fwpkg(
+        &mut self,
+        fwpkg: &Fwpkg,
+        filter: Option<&[&str]>,
+        progress: &mut dyn FnMut(&str, usize, usize),
+    ) -> Result<()>;
+
+    /// Flash raw binary files.
+    fn write_bins(&mut self, loaderboot: &[u8], bins: &[(&[u8], u32)]) -> Result<()>;
+
+    /// Erase entire flash.
+    fn erase_all(&mut self) -> Result<()>;
+
+    /// Reset the device.
+    fn reset(&mut self) -> Result<()>;
+
+    /// Get the connection baud rate.
+    fn connection_baud(&self) -> u32;
+
+    /// Get the target transfer baud rate (if different from connection).
+    fn target_baud(&self) -> Option<u32>;
+}
+
+impl ChipFamily {
+    /// Create a flasher instance for this chip family (native platforms).
+    ///
+    /// This is the main entry point for creating chip-specific flashers.
+    ///
+    /// # Arguments
+    ///
+    /// * `port_name` - Serial port name (e.g., "/dev/ttyUSB0")
+    /// * `target_baud` - Target baud rate for data transfer
+    /// * `late_baud` - Use late baud rate switch (after LoaderBoot)
+    /// * `verbose` - Verbose output level
+    ///
+    /// # Returns
+    ///
+    /// A boxed flasher instance implementing the `Flasher` trait
+    #[cfg(feature = "native")]
+    pub fn create_flasher(
+        &self,
+        port_name: &str,
+        target_baud: u32,
+        late_baud: bool,
+        verbose: u8,
+    ) -> Result<Box<dyn Flasher>> {
+        match self {
+            Self::Ws63 => {
+                // Ws63Flasher struct implements the Flasher trait
+                let flasher = super::ws63::flasher::Ws63Flasher::open(port_name, target_baud)
+                    .map_err(|e| Error::from(e))?
+                    .with_late_baud(late_baud)
+                    .with_verbose(verbose);
+                Ok(Box::new(flasher))
+            },
+            Self::Bs2x | Self::Bs25 => {
+                Err(Error::Unsupported("BS2X series support coming soon".into()))
+            },
+            Self::Ws53 | Self::Sw39 => Err(Error::Unsupported(format!(
+                "{} series support coming soon",
+                self
+            ))),
+            Self::Generic => Err(Error::Unsupported(
+                "Cannot create flasher for generic chip family".into(),
+            )),
+        }
+    }
+
+    /// Create a flasher with an existing port (generic, works for any Port type).
+    ///
+    /// This is useful for testing or custom port implementations.
+    #[cfg(feature = "native")]
+    pub fn create_flasher_with_port<P: Port + 'static>(
+        &self,
+        port: P,
+        target_baud: u32,
+        late_baud: bool,
+        verbose: u8,
+    ) -> Result<Box<dyn Flasher>> {
+        match self {
+            Self::Ws63 => {
+                let flasher = super::ws63::flasher::Ws63Flasher::new(port, target_baud)
+                    .with_late_baud(late_baud)
+                    .with_verbose(verbose);
+                Ok(Box::new(flasher))
+            },
+            _ => Err(Error::Unsupported(format!(
+                "Unsupported chip family for generic port: {}",
+                self
+            ))),
+        }
     }
 }
 
