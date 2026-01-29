@@ -211,6 +211,11 @@ pub trait Port: Read + Write + Send {
     /// Read DSR (Data Set Ready) pin state.
     fn read_dsr(&self) -> Result<bool>;
 
+    /// Close the port and release resources.
+    ///
+    /// After calling this method, the port cannot be used for further I/O.
+    fn close(&mut self) -> Result<()>;
+
     /// Write all bytes, blocking until complete.
     fn write_all_bytes(&mut self, buf: &[u8]) -> Result<()> {
         std::io::Write::write_all(self, buf)?;

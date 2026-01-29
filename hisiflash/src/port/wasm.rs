@@ -143,6 +143,11 @@ impl Port for WebSerialPort {
             "DSR reading not yet implemented for Web Serial.".to_string(),
         ))
     }
+
+    fn close(&mut self) -> Result<()> {
+        // Web Serial API handles port closing from JavaScript
+        Ok(())
+    }
 }
 
 impl Read for WebSerialPort {

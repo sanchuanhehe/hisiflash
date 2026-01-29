@@ -509,6 +509,9 @@ fn cmd_flash(
     }
     flasher.reset()?;
 
+    // Close the flasher to release the serial port
+    flasher.close();
+
     if !cli.quiet {
         println!("\n{} {}", style("🎉").green().bold(), t!("flash.completed"));
     }
@@ -581,6 +584,8 @@ fn cmd_write(
     flasher.write_bins(&lb_data, &bins_ref)?;
 
     flasher.reset()?;
+    flasher.close();
+
     if !cli.quiet {
         println!("\n{} {}", style("🎉").green().bold(), t!("write.completed"));
     }
@@ -634,6 +639,7 @@ fn cmd_erase(cli: &Cli, config: &mut Config, all: bool) -> Result<()> {
         println!("{} {}", style("🗑").red(), t!("erase.erasing"));
     }
     flasher.erase_all()?;
+    flasher.close();
 
     if !cli.quiet {
         println!("\n{} {}", style("✓").green().bold(), t!("erase.completed"));

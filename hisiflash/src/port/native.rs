@@ -14,7 +14,7 @@ use std::time::Duration;
 
 /// Native serial port implementation.
 pub struct NativePort {
-    port: Box<dyn serialport::SerialPort>,
+    port: Option<Box<dyn serialport::SerialPort>>,
     name: String,
     timeout: Duration,
     baud_rate: u32,
@@ -32,7 +32,7 @@ impl NativePort {
             .open()?;
 
         Ok(Self {
-            port,
+            port: Some(port),
             name: config.port_name.clone(),
             timeout: config.timeout,
             baud_rate: config.baud_rate,
@@ -44,21 +44,13 @@ impl NativePort {
         let config = SerialConfig::new(port_name, baud_rate);
         Self::open(&config)
     }
-
-    /// Get the underlying serialport instance.
-    pub fn inner(&self) -> &dyn serialport::SerialPort {
-        self.port.as_ref()
-    }
-
-    /// Get mutable access to the underlying serialport instance.
-    pub fn inner_mut(&mut self) -> &mut dyn serialport::SerialPort {
-        self.port.as_mut()
-    }
 }
 
 impl Port for NativePort {
     fn set_timeout(&mut self, timeout: Duration) -> Result<()> {
-        self.port.set_timeout(timeout)?;
+        if let Some(ref mut p) = self.port {
+            p.set_timeout(timeout)?;
+        }
         self.timeout = timeout;
         Ok(())
     }
@@ -68,7 +60,9 @@ impl Port for NativePort {
     }
 
     fn set_baud_rate(&mut self, baud_rate: u32) -> Result<()> {
-        self.port.set_baud_rate(baud_rate)?;
+        if let Some(ref mut p) = self.port {
+            p.set_baud_rate(baud_rate)?;
+        }
         self.baud_rate = baud_rate;
         Ok(())
     }
@@ -78,7 +72,9 @@ impl Port for NativePort {
     }
 
     fn clear_buffers(&mut self) -> Result<()> {
-        self.port.clear(ClearBuffer::All)?;
+        if let Some(ref mut p) = self.port {
+            p.clear(ClearBuffer::All)?;
+        }
         Ok(())
     }
 
@@ -88,13 +84,17 @@ impl Port for NativePort {
 
     fn set_dtr(&mut self, level: bool) -> Result<()> {
         trace!("Setting DTR to {level}");
-        self.port.write_data_terminal_ready(level)?;
+        if let Some(ref mut p) = self.port {
+            p.write_data_terminal_ready(level)?;
+        }
         Ok(())
     }
 
     fn set_rts(&mut self, level: bool) -> Result<()> {
         trace!("Setting RTS to {level}");
-        self.port.write_request_to_send(level)?;
+        if let Some(ref mut p) = self.port {
+            p.write_request_to_send(level)?;
+        }
         Ok(())
     }
 
@@ -108,21 +108,33 @@ impl Port for NativePort {
         // Same limitation as read_cts
         Ok(false)
     }
+
+    fn close(&mut self) -> Result<()> {
+        // Take ownership of the port and let it drop (close)
+        self.port.take();
+        Ok(())
+    }
 }
 
 impl Read for NativePort {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        self.port.read(buf)
+        self.port.as_mut()
+            .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotConnected, "port closed"))
+            .and_then(|p| p.read(buf))
     }
 }
 
 impl Write for NativePort {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        self.port.write(buf)
+        self.port.as_mut()
+            .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotConnected, "port closed"))
+            .and_then(|p| p.write(buf))
     }
 
     fn flush(&mut self) -> std::io::Result<()> {
-        self.port.flush()
+        self.port.as_mut()
+            .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotConnected, "port closed"))
+            .and_then(|p| p.flush())
     }
 }
 

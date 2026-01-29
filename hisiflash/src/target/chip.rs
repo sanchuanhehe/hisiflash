@@ -189,6 +189,13 @@ pub trait Flasher {
 
     /// Get the target transfer baud rate (if different from connection).
     fn target_baud(&self) -> Option<u32>;
+
+    /// Close the flasher and release resources.
+    ///
+    /// This method ensures the serial port is properly closed.
+    /// It is safe to call even if the connection is not active.
+    /// After calling this method, the flasher cannot be used.
+    fn close(&mut self);
 }
 
 impl ChipFamily {

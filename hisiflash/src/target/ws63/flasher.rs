@@ -344,11 +344,13 @@ impl<P: Port> Ws63Flasher<P> {
             }
         }
 
-        Err(last_error.unwrap_or(Error::Protocol("Download failed".into())))
+        // Use unwrap_or_else to ensure we never lose error information
+        Err(last_error.unwrap_or_else(|| {
+            Error::Protocol("Download failed after all retries (no error captured)".into())
+        }))
     }
 
     /// Single attempt to download a binary.
-    #[allow(clippy::cast_possible_truncation)]
     fn try_download_binary<F>(
         &mut self,
         name: &str,
@@ -359,8 +361,10 @@ impl<P: Port> Ws63Flasher<P> {
     where
         F: FnMut(&str, usize, usize),
     {
-        // Safe cast: firmware images are always < 4GB
-        let len = data.len() as u32;
+        // Check for oversized data that would truncate
+        let len = u32::try_from(data.len())
+            .map_err(|_| Error::Protocol(format!("Firmware too large ({} bytes > 4GB)", data.len())))?;
+
         debug!(
             "Downloading {} ({} bytes) to 0x{:08X}",
             name,
@@ -506,7 +510,9 @@ mod native_impl {
                 }
             }
 
-            Err(last_error.unwrap_or(Error::DeviceNotFound))
+            Err(last_error.unwrap_or_else(||
+                Error::Config(format!("Failed to open port after {} attempts", MAX_OPEN_PORT_ATTEMPTS))
+            ))
         }
 
         /// Open serial port with retry mechanism.
@@ -538,7 +544,9 @@ mod native_impl {
                 }
             }
 
-            Err(last_error.unwrap_or(Error::DeviceNotFound))
+            Err(last_error.unwrap_or_else(||
+                Error::Config(format!("Failed to open port {} after {} attempts", port_name, MAX_OPEN_PORT_ATTEMPTS))
+            ))
         }
     }
 }
@@ -577,6 +585,12 @@ impl<P: Port> crate::target::Flasher for Ws63Flasher<P> {
 
     fn target_baud(&self) -> Option<u32> {
         Some(self.target_baud)
+    }
+
+    fn close(&mut self) {
+        // Close the underlying port to release resources
+        // This is important for proper cleanup after reset
+        let _ = self.port.close();
     }
 }
 
@@ -680,6 +694,12 @@ mod tests {
 
         fn read_dsr(&self) -> Result<bool> {
             Ok(true) // Assume DSR is asserted
+        }
+
+        fn close(&mut self) -> Result<()> {
+            // Clear all buffers to simulate port closure
+            self.clear();
+            Ok(())
         }
     }
 
