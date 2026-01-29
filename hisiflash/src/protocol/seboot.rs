@@ -185,10 +185,10 @@ impl SebootFrame {
     /// - Parity: 1 byte
     /// - FlowCtrl: 1 byte
     /// - CRC16: 2 bytes
-    #[allow(clippy::unwrap_used)] // Writing to Vec<u8> cannot fail
     pub fn handshake(baud_rate: u32) -> Self {
         let mut frame = Self::new(CommandType::Handshake);
-        frame.data.write_u32::<LittleEndian>(baud_rate).unwrap();
+        // Writing to Vec<u8> with byteorder never fails - Vec will grow as needed
+        frame.data.write_u32::<LittleEndian>(baud_rate).expect("Vec<u8> write cannot fail");
         frame.data.push(8); // DataBits = 8
         frame.data.push(1); // StopBits = 1
         frame.data.push(0); // Parity = None
@@ -197,11 +197,14 @@ impl SebootFrame {
     }
 
     /// Build set baud rate frame.
-    #[allow(clippy::unwrap_used)] // Writing to Vec<u8> cannot fail
     pub fn set_baud_rate(baud_rate: u32) -> Self {
         let mut frame = Self::new(CommandType::SetBaudRate);
-        frame.data.write_u32::<LittleEndian>(baud_rate).unwrap();
-        frame.data.write_u32::<LittleEndian>(0x0108).unwrap(); // Magic constant
+        // Writing to Vec<u8> with byteorder never fails - Vec will grow as needed
+        frame.data.write_u32::<LittleEndian>(baud_rate).expect("Vec<u8> write cannot fail");
+        // Magic constant for baud rate change command
+        frame.data
+            .write_u32::<LittleEndian>(0x0108)
+            .expect("Vec<u8> write cannot fail");
         frame
     }
 
@@ -218,12 +221,18 @@ impl SebootFrame {
     /// - Formal: 1 byte (0x00 for normal)
     /// - ~Formal: 1 byte (0xFF)
     /// - CRC16: 2 bytes
-    #[allow(clippy::unwrap_used)] // Writing to Vec<u8> cannot fail
     pub fn download_flash_image(addr: u32, len: u32, erase_size: u32, is_rom: bool) -> Self {
         let mut frame = Self::new(CommandType::DownloadFlashImage);
-        frame.data.write_u32::<LittleEndian>(addr).unwrap();
-        frame.data.write_u32::<LittleEndian>(len).unwrap();
-        frame.data.write_u32::<LittleEndian>(erase_size).unwrap();
+        // Writing to Vec<u8> with byteorder never fails - Vec will grow as needed
+        frame.data
+            .write_u32::<LittleEndian>(addr)
+            .expect("Vec<u8> write cannot fail");
+        frame.data
+            .write_u32::<LittleEndian>(len)
+            .expect("Vec<u8> write cannot fail");
+        frame.data
+            .write_u32::<LittleEndian>(erase_size)
+            .expect("Vec<u8> write cannot fail");
         let formal = u8::from(is_rom);
         frame.data.push(formal);
         frame.data.push(!formal);

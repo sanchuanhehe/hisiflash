@@ -91,7 +91,10 @@ pub fn select_serial_port(options: &SerialOptions, config: &Config) -> Result<Se
         Ordering::Greater => select_port_interactive(selection_ports, config),
         Ordering::Equal => {
             // Single port - ask for confirmation if unknown
-            let port = selection_ports.into_iter().next().unwrap();
+            let port = selection_ports
+                .into_iter()
+                .next()
+                .expect("selection_ports has exactly 1 element here");
             if options.non_interactive || port.device.is_known() {
                 Ok(SelectedPort {
                     is_known: port.device.is_known(),
@@ -218,7 +221,10 @@ fn select_port_interactive(mut ports: Vec<DetectedPort>, config: &Config) -> Res
 
     match selection {
         Some(index) => {
-            let port = ports.into_iter().nth(index).unwrap();
+            let port = ports
+                .into_iter()
+                .nth(index)
+                .ok_or_else(|| anyhow::anyhow!("Invalid port index: {index}"))?;
             let is_known = is_known_device(&port, config);
             Ok(SelectedPort { port, is_known })
         },
