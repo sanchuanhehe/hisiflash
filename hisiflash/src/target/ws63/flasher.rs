@@ -582,6 +582,310 @@ impl<P: Port> crate::target::Flasher for Ws63Flasher<P> {
 
 #[cfg(test)]
 mod tests {
-    // Integration tests would require actual hardware
-    // Unit tests for internal functions can be added here
+    use super::*;
+    use crate::port::Port;
+    use std::io::{Read, Write};
+    use std::sync::{Arc, Mutex};
+
+    /// Mock port implementation for testing without real hardware.
+    ///
+    /// This implementation uses an internal buffer to simulate serial port
+    /// behavior, allowing unit tests to run without actual hardware.
+    #[derive(Clone)]
+    struct MockPort {
+        name: String,
+        baud_rate: u32,
+        timeout: Duration,
+        read_buffer: Arc<Mutex<Vec<u8>>>,
+        write_buffer: Arc<Mutex<Vec<u8>>>,
+        dtr: bool,
+        rts: bool,
+    }
+
+    impl MockPort {
+        fn new(name: &str) -> Self {
+            Self {
+                name: name.to_string(),
+                baud_rate: 115200,
+                timeout: Duration::from_millis(1000),
+                read_buffer: Arc::new(Mutex::new(Vec::new())),
+                write_buffer: Arc::new(Mutex::new(Vec::new())),
+                dtr: false,
+                rts: false,
+            }
+        }
+
+        /// Add data to the read buffer (simulates receiving data from device).
+        fn add_read_data(&self, data: &[u8]) {
+            let mut buf = self.read_buffer.lock().unwrap();
+            buf.extend_from_slice(data);
+        }
+
+        /// Get data written to the port (simulates sending data to device).
+        fn get_written_data(&self) -> Vec<u8> {
+            let buf = self.write_buffer.lock().unwrap();
+            buf.clone()
+        }
+
+        /// Clear all buffers.
+        fn clear(&self) {
+            let mut read_buf = self.read_buffer.lock().unwrap();
+            let mut write_buf = self.write_buffer.lock().unwrap();
+            read_buf.clear();
+            write_buf.clear();
+        }
+    }
+
+    impl Port for MockPort {
+        fn set_timeout(&mut self, timeout: Duration) -> Result<()> {
+            self.timeout = timeout;
+            Ok(())
+        }
+
+        fn timeout(&self) -> Duration {
+            self.timeout
+        }
+
+        fn set_baud_rate(&mut self, baud_rate: u32) -> Result<()> {
+            self.baud_rate = baud_rate;
+            Ok(())
+        }
+
+        fn baud_rate(&self) -> u32 {
+            self.baud_rate
+        }
+
+        fn clear_buffers(&mut self) -> Result<()> {
+            self.clear();
+            Ok(())
+        }
+
+        fn name(&self) -> &str {
+            &self.name
+        }
+
+        fn set_dtr(&mut self, level: bool) -> Result<()> {
+            self.dtr = level;
+            Ok(())
+        }
+
+        fn set_rts(&mut self, level: bool) -> Result<()> {
+            self.rts = level;
+            Ok(())
+        }
+
+        fn read_cts(&self) -> Result<bool> {
+            Ok(true) // Assume CTS is asserted
+        }
+
+        fn read_dsr(&self) -> Result<bool> {
+            Ok(true) // Assume DSR is asserted
+        }
+    }
+
+    impl Read for MockPort {
+        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+            let mut read_buf = self.read_buffer.lock().map_err(|e| {
+                std::io::Error::other(format!("mutex poisoned: {e}"))
+            })?;
+
+            if read_buf.is_empty() {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::TimedOut,
+                    "no data available",
+                ));
+            }
+
+            let to_read = std::cmp::min(buf.len(), read_buf.len());
+            buf[..to_read].copy_from_slice(&read_buf[..to_read]);
+            read_buf.drain(..to_read);
+            Ok(to_read)
+        }
+    }
+
+    impl Write for MockPort {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            let mut write_buf = self.write_buffer.lock().map_err(|e| {
+                std::io::Error::other(format!("mutex poisoned: {e}"))
+            })?;
+            write_buf.extend_from_slice(buf);
+            Ok(buf.len())
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    /// Test creating a Ws63Flasher with a mock port.
+    #[test]
+    fn test_flasher_new_with_mock_port() {
+        let port = MockPort::new("/dev/ttyUSB0");
+        let flasher = Ws63Flasher::new(port, 921600);
+
+        assert_eq!(flasher.target_baud, 921600);
+        assert!(!flasher.late_baud);
+        assert_eq!(flasher.verbose, 0);
+    }
+
+    /// Test builder methods on Ws63Flasher.
+    #[test]
+    fn test_flasher_builder_methods() {
+        let port = MockPort::new("/dev/ttyUSB0");
+        let flasher = Ws63Flasher::new(port, 921600)
+            .with_late_baud(true)
+            .with_verbose(2);
+
+        assert!(flasher.late_baud);
+        assert_eq!(flasher.verbose, 2);
+    }
+
+    /// Test MockPort read/write operations.
+    #[test]
+    fn test_mock_port_read_write() {
+        let mut port = MockPort::new("/dev/ttyUSB0");
+
+        // Add some data to read buffer
+        port.add_read_data(&[0xDE, 0xAD, 0xBE, 0xEF]);
+
+        // Write some data
+        port.write_all(b"test").unwrap();
+        port.flush().unwrap();
+
+        // Verify written data
+        let written = port.get_written_data();
+        assert_eq!(written, b"test");
+
+        // Read data - use read_exact to handle partial reads properly
+        let mut buf = [0u8; 4];
+        std::io::Read::read_exact(&mut port, &mut buf).unwrap();
+        assert_eq!(&buf, &[0xDE, 0xAD, 0xBE, 0xEF]);
+    }
+
+    /// Test MockPort buffer operations.
+    #[test]
+    fn test_mock_port_buffers() {
+        let mut port = MockPort::new("/dev/ttyUSB0");
+
+        // Clear buffers
+        port.clear();
+        assert!(port.get_written_data().is_empty());
+
+        // Write and add read data
+        port.write_all(b"hello").unwrap();
+        port.add_read_data(&[1, 2, 3]);
+
+        // Verify
+        assert_eq!(port.get_written_data(), b"hello");
+
+        let mut buf = [0u8; 3];
+        std::io::Read::read_exact(&mut port, &mut buf).unwrap();
+        assert_eq!(&buf, &[1, 2, 3]);
+
+        // Clear and verify
+        port.clear();
+        assert!(port.get_written_data().is_empty());
+    }
+
+    /// Test MockPort pin control.
+    #[test]
+    fn test_mock_port_pin_control() {
+        let mut port = MockPort::new("/dev/ttyUSB0");
+
+        assert!(!port.dtr);
+        assert!(!port.rts);
+
+        port.set_dtr(true).unwrap();
+        port.set_rts(true).unwrap();
+
+        assert!(port.dtr);
+        assert!(port.rts);
+    }
+
+    /// Test MockPort baud rate and timeout.
+    #[test]
+    fn test_mock_port_baud_timeout() {
+        let mut port = MockPort::new("/dev/ttyUSB0");
+
+        assert_eq!(port.baud_rate(), 115200);
+        assert_eq!(port.timeout(), Duration::from_millis(1000));
+
+        port.set_baud_rate(921600).unwrap();
+        port.set_timeout(Duration::from_millis(500)).unwrap();
+
+        assert_eq!(port.baud_rate(), 921600);
+        assert_eq!(port.timeout(), Duration::from_millis(500));
+    }
+
+    /// Test MockPort name.
+    #[test]
+    fn test_mock_port_name() {
+        let port = MockPort::new("/dev/ttyUSB1");
+        assert_eq!(port.name(), "/dev/ttyUSB1");
+
+        let port2 = MockPort::new("COM3");
+        assert_eq!(port2.name(), "COM3");
+    }
+
+    /// Test creating flasher with mock port through ChipFamily::create_flasher_with_port.
+    #[test]
+    fn test_create_flasher_with_mock_port() {
+        use crate::target::ChipFamily;
+
+        let port = MockPort::new("/dev/ttyUSB0");
+        let flasher = ChipFamily::Ws63.create_flasher_with_port(port, 921600, false, 0);
+
+        assert!(flasher.is_ok());
+        let flasher = flasher.unwrap();
+
+        // Flasher should be usable (even though connect will fail without mock response data)
+        assert_eq!(flasher.connection_baud(), 115200); // DEFAULT_BAUD for handshake
+        assert_eq!(flasher.target_baud(), Some(921600));
+    }
+
+    /// Test that Flasher trait object works correctly.
+    #[test]
+    fn test_flasher_trait_object() {
+        use crate::target::Flasher;
+
+        let port = MockPort::new("/dev/ttyUSB0");
+        let flasher: Box<dyn Flasher> = Box::new(Ws63Flasher::new(port, 921600));
+
+        assert_eq!(flasher.connection_baud(), 115200);
+        assert_eq!(flasher.target_baud(), Some(921600));
+    }
+
+    /// Test multiple flasher instances with same mock port clone.
+    #[test]
+    fn test_multiple_flashers_same_port() {
+        use crate::target::ChipFamily;
+
+        let port = MockPort::new("/dev/ttyUSB0");
+        let port_clone = port.clone();
+
+        let flasher1 = ChipFamily::Ws63.create_flasher_with_port(port, 921600, false, 0);
+        let flasher2 = ChipFamily::Ws63.create_flasher_with_port(port_clone, 115200, true, 1);
+
+        assert!(flasher1.is_ok());
+        assert!(flasher2.is_ok());
+
+        let flasher1 = flasher1.unwrap();
+        let flasher2 = flasher2.unwrap();
+
+        assert_eq!(flasher1.target_baud(), Some(921600));
+        assert_eq!(flasher2.target_baud(), Some(115200));
+    }
+
+    /// Test unsupported chip family returns error for create_flasher_with_port.
+    #[test]
+    fn test_create_flasher_with_port_unsupported_chip() {
+        use crate::target::ChipFamily;
+
+        let port = MockPort::new("/dev/ttyUSB0");
+        let result = ChipFamily::Bs2x.create_flasher_with_port(port, 115200, false, 0);
+
+        assert!(result.is_err());
+        // Verify error is the Unsupported variant
+        assert!(matches!(result, Err(crate::error::Error::Unsupported(_))));
+    }
 }
