@@ -158,6 +158,10 @@ enum Commands {
         /// Open serial monitor after flashing.
         #[arg(long)]
         monitor: bool,
+
+        /// Baud rate for serial monitor (used with --monitor).
+        #[arg(long, default_value = "115200")]
+        monitor_baud: u32,
     },
 
     /// Write raw binary files to flash.
@@ -222,6 +226,14 @@ enum Commands {
         /// Baud rate for monitoring (default: 115200).
         #[arg(long, default_value = "115200")]
         monitor_baud: u32,
+
+        /// Show timestamps on each line.
+        #[arg(long)]
+        timestamp: bool,
+
+        /// Save output to a log file.
+        #[arg(long, value_name = "FILE")]
+        log: Option<PathBuf>,
     },
 
     /// Generate shell completion scripts.
@@ -412,6 +424,7 @@ fn main() -> Result<()> {
             late_baud,
             skip_verify,
             monitor,
+            monitor_baud,
         } => {
             cmd_flash(
                 &cli,
@@ -423,7 +436,7 @@ fn main() -> Result<()> {
             )?;
             if *monitor {
                 eprintln!();
-                cmd_monitor(&cli, &mut config, 115200)?;
+                cmd_monitor(&cli, &mut config, *monitor_baud, false, None)?;
             }
         },
         Commands::Write {
@@ -457,8 +470,12 @@ fn main() -> Result<()> {
         Commands::ListPorts { json } => {
             cmd_list_ports(*json);
         },
-        Commands::Monitor { monitor_baud } => {
-            cmd_monitor(&cli, &mut config, *monitor_baud)?;
+        Commands::Monitor {
+            monitor_baud,
+            timestamp,
+            log,
+        } => {
+            cmd_monitor(&cli, &mut config, *monitor_baud, *timestamp, log.as_ref())?;
         },
         Commands::Completions { shell, install } => {
             if *install {
@@ -1006,51 +1023,280 @@ fn cmd_list_ports(json: bool) {
 }
 
 /// Monitor command implementation.
-fn cmd_monitor(cli: &Cli, config: &mut Config, monitor_baud: u32) -> Result<()> {
-    let port = get_port(cli, config)?;
+///
+/// Dual-threaded serial monitor with keyboard input, timestamps, and log file support.
+/// - Reader thread: serial → stdout (with optional timestamps and ANSI passthrough)
+/// - Main thread: keyboard (crossterm raw mode) → serial
+/// - Ctrl+C: graceful exit
+/// - Ctrl+R: reset device (DTR/RTS toggle)
+/// - Ctrl+T: toggle timestamp display
+fn cmd_monitor(
+    cli: &Cli,
+    config: &mut Config,
+    monitor_baud: u32,
+    timestamp: bool,
+    log_file: Option<&PathBuf>,
+) -> Result<()> {
+    use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyModifiers};
+    use crossterm::terminal;
+    use std::io::Read as _;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::time::Duration;
+
+    let port_name = get_port(cli, config)?;
 
     eprintln!(
         "{} {}",
         style("📡").cyan(),
         t!(
             "monitor.opening",
-            port = style(&port).green().to_string(),
+            port = style(&port_name).green().to_string(),
             baud = monitor_baud
         )
     );
     eprintln!("{}", style(t!("monitor.exit_hint")).dim());
 
-    // Simple serial monitor
-    let mut serial = serialport::new(&port, monitor_baud)
-        .timeout(std::time::Duration::from_millis(100))
+    // Open serial port
+    let serial = serialport::new(&port_name, monitor_baud)
+        .timeout(Duration::from_millis(50))
         .open()
-        .with_context(|| t!("error.open_port", port = port.clone()))?;
+        .with_context(|| t!("error.open_port", port = port_name.clone()))?;
 
-    let mut buf = [0u8; 1024];
-    loop {
-        match serial.read(&mut buf) {
-            Ok(n) if n > 0 => {
-                // Print received data
-                let data = &buf[..n];
-                if let Ok(s) = std::str::from_utf8(data) {
-                    print!("{s}");
-                } else {
-                    // Hex dump for non-UTF8 data
-                    for byte in data {
-                        print!("{byte:02X} ");
+    // Clone for the reader thread
+    let mut serial_reader = serial
+        .try_clone()
+        .context(t!("error.serial_error").to_string())?;
+    let mut serial_writer = serial;
+
+    // Shared state
+    let running = Arc::new(AtomicBool::new(true));
+    let running_reader = running.clone();
+    let show_timestamp = Arc::new(AtomicBool::new(timestamp));
+    let show_timestamp_reader = show_timestamp.clone();
+
+    // Open log file if specified
+    let log_writer: Option<std::sync::Mutex<std::fs::File>> = log_file.map(|path| {
+        let file = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)
+            .with_context(|| format!("Failed to open log file: {}", path.display()))
+            .unwrap();
+        eprintln!(
+            "{} {}",
+            style("📝").cyan(),
+            t!("monitor.logging", path = path.display().to_string())
+        );
+        std::sync::Mutex::new(file)
+    });
+
+    // Reader thread: serial → stdout
+    let reader_handle = std::thread::spawn(move || {
+        let mut buf = [0u8; 1024];
+        // Track whether we're at the beginning of a new line (for timestamp insertion)
+        let mut at_line_start = true;
+        // Buffer for partial UTF-8 sequences that span read boundaries
+        let mut utf8_buf: Vec<u8> = Vec::new();
+
+        while running_reader.load(Ordering::Relaxed) {
+            match serial_reader.read(&mut buf) {
+                Ok(0) => {},
+                Ok(n) => {
+                    let data = &buf[..n];
+
+                    // Append to UTF-8 buffer for handling partial sequences
+                    utf8_buf.extend_from_slice(data);
+
+                    // Find the longest valid UTF-8 prefix
+                    let (valid, remainder) = split_utf8(&utf8_buf);
+
+                    if !valid.is_empty() {
+                        // Write to log file (raw, no timestamps)
+                        if let Some(ref log) = log_writer {
+                            if let Ok(mut f) = log.lock() {
+                                let _ = f.write_all(valid.as_bytes());
+                            }
+                        }
+
+                        // Process output with optional timestamps
+                        let ts_enabled = show_timestamp_reader.load(Ordering::Relaxed);
+                        let output = format_monitor_output(valid, ts_enabled, &mut at_line_start);
+                        print!("{output}");
+                        io::stdout().flush().ok();
                     }
+
+                    // Keep remainder for next iteration
+                    let remainder_bytes = remainder.to_vec();
+                    utf8_buf.clear();
+                    utf8_buf.extend_from_slice(&remainder_bytes);
+                },
+                Err(ref e) if e.kind() == std::io::ErrorKind::TimedOut => {},
+                Err(ref e) if e.kind() == std::io::ErrorKind::BrokenPipe => break,
+                Err(_) => {
+                    if running_reader.load(Ordering::Relaxed) {
+                        // Only report if we haven't been asked to stop
+                        break;
+                    }
+                },
+            }
+        }
+    });
+
+    // Enter raw mode for keyboard input
+    terminal::enable_raw_mode().context("Failed to enable raw terminal mode")?;
+
+    // Ensure we restore terminal on exit (even on panic)
+    let _raw_guard = RawModeGuard;
+
+    // Main thread: keyboard → serial
+    while running.load(Ordering::Relaxed) {
+        // Poll for keyboard events with timeout
+        if event::poll(Duration::from_millis(50))? {
+            if let Event::Key(KeyEvent {
+                code, modifiers, ..
+            }) = event::read()?
+            {
+                match (code, modifiers) {
+                    // Ctrl+C: exit
+                    (KeyCode::Char('c'), KeyModifiers::CONTROL) => {
+                        running.store(false, Ordering::Relaxed);
+                        break;
+                    },
+                    // Ctrl+R: reset device via DTR/RTS toggle
+                    (KeyCode::Char('r'), KeyModifiers::CONTROL) => {
+                        eprintln!("\r\n{} {}", style("🔄").cyan(), t!("monitor.resetting"));
+                        let _ = serial_writer.write_data_terminal_ready(false);
+                        let _ = serial_writer.write_request_to_send(false);
+                        std::thread::sleep(Duration::from_millis(100));
+                        let _ = serial_writer.write_data_terminal_ready(true);
+                        let _ = serial_writer.write_request_to_send(true);
+                        std::thread::sleep(Duration::from_millis(100));
+                        let _ = serial_writer.write_data_terminal_ready(false);
+                    },
+                    // Ctrl+T: toggle timestamp
+                    (KeyCode::Char('t'), KeyModifiers::CONTROL) => {
+                        let current = show_timestamp.load(Ordering::Relaxed);
+                        show_timestamp.store(!current, Ordering::Relaxed);
+                        let state = if current {
+                            t!("monitor.timestamp_off")
+                        } else {
+                            t!("monitor.timestamp_on")
+                        };
+                        eprintln!("\r\n{} {state}", style("⏱").cyan());
+                    },
+                    // Enter: send \r\n (works with both \n and \r\n devices)
+                    (KeyCode::Enter, _) => {
+                        let _ = serial_writer.write_all(b"\r\n");
+                    },
+                    // Regular character
+                    (KeyCode::Char(c), KeyModifiers::NONE | KeyModifiers::SHIFT) => {
+                        let mut buf = [0u8; 4];
+                        let bytes = c.encode_utf8(&mut buf);
+                        let _ = serial_writer.write_all(bytes.as_bytes());
+                    },
+                    // Backspace
+                    (KeyCode::Backspace, _) => {
+                        let _ = serial_writer.write_all(&[0x08]); // BS
+                    },
+                    // Tab
+                    (KeyCode::Tab, _) => {
+                        let _ = serial_writer.write_all(&[0x09]); // HT
+                    },
+                    // Escape
+                    (KeyCode::Esc, _) => {
+                        let _ = serial_writer.write_all(&[0x1B]);
+                    },
+                    _ => {},
                 }
-                io::stdout().flush().ok();
-            },
-            Err(ref e) if e.kind() == std::io::ErrorKind::TimedOut => {
-                // Timeout is expected, continue
-            },
-            Err(e) => {
-                return Err(e).context(t!("error.serial_error").to_string());
-            },
-            _ => {},
+            }
         }
     }
+
+    // Wait for reader thread to finish
+    let _ = reader_handle.join();
+    eprintln!("\r\n{} {}", style("👋").cyan(), t!("monitor.closed"));
+
+    Ok(())
+}
+
+/// RAII guard to restore terminal mode on drop.
+struct RawModeGuard;
+
+impl Drop for RawModeGuard {
+    fn drop(&mut self) {
+        let _ = crossterm::terminal::disable_raw_mode();
+    }
+}
+
+/// Split a byte slice into a valid UTF-8 prefix string and the remaining bytes.
+///
+/// This handles the case where a multi-byte UTF-8 sequence is split across
+/// two serial reads. The valid prefix is returned as a `&str`, and the
+/// remaining incomplete bytes are returned for the next read.
+fn split_utf8(bytes: &[u8]) -> (&str, &[u8]) {
+    match std::str::from_utf8(bytes) {
+        Ok(s) => (s, &[]),
+        Err(e) => {
+            let valid_up_to = e.valid_up_to();
+            // SAFETY: `valid_up_to` is guaranteed by `from_utf8` to be a valid UTF-8 boundary
+            let valid = std::str::from_utf8(&bytes[..valid_up_to]).unwrap_or_default();
+            (valid, &bytes[valid_up_to..])
+        },
+    }
+}
+
+/// Format monitor output with optional timestamps.
+///
+/// Handles `\r\n`, `\n`, and `\r` line endings uniformly.
+/// Inserts `[HH:MM:SS.mmm]` at the beginning of each new line when enabled.
+fn format_monitor_output(text: &str, timestamp: bool, at_line_start: &mut bool) -> String {
+    if !timestamp {
+        // Even without timestamps, normalize \r\n handling:
+        // Raw mode requires \r\n for proper line feed + carriage return
+        let mut out = String::with_capacity(text.len() * 2);
+        for c in text.chars() {
+            match c {
+                '\n' => out.push_str("\r\n"),
+                '\r' => {}, // Skip \r, we handle it via \n → \r\n
+                _ => out.push(c),
+            }
+        }
+        return out;
+    }
+
+    let mut out = String::with_capacity(text.len() + 128);
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default();
+    let total_secs = now.as_secs();
+    let millis = now.subsec_millis();
+    // Convert to HH:MM:SS (UTC-based, good enough for relative timing)
+    let hours = (total_secs / 3600) % 24;
+    let minutes = (total_secs / 60) % 60;
+    let seconds = total_secs % 60;
+
+    for c in text.chars() {
+        match c {
+            '\r' => {}, // Skip \r, we handle it via \n → \r\n
+            '\n' => {
+                out.push_str("\r\n");
+                *at_line_start = true;
+            },
+            _ => {
+                if *at_line_start {
+                    use std::fmt::Write;
+                    let _ = write!(
+                        out,
+                        "\x1b[90m[{hours:02}:{minutes:02}:{seconds:02}.{millis:03}]\x1b[0m "
+                    );
+                    *at_line_start = false;
+                }
+                out.push(c);
+            },
+        }
+    }
+    out
 }
 
 /// Generate shell completions.
@@ -1489,6 +1735,7 @@ mod cli_tests {
             late_baud,
             skip_verify,
             monitor,
+            monitor_baud,
         } = cli.command
         {
             assert_eq!(firmware.to_str().unwrap(), "fw.fwpkg");
@@ -1496,6 +1743,7 @@ mod cli_tests {
             assert!(late_baud);
             assert!(skip_verify);
             assert!(monitor);
+            assert_eq!(monitor_baud, 115200);
         } else {
             panic!("Expected Flash command");
         }
@@ -1588,7 +1836,7 @@ mod cli_tests {
     #[test]
     fn test_cli_parse_monitor() {
         let cli = Cli::try_parse_from(["hisiflash", "monitor", "--monitor-baud", "9600"]).unwrap();
-        if let Commands::Monitor { monitor_baud } = cli.command {
+        if let Commands::Monitor { monitor_baud, .. } = cli.command {
             assert_eq!(monitor_baud, 9600);
         } else {
             panic!("Expected Monitor command");
@@ -1598,7 +1846,7 @@ mod cli_tests {
     #[test]
     fn test_cli_parse_monitor_default_baud() {
         let cli = Cli::try_parse_from(["hisiflash", "monitor"]).unwrap();
-        if let Commands::Monitor { monitor_baud } = cli.command {
+        if let Commands::Monitor { monitor_baud, .. } = cli.command {
             assert_eq!(monitor_baud, 115200);
         } else {
             panic!("Expected Monitor command");

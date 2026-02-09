@@ -48,7 +48,12 @@ list_ports.auto_detected: "Auto-detected: %{port}"
 
 # Monitor command
 monitor.opening: "Opening monitor on %{port} @ %{baud} baud"
-monitor.exit_hint: "Press Ctrl+C to exit"
+monitor.exit_hint: "Ctrl+C exit | Ctrl+R reset device | Ctrl+T toggle timestamps"
+monitor.resetting: "Resetting device (DTR/RTS toggle)..."
+monitor.timestamp_on: "Timestamps enabled"
+monitor.timestamp_off: "Timestamps disabled"
+monitor.logging: "Logging output to %{path}"
+monitor.closed: "Monitor closed"
 
 # Serial port selection
 serial.detected_ports: "Detected %{count} serial port(s)"
@@ -115,6 +120,11 @@ arg.json.help: "Output as JSON to stdout"
 
 # Monitor command options
 arg.monitor_baud.help: "Baud rate for monitoring (default: 115200)"
+arg.timestamp.help: "Show timestamps on each line"
+arg.log.help: "Save output to a log file"
+
+# Flash --monitor-baud
+arg.monitor_baud_flash.help: "Baud rate for serial monitor (used with --monitor)"
 
 # Completions command options
 arg.shell.help: "Shell type for completions"

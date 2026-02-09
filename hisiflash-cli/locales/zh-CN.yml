@@ -48,7 +48,12 @@ list_ports.auto_detected: "自动检测: %{port}"
 
 # 监视器命令
 monitor.opening: "在 %{port} 打开监视器 @ %{baud} 波特率"
-monitor.exit_hint: "按 Ctrl+C 退出"
+monitor.exit_hint: "Ctrl+C 退出 | Ctrl+R 重启设备 | Ctrl+T 切换时间戳"
+monitor.resetting: "正在重启设备 (DTR/RTS 切换)..."
+monitor.timestamp_on: "时间戳已启用"
+monitor.timestamp_off: "时间戳已禁用"
+monitor.logging: "输出日志保存至 %{path}"
+monitor.closed: "监视器已关闭"
 
 # 串口选择
 serial.detected_ports: "检测到 %{count} 个串口"
@@ -115,6 +120,11 @@ arg.json.help: "以 JSON 格式输出到标准输出"
 
 # monitor 命令选项
 arg.monitor_baud.help: "监视器波特率 (默认: 115200)"
+arg.timestamp.help: "在每行前显示时间戳"
+arg.log.help: "将输出保存到日志文件"
+
+# flash --monitor-baud
+arg.monitor_baud_flash.help: "串口监视器波特率 (配合 --monitor 使用)"
 
 # completions 命令选项
 arg.shell.help: "Shell 补全脚本类型"

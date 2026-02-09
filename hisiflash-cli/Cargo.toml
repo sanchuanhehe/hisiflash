@@ -39,6 +39,7 @@ console.workspace = true
 log.workspace = true
 env_logger.workspace = true
 serialport.workspace = true
+crossterm.workspace = true
 
 # Internationalization
 rust-i18n = "3"
