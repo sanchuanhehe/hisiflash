@@ -99,7 +99,7 @@ arg.list_all_ports.help: "List all available ports (including unknown types)"
 arg.config_path.help: "Path to a configuration file"
 
 # Flash command options
-arg.firmware.help: "Path to the FWPKG firmware file"
+arg.firmware.help: "Path to the FWPKG firmware file (auto-detected if omitted)"
 arg.filter.help: "Only flash specified partitions (comma-separated)"
 arg.late_baud.help: "Use late baud rate change (after LoaderBoot)"
 arg.skip_verify.help: "Skip CRC verification"
@@ -154,3 +154,12 @@ error.open_port: "Failed to open serial port: %{port}"
 error.serial_error: "Serial port error"
 error.connection_exhausted: "Connection failed after %{max} attempts"
 error.download_exhausted: "Download failed after %{max} retries"
+
+# Firmware auto-discovery
+flash.no_firmware_found: "No .fwpkg firmware files found in the current directory tree. Please specify a firmware file."
+flash.auto_found_one: "Found firmware: %{path} (%{size})"
+flash.auto_found_multiple: "Found %{count} firmware files"
+flash.confirm_firmware: "Use firmware '%{path}'?"
+flash.select_firmware: "Select a firmware file"
+flash.selection_cancelled: "Firmware selection cancelled"
+flash.multiple_firmware_non_interactive: "Multiple firmware files found. Use positional argument to specify one, or disable --non-interactive."

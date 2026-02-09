@@ -44,3 +44,6 @@ crossterm.workspace = true
 # Internationalization
 rust-i18n = "3"
 sys-locale = "0.3"
+
+[dev-dependencies]
+tempfile.workspace = true

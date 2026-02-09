@@ -92,3 +92,6 @@ byteorder = "1.5"
 
 # Internal crates
 hisiflash = { version = "0.2.0", path = "hisiflash" }
+
+# Testing
+tempfile = "3"

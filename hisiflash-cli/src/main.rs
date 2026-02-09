@@ -34,6 +34,7 @@ mod help;
 mod serial;
 
 use commands::completions::{cmd_completions, cmd_completions_install};
+use commands::firmware::resolve_firmware;
 use commands::flash::{cmd_erase, cmd_flash, cmd_write, cmd_write_program};
 use commands::info::{cmd_info, cmd_list_ports};
 use commands::monitor::cmd_monitor;
@@ -141,8 +142,8 @@ impl From<Chip> for ChipFamily {
 enum Commands {
     /// Flash a FWPKG firmware package.
     Flash {
-        /// Path to the FWPKG firmware file.
-        firmware: PathBuf,
+        /// Path to the FWPKG firmware file (auto-detected if omitted).
+        firmware: Option<PathBuf>,
 
         /// Only flash specified partitions (comma-separated).
         #[arg(long)]
@@ -391,10 +392,11 @@ fn main() -> Result<()> {
             monitor,
             monitor_baud,
         } => {
+            let firmware = resolve_firmware(firmware.as_ref(), cli.non_interactive, cli.quiet)?;
             cmd_flash(
                 &cli,
                 &mut config,
-                firmware,
+                &firmware,
                 filter.as_ref(),
                 *late_baud,
                 *skip_verify,
@@ -615,7 +617,7 @@ mod cli_tests {
             monitor_baud,
         } = cli.command
         {
-            assert_eq!(firmware.to_str().unwrap(), "fw.fwpkg");
+            assert_eq!(firmware.unwrap().to_str().unwrap(), "fw.fwpkg");
             assert_eq!(filter.as_deref(), Some("app,flashboot"));
             assert!(late_baud);
             assert!(skip_verify);

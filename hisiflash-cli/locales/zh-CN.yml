@@ -99,7 +99,7 @@ arg.list_all_ports.help: "列出所有可用端口 (包括未知类型)"
 arg.config_path.help: "配置文件路径"
 
 # flash 命令选项
-arg.firmware.help: "FWPKG 固件文件路径"
+arg.firmware.help: "FWPKG 固件文件路径 (省略时自动搜索)"
 arg.filter.help: "仅烧录指定分区 (逗号分隔)"
 arg.late_baud.help: "延迟切换波特率 (在 LoaderBoot 之后)"
 arg.skip_verify.help: "跳过 CRC 校验"
@@ -154,3 +154,12 @@ error.open_port: "打开串口失败: %{port}"
 error.serial_error: "串口错误"
 error.connection_exhausted: "经过 %{max} 次尝试后连接失败"
 error.download_exhausted: "经过 %{max} 次重试后下载失败"
+
+# 固件自动发现
+flash.no_firmware_found: "在当前目录树中未找到 .fwpkg 固件文件。请指定固件文件路径。"
+flash.auto_found_one: "发现固件: %{path} (%{size})"
+flash.auto_found_multiple: "发现 %{count} 个固件文件"
+flash.confirm_firmware: "使用固件 '%{path}'?"
+flash.select_firmware: "选择固件文件"
+flash.selection_cancelled: "已取消固件选择"
+flash.multiple_firmware_non_interactive: "发现多个固件文件。请通过参数指定固件，或禁用 --non-interactive 模式。"
