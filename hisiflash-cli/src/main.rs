@@ -1844,8 +1844,10 @@ mod cli_tests {
 
     #[test]
     fn test_localize_arg_unknown_key() {
-        let localized =
-            localized_arg("en", clap::Arg::new("nonexistent_arg_xyz").help("keep this"));
+        let localized = localized_arg(
+            "en",
+            clap::Arg::new("nonexistent_arg_xyz").help("keep this"),
+        );
         let help = localized
             .get_help()
             .map(std::string::ToString::to_string)
