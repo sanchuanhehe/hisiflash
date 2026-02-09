@@ -1,0 +1,133 @@
+#!/usr/bin/env bash
+#
+# Git pre-push hook for hisiflash
+#
+# Checks performed before push:
+#   1. cargo fmt --check  — ensure code is formatted
+#   2. cargo clippy        — ensure no lint warnings
+#   3. Tag-version match   — if pushing cli-v* or lib-v* tags,
+#      verify the tag version matches the corresponding Cargo.toml
+#
+# Install:
+#   git config core.hooksPath .githooks
+# Or:
+#   ln -sf ../../.githooks/pre-push .git/hooks/pre-push
+#
+
+set -euo pipefail
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+NC='\033[0m' # No Color
+
+info()  { echo -e "${GREEN}[pre-push]${NC} $*"; }
+warn()  { echo -e "${YELLOW}[pre-push]${NC} $*"; }
+error() { echo -e "${RED}[pre-push]${NC} $*"; }
+
+# Allow skipping with HISIFLASH_SKIP_HOOKS=1
+if [ "${HISIFLASH_SKIP_HOOKS:-0}" = "1" ]; then
+    warn "Skipping pre-push hooks (HISIFLASH_SKIP_HOOKS=1)"
+    exit 0
+fi
+
+ERRORS=0
+
+# ──────────────────────────────────────────────
+# 1. Check formatting
+# ──────────────────────────────────────────────
+info "Checking code formatting (cargo fmt --check)..."
+if ! cargo fmt --all -- --check 2>/dev/null; then
+    error "Code is not formatted! Run 'cargo fmt --all' before pushing."
+    ERRORS=$((ERRORS + 1))
+else
+    info "Formatting check passed ✓"
+fi
+
+# ──────────────────────────────────────────────
+# 2. Check clippy
+# ──────────────────────────────────────────────
+info "Running clippy..."
+if ! cargo clippy --all-targets --all-features -- -D warnings 2>/dev/null; then
+    error "Clippy found warnings! Fix them before pushing."
+    ERRORS=$((ERRORS + 1))
+else
+    info "Clippy check passed ✓"
+fi
+
+# ──────────────────────────────────────────────
+# 3. Check tag-version consistency
+# ──────────────────────────────────────────────
+# Read stdin: pre-push hook receives lines of
+#   <local ref> <local sha> <remote ref> <remote sha>
+while read -r local_ref local_sha remote_ref remote_sha; do
+    # Only check tag pushes
+    if [[ "$local_ref" != refs/tags/* ]]; then
+        continue
+    fi
+
+    tag="${local_ref#refs/tags/}"
+
+    # ── CLI tag: cli-v1.0.0-alpha.9 ──
+    if [[ "$tag" == cli-v* ]]; then
+        tag_version="${tag#cli-v}"
+        cargo_version=$(grep '^version = ' hisiflash-cli/Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
+
+        if [ "$tag_version" != "$cargo_version" ]; then
+            error "CLI tag version mismatch!"
+            error "  Tag:        $tag  (version: $tag_version)"
+            error "  Cargo.toml: hisiflash-cli/Cargo.toml  (version: $cargo_version)"
+            error "  Fix: update Cargo.toml or use tag 'cli-v${cargo_version}'"
+            ERRORS=$((ERRORS + 1))
+        else
+            info "CLI tag '$tag' matches Cargo.toml version ($cargo_version) ✓"
+        fi
+    fi
+
+    # ── Lib tag: lib-v0.2.0 ──
+    if [[ "$tag" == lib-v* ]]; then
+        tag_version="${tag#lib-v}"
+        cargo_version=$(grep '^version = ' hisiflash/Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
+
+        if [ "$tag_version" != "$cargo_version" ]; then
+            error "Library tag version mismatch!"
+            error "  Tag:        $tag  (version: $tag_version)"
+            error "  Cargo.toml: hisiflash/Cargo.toml  (version: $cargo_version)"
+            error "  Fix: update Cargo.toml or use tag 'lib-v${cargo_version}'"
+            ERRORS=$((ERRORS + 1))
+        else
+            info "Library tag '$tag' matches Cargo.toml version ($cargo_version) ✓"
+        fi
+    fi
+
+    # ── Generic version tag: v1.0.0 (check both) ──
+    if [[ "$tag" == v* && "$tag" != cli-v* && "$tag" != lib-v* ]]; then
+        tag_version="${tag#v}"
+        cli_version=$(grep '^version = ' hisiflash-cli/Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
+        lib_version=$(grep '^version = ' hisiflash/Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
+
+        warn "Generic tag '$tag' detected — checking against both crates:"
+        warn "  CLI version: $cli_version, Lib version: $lib_version"
+
+        if [ "$tag_version" != "$cli_version" ] && [ "$tag_version" != "$lib_version" ]; then
+            error "Tag '$tag' (version: $tag_version) doesn't match either crate!"
+            error "  hisiflash-cli: $cli_version"
+            error "  hisiflash:     $lib_version"
+            error "  Consider using 'cli-v$cli_version' or 'lib-v$lib_version' instead."
+            ERRORS=$((ERRORS + 1))
+        fi
+    fi
+done
+
+# ──────────────────────────────────────────────
+# Final result
+# ──────────────────────────────────────────────
+if [ "$ERRORS" -gt 0 ]; then
+    echo ""
+    error "Push aborted: $ERRORS check(s) failed."
+    error "To skip hooks in emergency: HISIFLASH_SKIP_HOOKS=1 git push ..."
+    exit 1
+fi
+
+info "All pre-push checks passed ✓"
+exit 0
