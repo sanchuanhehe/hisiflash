@@ -129,7 +129,7 @@ enum Commands {
         firmware: PathBuf,
 
         /// Only flash specified partitions (comma-separated).
-        #[arg(short = 'F', long)]
+        #[arg(long)]
         filter: Option<String>,
 
         /// Use late baud rate change (after LoaderBoot).
@@ -141,7 +141,7 @@ enum Commands {
         skip_verify: bool,
 
         /// Open serial monitor after flashing.
-        #[arg(short = 'M', long)]
+        #[arg(long)]
         monitor: bool,
     },
 
@@ -152,7 +152,7 @@ enum Commands {
         loaderboot: PathBuf,
 
         /// Binary file to flash (format: file:address, can be repeated).
-        #[arg(short = 'B', long = "bin", value_parser = parse_bin_arg)]
+        #[arg(long = "bin", value_parser = parse_bin_arg)]
         bins: Vec<(PathBuf, u32)>,
 
         /// Use late baud rate change.
@@ -197,7 +197,7 @@ enum Commands {
     /// Open serial monitor.
     Monitor {
         /// Baud rate for monitoring (default: 115200).
-        #[arg(short = 'B', long, default_value = "115200")]
+        #[arg(long, default_value = "115200")]
         monitor_baud: u32,
     },
 
@@ -206,6 +206,12 @@ enum Commands {
         /// Shell type for completions.
         #[arg(value_enum)]
         shell: Shell,
+    },
+
+    /// Show localized help for a subcommand
+    Help {
+        /// Subcommand name to show help for (e.g., flash, write)
+        command: Option<String>,
     },
 }
 
@@ -363,6 +369,9 @@ fn main() -> Result<()> {
         Commands::Completions { shell } => {
             cmd_completions(*shell);
         },
+        Commands::Help { command } => {
+            cmd_help(command.as_deref());
+        },
     }
 
     Ok(())
@@ -397,7 +406,7 @@ fn cmd_flash(
     skip_verify: bool,
 ) -> Result<()> {
     if !cli.quiet {
-        println!(
+        eprintln!(
             "{} {}",
             style("📦").cyan(),
             t!("flash.loading_firmware", path = firmware.display())
@@ -414,13 +423,13 @@ fn cmd_flash(
             .verify_crc()
             .context(t!("error.crc_failed").to_string())?;
         if !cli.quiet {
-            println!("{} {}", style("✓").green(), t!("flash.crc_passed"));
+            eprintln!("{} {}", style("✓").green(), t!("flash.crc_passed"));
         }
     }
 
     // Show partition info
     if !cli.quiet {
-        println!(
+        eprintln!(
             "{} {}",
             style("ℹ").blue(),
             t!("flash.found_partitions", count = fwpkg.partition_count())
@@ -431,7 +440,7 @@ fn cmd_flash(
             } else {
                 ""
             };
-            println!(
+            eprintln!(
                 "    {} {} @ 0x{:08X} ({} bytes) {}",
                 style("•").dim(),
                 bin.name,
@@ -445,7 +454,7 @@ fn cmd_flash(
     // Get port
     let port = get_port(cli, config)?;
     if !cli.quiet {
-        println!(
+        eprintln!(
             "{} {}",
             style("🔌").cyan(),
             t!("common.using_port", port = port, baud = cli.baud)
@@ -458,11 +467,11 @@ fn cmd_flash(
 
     // Connect
     if !cli.quiet {
-        println!("{} {}", style("⏳").yellow(), t!("common.waiting_device"));
+        eprintln!("{} {}", style("⏳").yellow(), t!("common.waiting_device"));
     }
     flasher.connect()?;
     if !cli.quiet {
-        println!("{} {}", style("✓").green(), t!("common.connected"));
+        eprintln!("{} {}", style("✓").green(), t!("common.connected"));
     }
 
     // Create progress bar
@@ -477,6 +486,7 @@ fn cmd_flash(
                 .unwrap()
                 .progress_chars("#>-"),
         );
+        pb.set_draw_target(indicatif::ProgressDrawTarget::stderr());
         pb
     };
 
@@ -504,7 +514,7 @@ fn cmd_flash(
 
     // Reset device
     if !cli.quiet {
-        println!("{} {}", style("🔄").cyan(), t!("common.resetting"));
+        eprintln!("{} {}", style("🔄").cyan(), t!("common.resetting"));
     }
     flasher.reset()?;
 
@@ -512,7 +522,7 @@ fn cmd_flash(
     flasher.close();
 
     if !cli.quiet {
-        println!("\n{} {}", style("🎉").green().bold(), t!("flash.completed"));
+        eprintln!("\n{} {}", style("🎉").green().bold(), t!("flash.completed"));
     }
 
     Ok(())
@@ -527,7 +537,7 @@ fn cmd_write(
     late_baud: bool,
 ) -> Result<()> {
     if !cli.quiet {
-        println!(
+        eprintln!(
             "{} {}",
             style("📦").cyan(),
             t!("write.loading_loaderboot", path = loaderboot.display())
@@ -544,7 +554,7 @@ fn cmd_write(
     let mut bin_data: Vec<(Vec<u8>, u32)> = Vec::new();
     for (path, addr) in bins {
         if !cli.quiet {
-            println!(
+            eprintln!(
                 "{} {}",
                 style("📦").cyan(),
                 t!(
@@ -561,7 +571,7 @@ fn cmd_write(
 
     let port = get_port(cli, config)?;
     if !cli.quiet {
-        println!(
+        eprintln!(
             "{} {}",
             style("🔌").cyan(),
             t!("common.using_port", port = port, baud = cli.baud)
@@ -572,11 +582,11 @@ fn cmd_write(
     let mut flasher = chip.create_flasher(&port, cli.baud, late_baud, cli.verbose)?;
 
     if !cli.quiet {
-        println!("{} {}", style("⏳").yellow(), t!("common.waiting_device"));
+        eprintln!("{} {}", style("⏳").yellow(), t!("common.waiting_device"));
     }
     flasher.connect()?;
     if !cli.quiet {
-        println!("{} {}", style("✓").green(), t!("common.connected"));
+        eprintln!("{} {}", style("✓").green(), t!("common.connected"));
     }
 
     let bins_ref: Vec<(&[u8], u32)> = bin_data.iter().map(|(d, a)| (d.as_slice(), *a)).collect();
@@ -586,7 +596,7 @@ fn cmd_write(
     flasher.close();
 
     if !cli.quiet {
-        println!("\n{} {}", style("🎉").green().bold(), t!("write.completed"));
+        eprintln!("\n{} {}", style("🎉").green().bold(), t!("write.completed"));
     }
 
     Ok(())
@@ -609,14 +619,14 @@ fn cmd_erase(cli: &Cli, config: &mut Config, all: bool) -> Result<()> {
     if !all {
         error!("{}", t!("erase.need_all_flag"));
         if !cli.quiet {
-            println!("{} {}", style("⚠").yellow(), t!("erase.use_all_flag"));
+            eprintln!("{} {}", style("⚠").yellow(), t!("erase.use_all_flag"));
         }
-        return Ok(());
+        std::process::exit(2);
     }
 
     let port = get_port(cli, config)?;
     if !cli.quiet {
-        println!(
+        eprintln!(
             "{} {}",
             style("🔌").cyan(),
             t!("common.using_port", port = port, baud = cli.baud)
@@ -627,21 +637,21 @@ fn cmd_erase(cli: &Cli, config: &mut Config, all: bool) -> Result<()> {
     let mut flasher = chip.create_flasher(&port, cli.baud, false, cli.verbose)?;
 
     if !cli.quiet {
-        println!("{} {}", style("⏳").yellow(), t!("common.waiting_device"));
+        eprintln!("{} {}", style("⏳").yellow(), t!("common.waiting_device"));
     }
     flasher.connect()?;
     if !cli.quiet {
-        println!("{} {}", style("✓").green(), t!("common.connected"));
+        eprintln!("{} {}", style("✓").green(), t!("common.connected"));
     }
 
     if !cli.quiet {
-        println!("{} {}", style("🗑").red(), t!("erase.erasing"));
+        eprintln!("{} {}", style("🗑").red(), t!("erase.erasing"));
     }
     flasher.erase_all()?;
     flasher.close();
 
     if !cli.quiet {
-        println!("\n{} {}", style("✓").green().bold(), t!("erase.completed"));
+        eprintln!("\n{} {}", style("✓").green().bold(), t!("erase.completed"));
     }
 
     Ok(())
@@ -673,7 +683,7 @@ fn format_partition_type(pt: PartitionType) -> String {
 
 /// Info command implementation.
 fn cmd_info(firmware: &PathBuf) -> Result<()> {
-    println!(
+    eprintln!(
         "{} {}",
         style("📦").cyan(),
         t!("flash.loading_firmware", path = firmware.display())
@@ -682,61 +692,61 @@ fn cmd_info(firmware: &PathBuf) -> Result<()> {
     let fwpkg = Fwpkg::from_file(firmware)
         .with_context(|| t!("error.load_firmware", path = firmware.display().to_string()))?;
 
-    println!("\n{}", style(t!("info.header")).bold().underlined());
+    eprintln!("\n{}", style(t!("info.header")).bold().underlined());
 
     // Show format version
     let version_str = match fwpkg.version() {
         FwpkgVersion::V1 => "V1 (32-byte names)",
         FwpkgVersion::V2 => "V2 (260-byte names)",
     };
-    println!("  {}: {}", t!("info.format"), version_str);
+    eprintln!("  {}: {}", t!("info.format"), version_str);
 
     // Show package name for V2
     if !fwpkg.package_name().is_empty() {
-        println!("  {}: {}", t!("info.package_name"), fwpkg.package_name());
+        eprintln!("  {}: {}", t!("info.package_name"), fwpkg.package_name());
     }
 
-    println!(
+    eprintln!(
         "  {}",
         t!("info.partitions", count = fwpkg.partition_count())
     );
-    println!("  {}", t!("info.total_size", size = fwpkg.header.len));
-    println!(
+    eprintln!("  {}", t!("info.total_size", size = fwpkg.header.len));
+    eprintln!(
         "  {}",
         t!("info.crc", crc = format!("{:04X}", fwpkg.header.crc))
     );
 
     // Verify CRC
     match fwpkg.verify_crc() {
-        Ok(()) => println!(
+        Ok(()) => eprintln!(
             "  {}",
             t!("info.crc_valid", status = t!("info.yes").to_string())
         ),
-        Err(_) => println!(
+        Err(_) => eprintln!(
             "  {}",
             t!("info.crc_valid", status = t!("info.no").to_string())
         ),
     }
 
-    println!(
+    eprintln!(
         "\n{}",
         style(t!("info.partitions_header")).bold().underlined()
     );
     for (i, bin) in fwpkg.bins.iter().enumerate() {
         let type_str = format_partition_type(bin.partition_type);
 
-        println!("\n  [{:2}] {}", i, style(&bin.name).cyan().bold());
-        println!("       {}", t!("info.type", "type" = type_str));
-        println!(
+        eprintln!("\n  [{:2}] {}", i, style(&bin.name).cyan().bold());
+        eprintln!("       {}", t!("info.type", "type" = type_str));
+        eprintln!(
             "       {}",
             t!("info.offset", offset = format!("{:08X}", bin.offset))
         );
-        println!("       {}", t!("info.length", length = bin.length));
-        println!(
+        eprintln!("       {}", t!("info.length", length = bin.length));
+        eprintln!(
             "       {}",
             t!("info.burn_addr", addr = format!("{:08X}", bin.burn_addr))
         );
-        println!("       {}", t!("info.burn_size", size = bin.burn_size));
+        eprintln!("       {}", t!("info.burn_size", size = bin.burn_size));
     }
 
     Ok(())
@@ -744,12 +754,12 @@ fn cmd_info(firmware: &PathBuf) -> Result<()> {
 
 /// List ports command implementation.
 fn cmd_list_ports() {
-    println!("{}", style(t!("list_ports.header")).bold().underlined());
+    eprintln!("{}", style(t!("list_ports.header")).bold().underlined());
 
     let detected = hisiflash::connection::detect::detect_ports();
 
     if detected.is_empty() {
-        println!("  {}", style(t!("list_ports.no_ports")).dim());
+        eprintln!("  {}", style(t!("list_ports.no_ports")).dim());
     } else {
         for port in &detected {
             let device_type = if port.device.is_known() {
@@ -765,7 +775,7 @@ fn cmd_list_ports() {
                 String::new()
             };
 
-            println!(
+            eprintln!(
                 "  {} {}{}{}{}",
                 style("•").green(),
                 style(&port.name).cyan(),
@@ -781,7 +791,7 @@ fn cmd_list_ports() {
 
         // Show auto-detection result
         if let Ok(auto_port) = hisiflash::connection::detect::auto_detect_port() {
-            println!(
+            eprintln!(
                 "\n{} {}",
                 style("→").green().bold(),
                 t!(
@@ -799,7 +809,7 @@ fn cmd_monitor(cli: &Cli, config: &mut Config, monitor_baud: u32) -> Result<()> 
 
     let port = get_port(cli, config)?;
 
-    println!(
+    eprintln!(
         "{} {}",
         style("📡").cyan(),
         t!(
@@ -808,7 +818,7 @@ fn cmd_monitor(cli: &Cli, config: &mut Config, monitor_baud: u32) -> Result<()> 
             baud = monitor_baud
         )
     );
-    println!("{}", style(t!("monitor.exit_hint")).dim());
+    eprintln!("{}", style(t!("monitor.exit_hint")).dim());
 
     // Simple serial monitor
     let mut serial = serialport::new(&port, monitor_baud)
@@ -848,6 +858,113 @@ fn cmd_completions(shell: Shell) {
     let mut cmd = Cli::command();
     let name = cmd.get_name().to_string();
     generate(shell, &mut cmd, name, &mut io::stdout());
+}
+
+/// Localized help printer for subcommands.
+fn cmd_help(cmd: Option<&str>) {
+    // Top-level help
+    if cmd.is_none() {
+        eprintln!("{}", t!("help.header"));
+        eprintln!();
+        eprintln!("  {}", t!("help.usage"));
+        eprintln!("");
+        eprintln!("{}:", t!("help.commands"));
+        eprintln!("  flash    - {}", t!("help.flash.summary"));
+        eprintln!("  write    - {}", t!("help.write.summary"));
+        eprintln!("  write-program - {}", t!("help.write_program.summary"));
+        eprintln!("  erase    - {}", t!("help.erase.summary"));
+        eprintln!("  info     - {}", t!("help.info.summary"));
+        eprintln!("  list-ports - {}", t!("help.list_ports.summary"));
+        eprintln!("  monitor  - {}", t!("help.monitor.summary"));
+        eprintln!("  completions - {}", t!("help.completions.summary"));
+        eprintln!("  help     - {}", t!("help.help.summary"));
+        eprintln!("");
+        eprintln!("{}", t!("help.more"));
+        return;
+    }
+
+    match cmd.unwrap() {
+        "flash" => {
+            eprintln!("{}", t!("help.flash.title"));
+            eprintln!("");
+            eprintln!("{}", t!("help.flash.usage"));
+            eprintln!("");
+            eprintln!("{}", t!("help.flash.description"));
+            eprintln!("");
+            eprintln!("{}", t!("help.flash.options_header"));
+            eprintln!("  - --filter <FILTER>    {}", t!("help.flash.opt.filter"));
+            eprintln!("  - --port <PORT>        {}", t!("help.opt.port"));
+            eprintln!("  - --baud <BAUD>        {}", t!("help.opt.baud"));
+            eprintln!("  - --chip <CHIP>        {}", t!("help.opt.chip"));
+            eprintln!("  - --lang <LANG>        {}", t!("help.opt.lang"));
+            eprintln!(
+                "  - --late-baud          {}",
+                t!("help.flash.opt.late_baud")
+            );
+            eprintln!(
+                "  - --skip-verify        {}",
+                t!("help.flash.opt.skip_verify")
+            );
+            eprintln!("  - --monitor            {}", t!("help.flash.opt.monitor"));
+            eprintln!("  - -v/--verbose         {}", t!("help.opt.verbose"));
+            eprintln!("  - -q/--quiet           {}", t!("help.opt.quiet"));
+        },
+        "write" => {
+            eprintln!("{}", t!("help.write.title"));
+            eprintln!();
+            eprintln!("{}", t!("help.write.usage"));
+            eprintln!("");
+            eprintln!("{}", t!("help.write.description"));
+            eprintln!("");
+            eprintln!("{}", t!("help.write.options_header"));
+            eprintln!(
+                "  - --loaderboot <FILE>  {}",
+                t!("help.write.opt.loaderboot")
+            );
+            eprintln!("  - --bin <FILE:ADDR>    {}", t!("help.write.opt.bins"));
+            eprintln!("  - --late-baud          {}", t!("help.opt.late_baud"));
+        },
+        "erase" => {
+            eprintln!("{}", t!("help.erase.title"));
+            eprintln!("");
+            eprintln!("{}", t!("help.erase.usage"));
+            eprintln!("");
+            eprintln!("{}", t!("help.erase.description"));
+            eprintln!("");
+            eprintln!("  --all    {}", t!("help.erase.opt.all"));
+        },
+        "info" => {
+            eprintln!("{}", t!("help.info.title"));
+            eprintln!("");
+            eprintln!("{}", t!("help.info.usage"));
+            eprintln!("");
+            eprintln!("{}", t!("help.info.description"));
+        },
+        "list-ports" => {
+            eprintln!("{}", t!("help.list_ports.title"));
+            eprintln!("");
+            eprintln!("{}", t!("help.list_ports.usage"));
+            eprintln!("");
+            eprintln!("{}", t!("help.list_ports.description"));
+            eprintln!("  --list-all-ports  {}", t!("help.list_ports.opt.list_all"));
+        },
+        "monitor" => {
+            eprintln!("{}", t!("help.monitor.title"));
+            eprintln!("");
+            eprintln!("{}", t!("help.monitor.usage"));
+            eprintln!("");
+            eprintln!("{}", t!("help.monitor.description"));
+            eprintln!("  --monitor-baud <BAUD> {}", t!("help.monitor.opt.baud"));
+        },
+        "completions" => {
+            eprintln!("{}", t!("help.completions.title"));
+            eprintln!("");
+            eprintln!("{}", t!("help.completions.description"));
+        },
+        other => {
+            eprintln!("{}: {}", t!("help.unknown"), other);
+        },
+    }
 }
 
 #[cfg(test)]
