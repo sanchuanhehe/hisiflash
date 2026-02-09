@@ -54,6 +54,16 @@ cargo install hisiflash-cli
 cargo binstall hisiflash-cli
 ```
 
+### 从 Git 仓库安装
+
+```bash
+# 安装最新 master 分支
+cargo install --git https://github.com/sanchuanhehe/hisiflash -p hisiflash-cli
+
+# 安装指定版本 tag
+cargo install --git https://github.com/sanchuanhehe/hisiflash --tag cli-v1.0.0 -p hisiflash-cli
+```
+
 ### 从源码编译
 
 ```bash
