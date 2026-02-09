@@ -144,12 +144,27 @@ pub(crate) fn build_localized_command() -> clap::Command {
 ///
 /// Looks up `arg.<id>.help` in the current locale. If found, replaces the
 /// arg's help text; otherwise keeps the original (English from doc comments).
+///
+/// Also checks `arg.<id>.long_help` — when present, sets the long help text
+/// and hides clap's auto-generated "Possible values:" section to avoid
+/// duplicate content.
 pub(crate) fn localize_arg(arg: clap::Arg) -> clap::Arg {
     let id = arg.get_id().as_str().to_string();
+
+    // Short help
     let key = format!("arg.{id}.help");
     let localized = t!(&key).to_string();
-    if localized != key {
+    let arg = if localized != key {
         arg.help(localized)
+    } else {
+        arg
+    };
+
+    // Long help (with possible values baked in)
+    let long_key = format!("arg.{id}.long_help");
+    let long_localized = t!(&long_key).to_string();
+    if long_localized != long_key {
+        arg.long_help(long_localized).hide_possible_values(true)
     } else {
         arg
     }
