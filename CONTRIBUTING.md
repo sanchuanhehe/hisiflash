@@ -18,10 +18,7 @@ Thank you for your interest in contributing to hisiflash! This document provides
 git clone https://github.com/example/hisiflash.git
 cd hisiflash
 
-# Set up git hooks (recommended)
-./scripts/setup-hooks.sh
-
-# Build the project
+# Build the project (git hooks are auto-configured on first build)
 cargo build
 
 # Run tests
@@ -36,17 +33,13 @@ cargo fmt --all
 
 ### Git Hooks
 
-The project includes a pre-push hook that automatically checks before each `git push`:
+Git hooks are **automatically configured** on first `cargo build` (via `build.rs`). No manual setup needed.
+
+The pre-push hook checks before each `git push`:
 
 1. **Code formatting** — `cargo fmt --check`
 2. **Clippy lints** — `cargo clippy` with `-D warnings`
 3. **Tag-version consistency** — if pushing a `cli-v*` or `lib-v*` tag, verifies the version matches the corresponding `Cargo.toml`
-
-To install:
-
-```bash
-./scripts/setup-hooks.sh
-```
 
 To skip hooks in an emergency:
 
