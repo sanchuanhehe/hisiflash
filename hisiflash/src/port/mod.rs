@@ -274,8 +274,7 @@ mod tests {
 
     #[test]
     fn test_serial_config_with_timeout() {
-        let config = SerialConfig::new("COM3", 9600)
-            .with_timeout(Duration::from_secs(5));
+        let config = SerialConfig::new("COM3", 9600).with_timeout(Duration::from_secs(5));
         assert_eq!(config.timeout, Duration::from_secs(5));
         assert_eq!(config.baud_rate, 9600);
     }

@@ -181,11 +181,40 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed architecture docum
 
 ## Release Process
 
-1. Update version in `Cargo.toml`
-2. Update `CHANGELOG.md`
-3. Create a git tag: `git tag v0.2.0`
-4. Push tag: `git push origin v0.2.0`
-5. GitHub Actions will build and create release
+The library (`hisiflash`) and CLI (`hisiflash-cli`) have independent version numbers and release cycles.
+
+### Releasing hisiflash-cli (CLI tool)
+
+1. Update version in `hisiflash-cli/Cargo.toml`
+2. Update `CHANGELOG.md` with release notes
+3. Commit changes: `git commit -am "chore: release hisiflash-cli v1.0.0"`
+4. Create a CLI tag: `git tag cli-v1.0.0`
+5. Push tag: `git push origin cli-v1.0.0`
+6. GitHub Actions will:
+   - Build binaries for all platforms (Linux, macOS, Windows)
+   - Create a GitHub Release with binaries attached
+   - Publish to crates.io (for stable releases)
+
+### Releasing hisiflash (library)
+
+1. Update version in `hisiflash/Cargo.toml`
+2. Update `CHANGELOG.md` with release notes
+3. Commit changes: `git commit -am "chore: release hisiflash v0.2.0"`
+4. Create a library tag: `git tag lib-v0.2.0`
+5. Push tag: `git push origin lib-v0.2.0`
+6. GitHub Actions will:
+   - Run tests
+   - Publish to crates.io (for stable releases)
+   - Create a GitHub Release
+
+### Tag Format
+
+| Tag Pattern | Target | Example |
+|-------------|--------|---------|
+| `cli-v*` | hisiflash-cli (binaries + crates.io) | `cli-v1.0.0`, `cli-v1.1.0-beta.1` |
+| `lib-v*` | hisiflash library (crates.io only) | `lib-v0.2.0`, `lib-v0.3.0-rc.1` |
+
+Pre-release tags (containing `-alpha`, `-beta`, `-rc` etc.) will create draft releases and skip crates.io publishing.
 
 ## Getting Help
 

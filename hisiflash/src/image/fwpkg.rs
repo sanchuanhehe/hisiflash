@@ -666,7 +666,11 @@ mod tests {
             (16, PartitionType::Database),
         ];
         for (val, expected) in &cases {
-            assert_eq!(PartitionType::from(*val), *expected, "Failed for value {val}");
+            assert_eq!(
+                PartitionType::from(*val),
+                *expected,
+                "Failed for value {val}"
+            );
         }
     }
 
@@ -925,9 +929,9 @@ mod tests {
     #[test]
     fn test_fwpkg_from_bytes_valid_v1() {
         let data = build_test_fwpkg_v1(&[
-            ("loaderboot", 0, 16, 0x0, 16, 0),       // Loader
-            ("flashboot", 0, 32, 0x200000, 32, 5),    // Flashboot
-            ("app", 0, 64, 0x800000, 64, 1),          // Normal
+            ("loaderboot", 0, 16, 0x0, 16, 0),     // Loader
+            ("flashboot", 0, 32, 0x200000, 32, 5), // Flashboot
+            ("app", 0, 64, 0x800000, 64, 1),       // Normal
         ]);
         let fwpkg = Fwpkg::from_bytes(data).unwrap();
         assert_eq!(fwpkg.version(), FwpkgVersion::V1);
@@ -968,18 +972,14 @@ mod tests {
 
     #[test]
     fn test_fwpkg_verify_crc() {
-        let data = build_test_fwpkg_v1(&[
-            ("app", 0, 8, 0x800000, 8, 1),
-        ]);
+        let data = build_test_fwpkg_v1(&[("app", 0, 8, 0x800000, 8, 1)]);
         let fwpkg = Fwpkg::from_bytes(data).unwrap();
         assert!(fwpkg.verify_crc().is_ok());
     }
 
     #[test]
     fn test_fwpkg_verify_crc_mismatch() {
-        let mut data = build_test_fwpkg_v1(&[
-            ("app", 0, 8, 0x800000, 8, 1),
-        ]);
+        let mut data = build_test_fwpkg_v1(&[("app", 0, 8, 0x800000, 8, 1)]);
         // Corrupt the CRC
         data[4] ^= 0xFF;
         let fwpkg = Fwpkg::from_bytes(data).unwrap();
@@ -988,9 +988,7 @@ mod tests {
 
     #[test]
     fn test_fwpkg_bin_data() {
-        let data = build_test_fwpkg_v1(&[
-            ("app", 0, 8, 0x800000, 8, 1),
-        ]);
+        let data = build_test_fwpkg_v1(&[("app", 0, 8, 0x800000, 8, 1)]);
         let fwpkg = Fwpkg::from_bytes(data).unwrap();
         let bin = &fwpkg.bins[0];
         let bin_data = fwpkg.bin_data(bin).unwrap();
@@ -1000,9 +998,7 @@ mod tests {
 
     #[test]
     fn test_fwpkg_bin_data_out_of_bounds() {
-        let data = build_test_fwpkg_v1(&[
-            ("app", 0, 8, 0x800000, 8, 1),
-        ]);
+        let data = build_test_fwpkg_v1(&[("app", 0, 8, 0x800000, 8, 1)]);
         let fwpkg = Fwpkg::from_bytes(data).unwrap();
         // Create a fake BinInfo pointing beyond data
         let fake_bin = FwpkgBinInfo {

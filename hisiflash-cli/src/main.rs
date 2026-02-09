@@ -17,7 +17,7 @@ use console::style;
 use env_logger::Env;
 use hisiflash::{ChipFamily, Fwpkg, FwpkgVersion, PartitionType};
 use indicatif::{ProgressBar, ProgressStyle};
-use log::{debug, error, warn};
+use log::{debug, error};
 use rust_i18n::t;
 use std::env;
 use std::io;
@@ -117,9 +117,9 @@ struct Cli {
 enum Chip {
     /// WS63 chip (WiFi + BLE, default).
     Ws63,
-    /// BS2X series (BS21, BLE only).
+    /// BS2X series (BS21, BLE only) — planned, not yet supported.
     Bs2x,
-    /// BS25 (BLE with enhanced features).
+    /// BS25 (BLE with enhanced features) — planned, not yet supported.
     Bs25,
 }
 
@@ -400,8 +400,8 @@ fn main() -> Result<()> {
                 *skip_verify,
             )?;
             if *monitor {
-                // TODO: Implement monitor after flash
-                warn!("Monitor after flash not yet implemented");
+                eprintln!();
+                cmd_monitor(&cli, &mut config, 115200)?;
             }
         },
         Commands::Write {
@@ -1165,8 +1165,10 @@ mod cli_tests {
     fn test_cli_parse_flash() {
         let cli = Cli::try_parse_from([
             "hisiflash",
-            "--port", "/dev/ttyUSB0",
-            "--baud", "460800",
+            "--port",
+            "/dev/ttyUSB0",
+            "--baud",
+            "460800",
             "flash",
             "firmware.fwpkg",
         ]);
@@ -1183,12 +1185,21 @@ mod cli_tests {
             "hisiflash",
             "flash",
             "fw.fwpkg",
-            "--filter", "app,flashboot",
+            "--filter",
+            "app,flashboot",
             "--late-baud",
             "--skip-verify",
             "--monitor",
-        ]).unwrap();
-        if let Commands::Flash { firmware, filter, late_baud, skip_verify, monitor } = cli.command {
+        ])
+        .unwrap();
+        if let Commands::Flash {
+            firmware,
+            filter,
+            late_baud,
+            skip_verify,
+            monitor,
+        } = cli.command
+        {
             assert_eq!(firmware.to_str().unwrap(), "fw.fwpkg");
             assert_eq!(filter.as_deref(), Some("app,flashboot"));
             assert!(late_baud);
@@ -1204,10 +1215,18 @@ mod cli_tests {
         let cli = Cli::try_parse_from([
             "hisiflash",
             "write",
-            "--loaderboot", "lb.bin",
-            "--bin", "app.bin:0x00800000",
-        ]).unwrap();
-        if let Commands::Write { loaderboot, bins, late_baud } = cli.command {
+            "--loaderboot",
+            "lb.bin",
+            "--bin",
+            "app.bin:0x00800000",
+        ])
+        .unwrap();
+        if let Commands::Write {
+            loaderboot,
+            bins,
+            late_baud,
+        } = cli.command
+        {
             assert_eq!(loaderboot.to_str().unwrap(), "lb.bin");
             assert_eq!(bins.len(), 1);
             assert_eq!(bins[0].0.to_str().unwrap(), "app.bin");
@@ -1223,10 +1242,13 @@ mod cli_tests {
         let cli = Cli::try_parse_from([
             "hisiflash",
             "write-program",
-            "--loaderboot", "lb.bin",
+            "--loaderboot",
+            "lb.bin",
             "program.bin",
-            "--address", "0x00800000",
-        ]).unwrap();
+            "--address",
+            "0x00800000",
+        ])
+        .unwrap();
         assert!(matches!(cli.command, Commands::WriteProgram { .. }));
     }
 
@@ -1242,17 +1264,13 @@ mod cli_tests {
 
     #[test]
     fn test_cli_parse_info() {
-        let cli = Cli::try_parse_from([
-            "hisiflash", "info", "firmware.fwpkg",
-        ]).unwrap();
+        let cli = Cli::try_parse_from(["hisiflash", "info", "firmware.fwpkg"]).unwrap();
         assert!(matches!(cli.command, Commands::Info { json: false, .. }));
     }
 
     #[test]
     fn test_cli_parse_info_json() {
-        let cli = Cli::try_parse_from([
-            "hisiflash", "info", "--json", "firmware.fwpkg",
-        ]).unwrap();
+        let cli = Cli::try_parse_from(["hisiflash", "info", "--json", "firmware.fwpkg"]).unwrap();
         if let Commands::Info { json, .. } = cli.command {
             assert!(json);
         } else {
@@ -1278,9 +1296,7 @@ mod cli_tests {
 
     #[test]
     fn test_cli_parse_monitor() {
-        let cli = Cli::try_parse_from([
-            "hisiflash", "monitor", "--monitor-baud", "9600",
-        ]).unwrap();
+        let cli = Cli::try_parse_from(["hisiflash", "monitor", "--monitor-baud", "9600"]).unwrap();
         if let Commands::Monitor { monitor_baud } = cli.command {
             assert_eq!(monitor_baud, 9600);
         } else {
@@ -1323,18 +1339,24 @@ mod cli_tests {
     fn test_cli_global_options() {
         let cli = Cli::try_parse_from([
             "hisiflash",
-            "--port", "COM3",
-            "--baud", "115200",
-            "--chip", "bs2x",
-            "--lang", "zh-CN",
+            "--port",
+            "COM3",
+            "--baud",
+            "115200",
+            "--chip",
+            "bs2x",
+            "--lang",
+            "zh-CN",
             "-vv",
             "--quiet",
             "--non-interactive",
             "--confirm-port",
             "--list-all-ports",
-            "--config", "/tmp/config.toml",
+            "--config",
+            "/tmp/config.toml",
             "list-ports",
-        ]).unwrap();
+        ])
+        .unwrap();
         assert_eq!(cli.port.as_deref(), Some("COM3"));
         assert_eq!(cli.baud, 115200);
         assert!(matches!(cli.chip, Chip::Bs2x));
@@ -1354,9 +1376,7 @@ mod cli_tests {
 
     #[test]
     fn test_cli_invalid_chip() {
-        let result = Cli::try_parse_from([
-            "hisiflash", "--chip", "invalid_chip", "list-ports"
-        ]);
+        let result = Cli::try_parse_from(["hisiflash", "--chip", "invalid_chip", "list-ports"]);
         assert!(result.is_err());
     }
 
@@ -1470,7 +1490,10 @@ mod cli_tests {
     fn test_build_localized_command_has_subcommands() {
         rust_i18n::set_locale("en");
         let cmd = build_localized_command();
-        let subcmd_names: Vec<_> = cmd.get_subcommands().map(|s| s.get_name().to_string()).collect();
+        let subcmd_names: Vec<_> = cmd
+            .get_subcommands()
+            .map(|s| s.get_name().to_string())
+            .collect();
         assert!(subcmd_names.contains(&"flash".to_string()));
         assert!(subcmd_names.contains(&"write".to_string()));
         assert!(subcmd_names.contains(&"erase".to_string()));
@@ -1486,8 +1509,14 @@ mod cli_tests {
         let cmd = build_localized_command();
         cmd.clone().debug_assert();
         // About should be Chinese
-        let about = cmd.get_about().map(std::string::ToString::to_string).unwrap_or_default();
-        assert!(about.contains("海思"), "About should be in Chinese: {about}");
+        let about = cmd
+            .get_about()
+            .map(std::string::ToString::to_string)
+            .unwrap_or_default();
+        assert!(
+            about.contains("海思"),
+            "About should be in Chinese: {about}"
+        );
     }
 
     // ---- localize_arg ----
@@ -1497,7 +1526,10 @@ mod cli_tests {
         rust_i18n::set_locale("zh-CN");
         let arg = clap::Arg::new("port").help("original help");
         let localized = localize_arg(arg);
-        let help = localized.get_help().map(std::string::ToString::to_string).unwrap_or_default();
+        let help = localized
+            .get_help()
+            .map(std::string::ToString::to_string)
+            .unwrap_or_default();
         // Should be Chinese translation
         assert!(!help.is_empty());
         assert_ne!(help, "original help");
@@ -1508,7 +1540,10 @@ mod cli_tests {
         rust_i18n::set_locale("en");
         let arg = clap::Arg::new("nonexistent_arg_xyz").help("keep this");
         let localized = localize_arg(arg);
-        let help = localized.get_help().map(std::string::ToString::to_string).unwrap_or_default();
+        let help = localized
+            .get_help()
+            .map(std::string::ToString::to_string)
+            .unwrap_or_default();
         // Should keep original since no translation exists
         assert_eq!(help, "keep this");
     }

@@ -305,16 +305,28 @@ mod tests {
 
     #[test]
     fn test_usb_device_eq() {
-        let a = UsbDevice { vid: 0x1A86, pid: 0x7523 };
-        let b = UsbDevice { vid: 0x1A86, pid: 0x7523 };
-        let c = UsbDevice { vid: 0x10C4, pid: 0xEA60 };
+        let a = UsbDevice {
+            vid: 0x1A86,
+            pid: 0x7523,
+        };
+        let b = UsbDevice {
+            vid: 0x1A86,
+            pid: 0x7523,
+        };
+        let c = UsbDevice {
+            vid: 0x10C4,
+            pid: 0xEA60,
+        };
         assert_eq!(a, b);
         assert_ne!(a, c);
     }
 
     #[test]
     fn test_usb_device_clone() {
-        let a = UsbDevice { vid: 0x1A86, pid: 0x7523 };
+        let a = UsbDevice {
+            vid: 0x1A86,
+            pid: 0x7523,
+        };
         let b = a.clone();
         assert_eq!(a, b);
     }
@@ -362,10 +374,16 @@ mod tests {
     #[test]
     fn test_config_merge_usb_devices_extend() {
         let mut base = Config::default();
-        base.port.usb_device.push(UsbDevice { vid: 0x1A86, pid: 0x7523 });
+        base.port.usb_device.push(UsbDevice {
+            vid: 0x1A86,
+            pid: 0x7523,
+        });
 
         let mut other = Config::default();
-        other.port.usb_device.push(UsbDevice { vid: 0x10C4, pid: 0xEA60 });
+        other.port.usb_device.push(UsbDevice {
+            vid: 0x10C4,
+            pid: 0xEA60,
+        });
 
         base.merge(other);
         assert_eq!(base.port.usb_device.len(), 2);
@@ -408,7 +426,10 @@ skip_verify = true
 late_baud = false
 "#;
         let config: Config = toml::from_str(toml_str).unwrap();
-        assert_eq!(config.port.connection.serial.as_deref(), Some("/dev/ttyUSB0"));
+        assert_eq!(
+            config.port.connection.serial.as_deref(),
+            Some("/dev/ttyUSB0")
+        );
         assert_eq!(config.port.connection.baud, Some(921600));
         assert_eq!(config.port.usb_device.len(), 1);
         assert_eq!(config.port.usb_device[0].vid, 6790);
@@ -443,7 +464,10 @@ chip = "bs2x"
         config.port.connection.serial = Some("COM3".to_string());
         config.port.connection.baud = Some(460800);
         config.flash.chip = Some("ws63".to_string());
-        config.port.usb_device.push(UsbDevice { vid: 0x1A86, pid: 0x7523 });
+        config.port.usb_device.push(UsbDevice {
+            vid: 0x1A86,
+            pid: 0x7523,
+        });
 
         let serialized = toml::to_string_pretty(&config).unwrap();
         let deserialized: Config = toml::from_str(&serialized).unwrap();
@@ -459,13 +483,22 @@ chip = "bs2x"
     fn test_port_config_toml_roundtrip() {
         let mut port = PortConfig::default();
         port.connection.serial = Some("/dev/ttyACM0".to_string());
-        port.usb_device.push(UsbDevice { vid: 0x10C4, pid: 0xEA60 });
-        port.usb_device.push(UsbDevice { vid: 0x0403, pid: 0x6001 });
+        port.usb_device.push(UsbDevice {
+            vid: 0x10C4,
+            pid: 0xEA60,
+        });
+        port.usb_device.push(UsbDevice {
+            vid: 0x0403,
+            pid: 0x6001,
+        });
 
         let serialized = toml::to_string_pretty(&port).unwrap();
         let deserialized: PortConfig = toml::from_str(&serialized).unwrap();
 
-        assert_eq!(deserialized.connection.serial.as_deref(), Some("/dev/ttyACM0"));
+        assert_eq!(
+            deserialized.connection.serial.as_deref(),
+            Some("/dev/ttyACM0")
+        );
         assert_eq!(deserialized.usb_device.len(), 2);
     }
 
@@ -476,15 +509,22 @@ chip = "bs2x"
         let dir = std::env::temp_dir().join("hisiflash_test_config");
         let _ = fs::create_dir_all(&dir);
         let path = dir.join("test_config.toml");
-        fs::write(&path, r#"
+        fs::write(
+            &path,
+            r#"
 [port.connection]
 serial = "/dev/ttyUSB1"
 [flash]
 chip = "bs2x"
-"#).unwrap();
+"#,
+        )
+        .unwrap();
 
         let config = Config::load_from_path(&path);
-        assert_eq!(config.port.connection.serial.as_deref(), Some("/dev/ttyUSB1"));
+        assert_eq!(
+            config.port.connection.serial.as_deref(),
+            Some("/dev/ttyUSB1")
+        );
         assert_eq!(config.flash.chip.as_deref(), Some("bs2x"));
 
         let _ = fs::remove_dir_all(&dir);

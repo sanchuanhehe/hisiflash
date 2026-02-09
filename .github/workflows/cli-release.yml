@@ -1,13 +1,13 @@
-name: Release
+name: CLI Release
 
 on:
   push:
     tags:
-      - 'v[0-9]+.*'
+      - 'cli-v[0-9]+.*'
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Release tag (e.g., v0.1.0)'
+        description: 'CLI release tag (e.g., cli-v1.0.0)'
         required: true
         type: string
 
@@ -15,13 +15,14 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  # Create release
+  # Extract version and create release
   create-release:
     name: Create Release
     runs-on: ubuntu-latest
     outputs:
       upload_url: ${{ steps.create_release.outputs.upload_url }}
       version: ${{ steps.get_version.outputs.version }}
+      cli_version: ${{ steps.get_version.outputs.cli_version }}
     steps:
       - uses: actions/checkout@v4
 
@@ -29,23 +30,35 @@ jobs:
         id: get_version
         run: |
           if [ -n "${{ github.event.inputs.tag }}" ]; then
-            VERSION="${{ github.event.inputs.tag }}"
+            TAG="${{ github.event.inputs.tag }}"
           else
-            VERSION="${GITHUB_REF#refs/tags/}"
+            TAG="${GITHUB_REF#refs/tags/}"
           fi
-          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          # Extract version number (cli-v1.0.0 -> 1.0.0)
+          CLI_VERSION="${TAG#cli-v}"
+          echo "version=${TAG}" >> $GITHUB_OUTPUT
+          echo "cli_version=${CLI_VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Verify CLI version matches Cargo.toml
+        run: |
+          CARGO_VERSION=$(grep '^version = ' hisiflash-cli/Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
+          if [ "$CARGO_VERSION" != "${{ steps.get_version.outputs.cli_version }}" ]; then
+            echo "❌ Version mismatch: tag=${{ steps.get_version.outputs.cli_version }}, Cargo.toml=$CARGO_VERSION"
+            exit 1
+          fi
+          echo "✅ Version verified: $CARGO_VERSION"
 
       - name: Create Release
         id: create_release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.get_version.outputs.version }}
-          name: Release ${{ steps.get_version.outputs.version }}
+          name: hisiflash-cli ${{ steps.get_version.outputs.cli_version }}
           draft: true
-          prerelease: ${{ contains(steps.get_version.outputs.version, '-') }}
+          prerelease: ${{ contains(steps.get_version.outputs.cli_version, '-') }}
           generate_release_notes: true
 
-  # Build release binaries
+  # Build release binaries for all platforms
   build-release:
     name: Build (${{ matrix.target }})
     needs: create-release
@@ -106,7 +119,7 @@ jobs:
         if: runner.os == 'Linux' && matrix.cross
         run: sudo apt-get update && sudo apt-get install -y zip
 
-      # Cross compilation for ARM64 Linux using cross
+      # Cross compilation for ARM64 Linux
       - name: Install cross
         if: matrix.cross
         uses: taiki-e/install-action@cross
@@ -140,12 +153,13 @@ jobs:
           tag_name: ${{ needs.create-release.outputs.version }}
           files: hisiflash-cli-${{ matrix.target }}.${{ matrix.archive }}
 
-  # Publish to crates.io (optional, manual trigger)
+  # Publish CLI to crates.io
   publish-crates:
     name: Publish to crates.io
     needs: [create-release, build-release]
     runs-on: ubuntu-latest
-    if: ${{ !contains(needs.create-release.outputs.version, '-') }}
+    # Only publish stable releases (no pre-release suffix)
+    if: ${{ !contains(needs.create-release.outputs.cli_version, '-') }}
     steps:
       - uses: actions/checkout@v4
 
@@ -153,14 +167,6 @@ jobs:
 
       - name: Install libudev
         run: sudo apt-get update && sudo apt-get install -y libudev-dev
-
-      - name: Publish hisiflash (library)
-        run: cargo publish -p hisiflash
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-
-      - name: Wait for crates.io index update
-        run: sleep 30
 
       - name: Publish hisiflash-cli
         run: cargo publish -p hisiflash-cli
