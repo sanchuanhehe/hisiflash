@@ -388,12 +388,13 @@ mod tests {
     fn test_ymodem_transfer_single_c_wait() {
         // Simulate device that sends: C, ACK(block0), ACK(data), ACK(EOT), ACK(finish)
         // NO second 'C' between block 0 ACK and data blocks.
-        let mut response = Vec::new();
-        response.push(control::C); // Initial 'C' for YMODEM start
-        response.push(control::ACK); // ACK for block 0 (file info)
-        response.push(control::ACK); // ACK for data block 1
-        response.push(control::ACK); // ACK for EOT
-        response.push(control::ACK); // ACK for finish block
+        let response = vec![
+            control::C,   // Initial 'C' for YMODEM start
+            control::ACK, // ACK for block 0 (file info)
+            control::ACK, // ACK for data block 1
+            control::ACK, // ACK for EOT
+            control::ACK, // ACK for finish block
+        ];
 
         let mut port = MockSerial::new(&response);
         let config = YmodemConfig {
@@ -423,13 +424,14 @@ mod tests {
     #[test]
     fn test_ymodem_no_c_before_finish() {
         // Response sequence without any extra 'C' between EOT ACK and finish
-        let mut response = Vec::new();
-        response.push(control::C); // Initial 'C'
-        response.push(control::ACK); // ACK for block 0
-        response.push(control::ACK); // ACK for data block 1
-        response.push(control::ACK); // ACK for EOT
-        // Note: NO 'C' here before finish block
-        response.push(control::ACK); // ACK for finish block
+        let response = vec![
+            control::C,   // Initial 'C'
+            control::ACK, // ACK for block 0
+            control::ACK, // ACK for data block 1
+            control::ACK, // ACK for EOT
+            // Note: NO 'C' here before finish block
+            control::ACK, // ACK for finish block
+        ];
 
         let mut port = MockSerial::new(&response);
         let config = YmodemConfig {
@@ -454,12 +456,13 @@ mod tests {
     /// Regression: YMODEM transfer with exactly 1024 bytes (one full STX block).
     #[test]
     fn test_ymodem_transfer_exact_block_size() {
-        let mut response = Vec::new();
-        response.push(control::C); // Initial 'C'
-        response.push(control::ACK); // ACK for block 0
-        response.push(control::ACK); // ACK for data block 1
-        response.push(control::ACK); // ACK for EOT
-        response.push(control::ACK); // ACK for finish block
+        let response = vec![
+            control::C,   // Initial 'C'
+            control::ACK, // ACK for block 0
+            control::ACK, // ACK for data block 1
+            control::ACK, // ACK for EOT
+            control::ACK, // ACK for finish block
+        ];
 
         let mut port = MockSerial::new(&response);
         let config = YmodemConfig {
@@ -484,12 +487,11 @@ mod tests {
     #[test]
     fn test_ymodem_transfer_multi_block() {
         let num_blocks = 3;
-        let mut response = Vec::new();
-        response.push(control::C); // Initial 'C'
-        response.push(control::ACK); // ACK for block 0
-        for _ in 0..num_blocks {
-            response.push(control::ACK); // ACK for each data block
-        }
+        let mut response = vec![
+            control::C,   // Initial 'C'
+            control::ACK, // ACK for block 0
+        ];
+        response.extend(std::iter::repeat_n(control::ACK, num_blocks)); // ACK for each data block
         response.push(control::ACK); // ACK for EOT
         response.push(control::ACK); // ACK for finish block
 

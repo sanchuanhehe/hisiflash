@@ -1090,16 +1090,13 @@ mod tests {
         let port = MockPort::new("/dev/ttyUSB0");
 
         // Simulate: device sends 'C' for YMODEM, then ACKs all blocks, then magic
-        let mut response = Vec::new();
-        response.push(b'C'); // YMODEM 'C' request
-        // Block 0 (file info) ACK
-        response.push(0x06); // ACK
-        // Data block ACKs (for a small 1-byte payload, 1 block)
-        response.push(0x06); // ACK for data block
-        // EOT ACK
-        response.push(0x06); // ACK for EOT
-        // Finish block ACK
-        response.push(0x06); // ACK for finish block
+        let response = vec![
+            b'C',  // YMODEM 'C' request
+            0x06,  // ACK for block 0 (file info)
+            0x06,  // ACK for data block
+            0x06,  // ACK for EOT
+            0x06,  // ACK for finish block
+        ];
         port.add_read_data(&response);
 
         let mut flasher = Ws63Flasher::new(port, 921600);

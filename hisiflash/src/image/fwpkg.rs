@@ -639,8 +639,8 @@ mod tests {
         assert_eq!(FWPKG_MAGIC_V1, 0xEFBEADDF);
         assert_eq!(FWPKG_MAGIC_V2_MIN, 0xEFBEADD0);
         assert_eq!(FWPKG_MAGIC_V2_MAX, 0xEFBEADDE);
-        // V1 magic should be just above V2 range (compile-time check)
-        const _: () = assert!(FWPKG_MAGIC_V1 > FWPKG_MAGIC_V2_MAX);
+        // V1 magic should be just above V2 range
+        const { assert!(FWPKG_MAGIC_V1 > FWPKG_MAGIC_V2_MAX) };
     }
 
     #[test]

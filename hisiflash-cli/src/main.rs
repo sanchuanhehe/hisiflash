@@ -317,7 +317,7 @@ fn main() -> Result<()> {
         console::set_colors_enabled_stderr(false);
     }
 
-    debug!("Using locale: {}", locale);
+    debug!("Using locale: {locale}");
 
     // If user asked for help (-h/--help), print localized help via clap with
     // translated section headings. This intercepts before clap's auto-help so
