@@ -337,7 +337,10 @@ fn main() -> Result<()> {
 
         if let Some(cmd_name) = found {
             // Print subcommand help
-            if let Some(sub) = app.get_subcommands().find(|s| s.get_name() == cmd_name.as_str()) {
+            if let Some(sub) = app
+                .get_subcommands()
+                .find(|s| s.get_name() == cmd_name.as_str())
+            {
                 let _ = sub.clone().print_help();
             }
         } else {
@@ -884,7 +887,10 @@ fn cmd_info_json(firmware: &PathBuf) -> Result<()> {
         "partitions": partitions,
     });
 
-    println!("{}", serde_json::to_string_pretty(&info).unwrap_or_default());
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&info).unwrap_or_default()
+    );
     Ok(())
 }
 
@@ -908,7 +914,10 @@ fn cmd_list_ports(json: bool) {
                 })
             })
             .collect();
-        println!("{}", serde_json::to_string_pretty(&ports).unwrap_or_default());
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&ports).unwrap_or_default()
+        );
         return;
     }
 

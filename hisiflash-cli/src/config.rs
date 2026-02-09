@@ -107,7 +107,10 @@ impl Config {
             debug!("Loaded config from {}", path.display());
             config
         } else {
-            warn!("Could not load config from {}, using defaults", path.display());
+            warn!(
+                "Could not load config from {}, using defaults",
+                path.display()
+            );
             Self::default()
         }
     }

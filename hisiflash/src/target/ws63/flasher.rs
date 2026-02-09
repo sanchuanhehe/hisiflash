@@ -1091,11 +1091,11 @@ mod tests {
 
         // Simulate: device sends 'C' for YMODEM, then ACKs all blocks, then magic
         let response = vec![
-            b'C',  // YMODEM 'C' request
-            0x06,  // ACK for block 0 (file info)
-            0x06,  // ACK for data block
-            0x06,  // ACK for EOT
-            0x06,  // ACK for finish block
+            b'C', // YMODEM 'C' request
+            0x06, // ACK for block 0 (file info)
+            0x06, // ACK for data block
+            0x06, // ACK for EOT
+            0x06, // ACK for finish block
         ];
         port.add_read_data(&response);
 
