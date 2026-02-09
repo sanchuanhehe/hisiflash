@@ -325,10 +325,14 @@ fn main() -> Result<()> {
 
     debug!("Using locale: {locale}");
 
-    // If user asked for help (-h/--help), print localized help via clap with
-    // translated section headings. This intercepts before clap's auto-help so
-    // we can apply help_template with i18n strings.
-    if raw_args.iter().any(|a| a == "-h" || a == "--help") {
+    // If user asked for help (-h/--help) or provided no arguments at all,
+    // print localized help via clap with translated section headings.
+    // This intercepts before clap's auto-help so we can apply help_template
+    // with i18n strings.
+    let wants_help = raw_args.iter().any(|a| a == "-h" || a == "--help");
+    let no_args = raw_args.len() <= 1;
+
+    if wants_help || no_args {
         let mut app = build_localized_command();
 
         // Determine subcommand if provided
