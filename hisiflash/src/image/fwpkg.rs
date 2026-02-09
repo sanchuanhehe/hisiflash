@@ -89,7 +89,7 @@ pub const HEADER_SIZE_V2: usize = 272;
 pub const HEADER_SIZE: usize = HEADER_SIZE_V1;
 
 /// V1 BinInfo size in bytes.
-/// name[32] + offset(4) + length(4) + burn_addr(4) + burn_size(4) + type(4) = 52
+/// name\[32\] + offset(4) + length(4) + burn_addr(4) + burn_size(4) + type(4) = 52
 pub const BIN_INFO_SIZE_V1: usize = 52;
 
 /// V2 BinInfo size in bytes.
