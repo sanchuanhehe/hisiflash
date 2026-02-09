@@ -1,7 +1,8 @@
 //! Command implementations.
 //!
-//! This module contains additional command implementations
-//! that may be factored out for cleaner organization.
+//! Each subcommand is implemented in its own module for clean separation.
 
-// Currently all commands are in main.rs for simplicity.
-// This module can be expanded for larger command implementations.
+pub(crate) mod completions;
+pub(crate) mod flash;
+pub(crate) mod info;
+pub(crate) mod monitor;

@@ -10,34 +10,35 @@
 //! - Environment variable support
 //! - Internationalization (i18n) support
 
-use anyhow::{Context, Result};
-use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
-use clap_complete::{Shell, generate};
+use anyhow::Result;
+use clap::{Parser, Subcommand, ValueEnum};
+use clap_complete::Shell;
 use console::style;
 use env_logger::Env;
-use hisiflash::{ChipFamily, Fwpkg, FwpkgVersion, PartitionType};
-use indicatif::{ProgressBar, ProgressStyle};
-use log::{debug, error};
-use rust_i18n::t;
+use hisiflash::ChipFamily;
+use log::debug;
 use std::env;
-use std::fs;
-use std::io;
-use std::io::Write as _;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 /// Whether stderr is a terminal (set once at startup).
 static STDERR_IS_TTY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
 
 /// Check if emoji/animations should be used (TTY and colors enabled).
-fn use_fancy_output() -> bool {
+pub(crate) fn use_fancy_output() -> bool {
     STDERR_IS_TTY.load(std::sync::atomic::Ordering::Relaxed) && console::colors_enabled_stderr()
 }
 
 mod commands;
 mod config;
+mod help;
 mod serial;
 
+use commands::completions::{cmd_completions, cmd_completions_install};
+use commands::flash::{cmd_erase, cmd_flash, cmd_write, cmd_write_program};
+use commands::info::{cmd_info, cmd_list_ports};
+use commands::monitor::cmd_monitor;
 use config::Config;
+use help::{build_localized_command, detect_locale};
 use serial::{SerialOptions, ask_remember_port, select_serial_port};
 
 // Initialize i18n with locale files from the locales directory
@@ -57,10 +58,10 @@ rust_i18n::i18n!("locales", fallback = "en");
 #[command(propagate_version = true)]
 #[command(after_help = "For more information, visit: https://github.com/sanchuanhehe/hisiflash")]
 #[allow(clippy::struct_excessive_bools)]
-struct Cli {
+pub(crate) struct Cli {
     /// Serial port to use (auto-detected if not specified).
     #[arg(short, long, global = true, env = "HISIFLASH_PORT")]
-    port: Option<String>,
+    pub(crate) port: Option<String>,
 
     /// Baud rate for data transfer.
     #[arg(
@@ -70,7 +71,7 @@ struct Cli {
         default_value = "921600",
         env = "HISIFLASH_BAUD"
     )]
-    baud: u32,
+    pub(crate) baud: u32,
 
     /// Target chip type.
     #[arg(
@@ -80,35 +81,35 @@ struct Cli {
         default_value = "ws63",
         env = "HISIFLASH_CHIP"
     )]
-    chip: Chip,
+    pub(crate) chip: Chip,
 
     /// Language/locale for messages (e.g., en, zh-CN).
     #[arg(long, global = true, env = "HISIFLASH_LANG")]
-    lang: Option<String>,
+    pub(crate) lang: Option<String>,
 
     /// Verbose output level (-v, -vv, -vvv for increasing detail).
     #[arg(short, long, global = true, action = clap::ArgAction::Count)]
-    verbose: u8,
+    pub(crate) verbose: u8,
 
     /// Quiet mode (suppress non-essential output).
     #[arg(short, long, global = true)]
-    quiet: bool,
+    pub(crate) quiet: bool,
 
     /// Non-interactive mode (fail instead of prompting).
     #[arg(long, global = true, env = "HISIFLASH_NON_INTERACTIVE")]
-    non_interactive: bool,
+    pub(crate) non_interactive: bool,
 
     /// Confirm port selection even for auto-detected ports.
     #[arg(long, global = true)]
-    confirm_port: bool,
+    pub(crate) confirm_port: bool,
 
     /// List all available ports (including unknown types).
     #[arg(long, global = true)]
-    list_all_ports: bool,
+    pub(crate) list_all_ports: bool,
 
     /// Path to a configuration file.
     #[arg(long = "config", global = true, value_name = "PATH")]
-    config_path: Option<PathBuf>,
+    pub(crate) config_path: Option<PathBuf>,
 
     #[command(subcommand)]
     command: Commands,
@@ -116,7 +117,7 @@ struct Cli {
 
 /// Supported chip types.
 #[derive(Clone, Copy, Debug, ValueEnum)]
-enum Chip {
+pub(crate) enum Chip {
     /// WS63 chip (WiFi + BLE, default).
     Ws63,
     /// BS2X series (BS21, BLE only) — planned, not yet supported.
@@ -270,42 +271,6 @@ fn parse_hex_u32(s: &str) -> Result<u32, String> {
     // Support underscore separators like 0x00_80_00_00
     let s: String = s.chars().filter(|c| *c != '_').collect();
     u32::from_str_radix(&s, 16).map_err(|e| format!("Invalid hex address: {e}"))
-}
-
-/// Supported locales for i18n
-const SUPPORTED_LOCALES: &[&str] = &["en", "zh-CN"];
-
-/// Detect the best matching locale from system settings.
-///
-/// This function tries to match the system locale to one of the supported locales.
-/// It handles various locale formats like:
-/// - `zh_CN.UTF-8` -> `zh-CN`
-/// - `zh-CN` -> `zh-CN`
-/// - `zh` -> `zh-CN`
-/// - `en_US.UTF-8` -> `en`
-/// - `C` or `POSIX` -> `en`
-fn detect_locale() -> String {
-    let system_locale = sys_locale::get_locale().unwrap_or_else(|| "en".to_string());
-
-    // Normalize the locale string
-    // Remove encoding suffix (e.g., .UTF-8)
-    let locale = system_locale.split('.').next().unwrap_or(&system_locale);
-
-    // Replace underscore with hyphen for BCP 47 format
-    let locale = locale.replace('_', "-");
-
-    // Try exact match first
-    if SUPPORTED_LOCALES.contains(&locale.as_str()) {
-        return locale;
-    }
-
-    // Try matching by language code (first part before hyphen)
-    let lang_code = locale.split('-').next().unwrap_or(&locale);
-
-    match lang_code.to_lowercase().as_str() {
-        "zh" => "zh-CN".to_string(), // Chinese -> Simplified Chinese
-        _ => "en".to_string(),       // English and all others fallback to English
-    }
 }
 
 fn main() -> Result<()> {
@@ -501,7 +466,7 @@ fn main() -> Result<()> {
 }
 
 /// Get serial port from CLI args or interactive selection.
-fn get_port(cli: &Cli, config: &mut Config) -> Result<String> {
+pub(crate) fn get_port(cli: &Cli, config: &mut Config) -> Result<String> {
     let options = SerialOptions {
         port: cli.port.clone(),
         list_all_ports: cli.list_all_ports,
@@ -519,1099 +484,9 @@ fn get_port(cli: &Cli, config: &mut Config) -> Result<String> {
     Ok(selected.port.name)
 }
 
-/// Flash command implementation.
-fn cmd_flash(
-    cli: &Cli,
-    config: &mut Config,
-    firmware: &PathBuf,
-    filter: Option<&String>,
-    late_baud: bool,
-    skip_verify: bool,
-) -> Result<()> {
-    if !cli.quiet {
-        eprintln!(
-            "{} {}",
-            style("📦").cyan(),
-            t!("flash.loading_firmware", path = firmware.display())
-        );
-    }
-
-    // Load FWPKG
-    let fwpkg = Fwpkg::from_file(firmware)
-        .with_context(|| t!("error.load_firmware", path = firmware.display().to_string()))?;
-
-    // Verify CRC
-    if !skip_verify {
-        fwpkg
-            .verify_crc()
-            .context(t!("error.crc_failed").to_string())?;
-        if !cli.quiet {
-            eprintln!("{} {}", style("✓").green(), t!("flash.crc_passed"));
-        }
-    }
-
-    // Show partition info
-    if !cli.quiet {
-        eprintln!(
-            "{} {}",
-            style("ℹ").blue(),
-            t!("flash.found_partitions", count = fwpkg.partition_count())
-        );
-        for bin in &fwpkg.bins {
-            let type_str = if bin.is_loaderboot() {
-                "(LoaderBoot)"
-            } else {
-                ""
-            };
-            eprintln!(
-                "    {} {} @ 0x{:08X} ({} bytes) {}",
-                style("•").dim(),
-                bin.name,
-                bin.burn_addr,
-                bin.length,
-                style(type_str).yellow()
-            );
-        }
-    }
-
-    // Get port
-    let port = get_port(cli, config)?;
-    if !cli.quiet {
-        eprintln!(
-            "{} {}",
-            style("🔌").cyan(),
-            t!("common.using_port", port = port, baud = cli.baud)
-        );
-    }
-
-    // Create flasher using chip abstraction
-    let chip: ChipFamily = cli.chip.into();
-    let mut flasher = chip.create_flasher(&port, cli.baud, late_baud, cli.verbose)?;
-
-    // Connect
-    if !cli.quiet {
-        eprintln!("{} {}", style("⏳").yellow(), t!("common.waiting_device"));
-    }
-    flasher.connect()?;
-    if !cli.quiet {
-        eprintln!("{} {}", style("✓").green(), t!("common.connected"));
-    }
-
-    // Create progress bar
-    let pb = if cli.quiet || !use_fancy_output() {
-        ProgressBar::hidden()
-    } else {
-        let pb = ProgressBar::new(100);
-        #[allow(clippy::unwrap_used)] // Static template string
-        pb.set_style(
-            ProgressStyle::default_bar()
-                .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}% {msg}")
-                .unwrap()
-                .progress_chars("#>-"),
-        );
-        pb.set_draw_target(indicatif::ProgressDrawTarget::stderr());
-        pb
-    };
-
-    // Flash
-    let filter_names: Option<Vec<&str>> = filter.as_ref().map(|f| f.split(',').collect());
-    let filter_slice = filter_names.as_deref();
-
-    let mut current_partition = String::new();
-
-    flasher.flash_fwpkg(
-        &fwpkg,
-        filter_slice,
-        &mut |name: &str, current: usize, total: usize| {
-            if name != current_partition {
-                current_partition = name.to_string();
-                pb.set_message(t!("flash.flashing", name = name).to_string());
-            }
-            if total > 0 {
-                pb.set_position((current * 100 / total) as u64);
-            }
-        },
-    )?;
-
-    pb.finish_with_message(t!("common.complete").to_string());
-
-    // Reset device
-    if !cli.quiet {
-        eprintln!("{} {}", style("🔄").cyan(), t!("common.resetting"));
-    }
-    flasher.reset()?;
-
-    // Close the flasher to release the serial port
-    flasher.close();
-
-    if !cli.quiet {
-        eprintln!("\n{} {}", style("🎉").green().bold(), t!("flash.completed"));
-    }
-
-    Ok(())
-}
-
-/// Write command implementation.
-fn cmd_write(
-    cli: &Cli,
-    config: &mut Config,
-    loaderboot: &PathBuf,
-    bins: &[(PathBuf, u32)],
-    late_baud: bool,
-) -> Result<()> {
-    if !cli.quiet {
-        eprintln!(
-            "{} {}",
-            style("📦").cyan(),
-            t!("write.loading_loaderboot", path = loaderboot.display())
-        );
-    }
-
-    let lb_data = std::fs::read(loaderboot).with_context(|| {
-        t!(
-            "error.read_loaderboot",
-            path = loaderboot.display().to_string()
-        )
-    })?;
-
-    let mut bin_data: Vec<(Vec<u8>, u32)> = Vec::new();
-    for (path, addr) in bins {
-        if !cli.quiet {
-            eprintln!(
-                "{} {}",
-                style("📦").cyan(),
-                t!(
-                    "write.loading_binary",
-                    path = path.display(),
-                    addr = format!("{:08X}", addr)
-                )
-            );
-        }
-        let data = std::fs::read(path)
-            .with_context(|| t!("error.read_binary", path = path.display().to_string()))?;
-        bin_data.push((data, *addr));
-    }
-
-    let port = get_port(cli, config)?;
-    if !cli.quiet {
-        eprintln!(
-            "{} {}",
-            style("🔌").cyan(),
-            t!("common.using_port", port = port, baud = cli.baud)
-        );
-    }
-
-    let chip: ChipFamily = cli.chip.into();
-    let mut flasher = chip.create_flasher(&port, cli.baud, late_baud, cli.verbose)?;
-
-    if !cli.quiet {
-        eprintln!("{} {}", style("⏳").yellow(), t!("common.waiting_device"));
-    }
-    flasher.connect()?;
-    if !cli.quiet {
-        eprintln!("{} {}", style("✓").green(), t!("common.connected"));
-    }
-
-    let bins_ref: Vec<(&[u8], u32)> = bin_data.iter().map(|(d, a)| (d.as_slice(), *a)).collect();
-    flasher.write_bins(&lb_data, &bins_ref)?;
-
-    flasher.reset()?;
-    flasher.close();
-
-    if !cli.quiet {
-        eprintln!("\n{} {}", style("🎉").green().bold(), t!("write.completed"));
-    }
-
-    Ok(())
-}
-
-/// Write program command implementation.
-fn cmd_write_program(
-    cli: &Cli,
-    config: &mut Config,
-    loaderboot: &PathBuf,
-    program: PathBuf,
-    address: u32,
-    late_baud: bool,
-) -> Result<()> {
-    cmd_write(cli, config, loaderboot, &[(program, address)], late_baud)
-}
-
-/// Erase command implementation.
-fn cmd_erase(cli: &Cli, config: &mut Config, all: bool) -> Result<()> {
-    if !all {
-        error!("{}", t!("erase.need_all_flag"));
-        if !cli.quiet {
-            eprintln!("{} {}", style("⚠").yellow(), t!("erase.use_all_flag"));
-        }
-        std::process::exit(2);
-    }
-
-    let port = get_port(cli, config)?;
-    if !cli.quiet {
-        eprintln!(
-            "{} {}",
-            style("🔌").cyan(),
-            t!("common.using_port", port = port, baud = cli.baud)
-        );
-    }
-
-    let chip: ChipFamily = cli.chip.into();
-    let mut flasher = chip.create_flasher(&port, cli.baud, false, cli.verbose)?;
-
-    if !cli.quiet {
-        eprintln!("{} {}", style("⏳").yellow(), t!("common.waiting_device"));
-    }
-    flasher.connect()?;
-    if !cli.quiet {
-        eprintln!("{} {}", style("✓").green(), t!("common.connected"));
-    }
-
-    if !cli.quiet {
-        eprintln!("{} {}", style("🗑").red(), t!("erase.erasing"));
-    }
-    flasher.erase_all()?;
-    flasher.close();
-
-    if !cli.quiet {
-        eprintln!("\n{} {}", style("✓").green().bold(), t!("erase.completed"));
-    }
-
-    Ok(())
-}
-
-/// Format partition type as a plain string (no ANSI colors) for JSON output.
-fn partition_type_str(pt: PartitionType) -> &'static str {
-    match pt {
-        PartitionType::Loader => "Loader",
-        PartitionType::Normal => "Normal",
-        PartitionType::KvNv => "KV-NV",
-        PartitionType::Efuse => "eFuse",
-        PartitionType::Otp => "OTP",
-        PartitionType::Flashboot => "FlashBoot",
-        PartitionType::Factory => "Factory",
-        PartitionType::Version => "Version",
-        PartitionType::SecurityA => "Security-A",
-        PartitionType::SecurityB => "Security-B",
-        PartitionType::SecurityC => "Security-C",
-        PartitionType::ProtocolA => "Protocol-A",
-        PartitionType::AppsA => "Apps-A",
-        PartitionType::RadioConfig => "RadioConfig",
-        PartitionType::Rom => "ROM",
-        PartitionType::Emmc => "eMMC",
-        PartitionType::Database => "Database",
-        PartitionType::Unknown(_) => "Unknown",
-    }
-}
-
-/// Format partition type for display (with ANSI colors).
-fn format_partition_type(pt: PartitionType) -> String {
-    match pt {
-        PartitionType::Loader => style("Loader").yellow().to_string(),
-        PartitionType::Normal => "Normal".to_string(),
-        PartitionType::KvNv => style("KV-NV").magenta().to_string(),
-        PartitionType::Efuse => style("eFuse").red().to_string(),
-        PartitionType::Otp => style("OTP").red().to_string(),
-        PartitionType::Flashboot => style("FlashBoot").yellow().to_string(),
-        PartitionType::Factory => style("Factory").blue().to_string(),
-        PartitionType::Version => "Version".to_string(),
-        PartitionType::SecurityA => style("Security-A").red().to_string(),
-        PartitionType::SecurityB => style("Security-B").red().to_string(),
-        PartitionType::SecurityC => style("Security-C").red().to_string(),
-        PartitionType::ProtocolA => "Protocol-A".to_string(),
-        PartitionType::AppsA => "Apps-A".to_string(),
-        PartitionType::RadioConfig => "RadioConfig".to_string(),
-        PartitionType::Rom => "ROM".to_string(),
-        PartitionType::Emmc => "eMMC".to_string(),
-        PartitionType::Database => style("Database").dim().to_string(),
-        PartitionType::Unknown(v) => format!("Unknown({v})"),
-    }
-}
-
-/// Info command implementation.
-fn cmd_info(firmware: &PathBuf, json: bool) -> Result<()> {
-    if json {
-        return cmd_info_json(firmware);
-    }
-
-    eprintln!(
-        "{} {}",
-        style("📦").cyan(),
-        t!("flash.loading_firmware", path = firmware.display())
-    );
-
-    let fwpkg = Fwpkg::from_file(firmware)
-        .with_context(|| t!("error.load_firmware", path = firmware.display().to_string()))?;
-
-    eprintln!("\n{}", style(t!("info.header")).bold().underlined());
-
-    // Show format version
-    let version_str = match fwpkg.version() {
-        FwpkgVersion::V1 => "V1 (32-byte names)",
-        FwpkgVersion::V2 => "V2 (260-byte names)",
-    };
-    eprintln!("  {}: {}", t!("info.format"), version_str);
-
-    // Show package name for V2
-    if !fwpkg.package_name().is_empty() {
-        eprintln!("  {}: {}", t!("info.package_name"), fwpkg.package_name());
-    }
-
-    eprintln!(
-        "  {}",
-        t!("info.partitions", count = fwpkg.partition_count())
-    );
-    eprintln!("  {}", t!("info.total_size", size = fwpkg.header.len));
-    eprintln!(
-        "  {}",
-        t!("info.crc", crc = format!("{:04X}", fwpkg.header.crc))
-    );
-
-    // Verify CRC
-    match fwpkg.verify_crc() {
-        Ok(()) => eprintln!(
-            "  {}",
-            t!("info.crc_valid", status = t!("info.yes").to_string())
-        ),
-        Err(_) => eprintln!(
-            "  {}",
-            t!("info.crc_valid", status = t!("info.no").to_string())
-        ),
-    }
-
-    eprintln!(
-        "\n{}",
-        style(t!("info.partitions_header")).bold().underlined()
-    );
-    for (i, bin) in fwpkg.bins.iter().enumerate() {
-        let type_str = format_partition_type(bin.partition_type);
-
-        eprintln!("\n  [{:2}] {}", i, style(&bin.name).cyan().bold());
-        eprintln!("       {}", t!("info.type", "type" = type_str));
-        eprintln!(
-            "       {}",
-            t!("info.offset", offset = format!("{:08X}", bin.offset))
-        );
-        eprintln!("       {}", t!("info.length", length = bin.length));
-        eprintln!(
-            "       {}",
-            t!("info.burn_addr", addr = format!("{:08X}", bin.burn_addr))
-        );
-        eprintln!("       {}", t!("info.burn_size", size = bin.burn_size));
-    }
-
-    Ok(())
-}
-
-/// Info command --json output: structured JSON to stdout.
-fn cmd_info_json(firmware: &PathBuf) -> Result<()> {
-    let fwpkg = Fwpkg::from_file(firmware)
-        .with_context(|| t!("error.load_firmware", path = firmware.display().to_string()))?;
-
-    let version_str = match fwpkg.version() {
-        FwpkgVersion::V1 => "V1",
-        FwpkgVersion::V2 => "V2",
-    };
-
-    let crc_valid = fwpkg.verify_crc().is_ok();
-
-    let partitions: Vec<serde_json::Value> = fwpkg
-        .bins
-        .iter()
-        .map(|bin| {
-            serde_json::json!({
-                "name": bin.name,
-                "type": partition_type_str(bin.partition_type),
-                "offset": format!("0x{:08X}", bin.offset),
-                "length": bin.length,
-                "burn_addr": format!("0x{:08X}", bin.burn_addr),
-                "burn_size": bin.burn_size,
-                "is_loaderboot": bin.is_loaderboot(),
-            })
-        })
-        .collect();
-
-    let info = serde_json::json!({
-        "format": version_str,
-        "package_name": fwpkg.package_name(),
-        "partition_count": fwpkg.partition_count(),
-        "total_size": fwpkg.header.len,
-        "crc": format!("0x{:04X}", fwpkg.header.crc),
-        "crc_valid": crc_valid,
-        "partitions": partitions,
-    });
-
-    println!(
-        "{}",
-        serde_json::to_string_pretty(&info).unwrap_or_default()
-    );
-    Ok(())
-}
-
-/// List ports command implementation.
-fn cmd_list_ports(json: bool) {
-    let detected = hisiflash::connection::detect::detect_ports();
-
-    if json {
-        let ports: Vec<serde_json::Value> = detected
-            .iter()
-            .map(|p| {
-                serde_json::json!({
-                    "name": p.name,
-                    "device": p.device.name(),
-                    "known": p.device.is_known(),
-                    "vid": p.vid,
-                    "pid": p.pid,
-                    "manufacturer": p.manufacturer,
-                    "product": p.product,
-                    "serial": p.serial,
-                })
-            })
-            .collect();
-        println!(
-            "{}",
-            serde_json::to_string_pretty(&ports).unwrap_or_default()
-        );
-        return;
-    }
-
-    eprintln!("{}", style(t!("list_ports.header")).bold().underlined());
-
-    if detected.is_empty() {
-        eprintln!("  {}", style(t!("list_ports.no_ports")).dim());
-    } else {
-        for port in &detected {
-            let device_type = if port.device.is_known() {
-                format!(" [{}]", style(port.device.name()).yellow())
-            } else {
-                String::new()
-            };
-
-            let product = port.product.as_deref().unwrap_or("");
-            let vid_pid = if let (Some(vid), Some(pid)) = (port.vid, port.pid) {
-                format!(" ({vid:04X}:{pid:04X})")
-            } else {
-                String::new()
-            };
-
-            eprintln!(
-                "  {} {}{}{}{}",
-                style("•").green(),
-                style(&port.name).cyan(),
-                device_type,
-                vid_pid,
-                if !product.is_empty() {
-                    format!(" - {}", style(product).dim())
-                } else {
-                    String::new()
-                }
-            );
-        }
-
-        // Show auto-detection result
-        if let Ok(auto_port) = hisiflash::connection::detect::auto_detect_port() {
-            eprintln!(
-                "\n{} {}",
-                style("→").green().bold(),
-                t!(
-                    "list_ports.auto_detected",
-                    port = style(&auto_port.name).cyan().bold().to_string()
-                )
-            );
-        }
-    }
-}
-
-/// Monitor command implementation.
-///
-/// Dual-threaded serial monitor with keyboard input, timestamps, and log file support.
-/// - Reader thread: serial → stdout (with optional timestamps and ANSI passthrough)
-/// - Main thread: keyboard (crossterm raw mode) → serial
-/// - Ctrl+C: graceful exit
-/// - Ctrl+R: reset device (DTR/RTS toggle)
-/// - Ctrl+T: toggle timestamp display
-fn cmd_monitor(
-    cli: &Cli,
-    config: &mut Config,
-    monitor_baud: u32,
-    timestamp: bool,
-    log_file: Option<&PathBuf>,
-) -> Result<()> {
-    use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyModifiers};
-    use crossterm::terminal;
-    use std::io::Read as _;
-    use std::sync::Arc;
-    use std::sync::atomic::{AtomicBool, Ordering};
-    use std::time::Duration;
-
-    let port_name = get_port(cli, config)?;
-
-    eprintln!(
-        "{} {}",
-        style("📡").cyan(),
-        t!(
-            "monitor.opening",
-            port = style(&port_name).green().to_string(),
-            baud = monitor_baud
-        )
-    );
-    eprintln!("{}", style(t!("monitor.exit_hint")).dim());
-
-    // Open serial port
-    let serial = serialport::new(&port_name, monitor_baud)
-        .timeout(Duration::from_millis(50))
-        .open()
-        .with_context(|| t!("error.open_port", port = port_name.clone()))?;
-
-    // Clone for the reader thread
-    let mut serial_reader = serial
-        .try_clone()
-        .context(t!("error.serial_error").to_string())?;
-    let mut serial_writer = serial;
-
-    // Shared state
-    let running = Arc::new(AtomicBool::new(true));
-    let running_reader = running.clone();
-    let show_timestamp = Arc::new(AtomicBool::new(timestamp));
-    let show_timestamp_reader = show_timestamp.clone();
-
-    // Open log file if specified
-    let log_writer: Option<std::sync::Mutex<std::fs::File>> = log_file.map(|path| {
-        let file = std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(path)
-            .with_context(|| format!("Failed to open log file: {}", path.display()))
-            .unwrap();
-        eprintln!(
-            "{} {}",
-            style("📝").cyan(),
-            t!("monitor.logging", path = path.display().to_string())
-        );
-        std::sync::Mutex::new(file)
-    });
-
-    // Reader thread: serial → stdout
-    let reader_handle = std::thread::spawn(move || {
-        let mut buf = [0u8; 1024];
-        // Track whether we're at the beginning of a new line (for timestamp insertion)
-        let mut at_line_start = true;
-        // Buffer for partial UTF-8 sequences that span read boundaries
-        let mut utf8_buf: Vec<u8> = Vec::new();
-
-        while running_reader.load(Ordering::Relaxed) {
-            match serial_reader.read(&mut buf) {
-                Ok(0) => {},
-                Ok(n) => {
-                    let data = &buf[..n];
-
-                    // Append to UTF-8 buffer for handling partial sequences
-                    utf8_buf.extend_from_slice(data);
-
-                    // Find the longest valid UTF-8 prefix
-                    let (valid, remainder) = split_utf8(&utf8_buf);
-
-                    if !valid.is_empty() {
-                        // Write to log file (raw, no timestamps)
-                        if let Some(ref log) = log_writer {
-                            if let Ok(mut f) = log.lock() {
-                                let _ = f.write_all(valid.as_bytes());
-                            }
-                        }
-
-                        // Process output with optional timestamps
-                        let ts_enabled = show_timestamp_reader.load(Ordering::Relaxed);
-                        let output = format_monitor_output(valid, ts_enabled, &mut at_line_start);
-                        print!("{output}");
-                        io::stdout().flush().ok();
-                    }
-
-                    // Keep remainder for next iteration
-                    let remainder_bytes = remainder.to_vec();
-                    utf8_buf.clear();
-                    utf8_buf.extend_from_slice(&remainder_bytes);
-                },
-                Err(ref e) if e.kind() == std::io::ErrorKind::TimedOut => {},
-                Err(ref e) if e.kind() == std::io::ErrorKind::BrokenPipe => break,
-                Err(_) => {
-                    if running_reader.load(Ordering::Relaxed) {
-                        // Only report if we haven't been asked to stop
-                        break;
-                    }
-                },
-            }
-        }
-    });
-
-    // Enter raw mode for keyboard input
-    terminal::enable_raw_mode().context("Failed to enable raw terminal mode")?;
-
-    // Ensure we restore terminal on exit (even on panic)
-    let _raw_guard = RawModeGuard;
-
-    // Main thread: keyboard → serial
-    while running.load(Ordering::Relaxed) {
-        // Poll for keyboard events with timeout
-        if event::poll(Duration::from_millis(50))? {
-            if let Event::Key(KeyEvent {
-                code, modifiers, ..
-            }) = event::read()?
-            {
-                match (code, modifiers) {
-                    // Ctrl+C: exit
-                    (KeyCode::Char('c'), KeyModifiers::CONTROL) => {
-                        running.store(false, Ordering::Relaxed);
-                        break;
-                    },
-                    // Ctrl+R: reset device via DTR/RTS toggle
-                    (KeyCode::Char('r'), KeyModifiers::CONTROL) => {
-                        eprintln!("\r\n{} {}", style("🔄").cyan(), t!("monitor.resetting"));
-                        let _ = serial_writer.write_data_terminal_ready(false);
-                        let _ = serial_writer.write_request_to_send(false);
-                        std::thread::sleep(Duration::from_millis(100));
-                        let _ = serial_writer.write_data_terminal_ready(true);
-                        let _ = serial_writer.write_request_to_send(true);
-                        std::thread::sleep(Duration::from_millis(100));
-                        let _ = serial_writer.write_data_terminal_ready(false);
-                    },
-                    // Ctrl+T: toggle timestamp
-                    (KeyCode::Char('t'), KeyModifiers::CONTROL) => {
-                        let current = show_timestamp.load(Ordering::Relaxed);
-                        show_timestamp.store(!current, Ordering::Relaxed);
-                        let state = if current {
-                            t!("monitor.timestamp_off")
-                        } else {
-                            t!("monitor.timestamp_on")
-                        };
-                        eprintln!("\r\n{} {state}", style("⏱").cyan());
-                    },
-                    // Enter: send \r\n (works with both \n and \r\n devices)
-                    (KeyCode::Enter, _) => {
-                        let _ = serial_writer.write_all(b"\r\n");
-                    },
-                    // Regular character
-                    (KeyCode::Char(c), KeyModifiers::NONE | KeyModifiers::SHIFT) => {
-                        let mut buf = [0u8; 4];
-                        let bytes = c.encode_utf8(&mut buf);
-                        let _ = serial_writer.write_all(bytes.as_bytes());
-                    },
-                    // Backspace
-                    (KeyCode::Backspace, _) => {
-                        let _ = serial_writer.write_all(&[0x08]); // BS
-                    },
-                    // Tab
-                    (KeyCode::Tab, _) => {
-                        let _ = serial_writer.write_all(&[0x09]); // HT
-                    },
-                    // Escape
-                    (KeyCode::Esc, _) => {
-                        let _ = serial_writer.write_all(&[0x1B]);
-                    },
-                    _ => {},
-                }
-            }
-        }
-    }
-
-    // Wait for reader thread to finish
-    let _ = reader_handle.join();
-    eprintln!("\r\n{} {}", style("👋").cyan(), t!("monitor.closed"));
-
-    Ok(())
-}
-
-/// RAII guard to restore terminal mode on drop.
-struct RawModeGuard;
-
-impl Drop for RawModeGuard {
-    fn drop(&mut self) {
-        let _ = crossterm::terminal::disable_raw_mode();
-    }
-}
-
-/// Split a byte slice into a valid UTF-8 prefix string and the remaining bytes.
-///
-/// This handles the case where a multi-byte UTF-8 sequence is split across
-/// two serial reads. The valid prefix is returned as a `&str`, and the
-/// remaining incomplete bytes are returned for the next read.
-fn split_utf8(bytes: &[u8]) -> (&str, &[u8]) {
-    match std::str::from_utf8(bytes) {
-        Ok(s) => (s, &[]),
-        Err(e) => {
-            let valid_up_to = e.valid_up_to();
-            // SAFETY: `valid_up_to` is guaranteed by `from_utf8` to be a valid UTF-8 boundary
-            let valid = std::str::from_utf8(&bytes[..valid_up_to]).unwrap_or_default();
-            (valid, &bytes[valid_up_to..])
-        },
-    }
-}
-
-/// Format monitor output with optional timestamps.
-///
-/// Handles `\r\n`, `\n`, and `\r` line endings uniformly.
-/// Inserts `[HH:MM:SS.mmm]` at the beginning of each new line when enabled.
-fn format_monitor_output(text: &str, timestamp: bool, at_line_start: &mut bool) -> String {
-    if !timestamp {
-        // Even without timestamps, normalize \r\n handling:
-        // Raw mode requires \r\n for proper line feed + carriage return
-        let mut out = String::with_capacity(text.len() * 2);
-        for c in text.chars() {
-            match c {
-                '\n' => out.push_str("\r\n"),
-                '\r' => {}, // Skip \r, we handle it via \n → \r\n
-                _ => out.push(c),
-            }
-        }
-        return out;
-    }
-
-    let mut out = String::with_capacity(text.len() + 128);
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default();
-    let total_secs = now.as_secs();
-    let millis = now.subsec_millis();
-    // Convert to HH:MM:SS (UTC-based, good enough for relative timing)
-    let hours = (total_secs / 3600) % 24;
-    let minutes = (total_secs / 60) % 60;
-    let seconds = total_secs % 60;
-
-    for c in text.chars() {
-        match c {
-            '\r' => {}, // Skip \r, we handle it via \n → \r\n
-            '\n' => {
-                out.push_str("\r\n");
-                *at_line_start = true;
-            },
-            _ => {
-                if *at_line_start {
-                    use std::fmt::Write;
-                    let _ = write!(
-                        out,
-                        "\x1b[90m[{hours:02}:{minutes:02}:{seconds:02}.{millis:03}]\x1b[0m "
-                    );
-                    *at_line_start = false;
-                }
-                out.push(c);
-            },
-        }
-    }
-    out
-}
-
-/// Generate shell completions.
-fn cmd_completions(shell: Shell) {
-    let mut cmd = Cli::command();
-    let name = cmd.get_name().to_string();
-    generate(shell, &mut cmd, name, &mut io::stdout());
-}
-
-/// Detect the user's current shell from environment.
-fn detect_shell_type() -> Option<Shell> {
-    // Try $SHELL first (Unix)
-    if let Ok(shell_path) = env::var("SHELL") {
-        let shell_name = std::path::Path::new(&shell_path)
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("");
-        return match shell_name {
-            "bash" => Some(Shell::Bash),
-            "zsh" => Some(Shell::Zsh),
-            "fish" => Some(Shell::Fish),
-            "elvish" => Some(Shell::Elvish),
-            "pwsh" | "powershell" => Some(Shell::PowerShell),
-            _ => None,
-        };
-    }
-
-    // On Windows, try PSModulePath for PowerShell detection
-    if cfg!(windows) && env::var("PSModulePath").is_ok() {
-        return Some(Shell::PowerShell);
-    }
-
-    None
-}
-
-/// Get the completion script installation path for a given shell.
-fn get_completion_install_path(shell: Shell) -> Result<PathBuf> {
-    match shell {
-        Shell::Bash => {
-            // ~/.local/share/bash-completion/completions/hisiflash
-            let dir = dirs_for_data().join("bash-completion").join("completions");
-            Ok(dir.join("hisiflash"))
-        },
-        Shell::Zsh => {
-            // ~/.zfunc/_hisiflash (common convention)
-            let home = home_dir()?;
-            let dir = home.join(".zfunc");
-            Ok(dir.join("_hisiflash"))
-        },
-        Shell::Fish => {
-            // ~/.config/fish/completions/hisiflash.fish
-            let config_dir = xdg_config_dir();
-            Ok(config_dir
-                .join("fish")
-                .join("completions")
-                .join("hisiflash.fish"))
-        },
-        Shell::PowerShell => {
-            // $PROFILE directory / hisiflash.ps1
-            if let Ok(profile) = env::var("PROFILE") {
-                let dir = PathBuf::from(&profile)
-                    .parent()
-                    .map_or_else(|| PathBuf::from("."), Path::to_path_buf);
-                Ok(dir.join("hisiflash.ps1"))
-            } else {
-                let home = home_dir()?;
-                let dir = home.join(".config").join("powershell").join("completions");
-                Ok(dir.join("hisiflash.ps1"))
-            }
-        },
-        Shell::Elvish => {
-            let config_dir = xdg_config_dir();
-            Ok(config_dir.join("elvish").join("lib").join("hisiflash.elv"))
-        },
-        _ => anyhow::bail!("Unsupported shell for auto-install"),
-    }
-}
-
-/// Get home directory.
-fn home_dir() -> Result<PathBuf> {
-    env::var("HOME")
-        .or_else(|_| env::var("USERPROFILE"))
-        .map(PathBuf::from)
-        .context("Could not determine home directory")
-}
-
-/// Get XDG config directory (~/.config by default).
-fn xdg_config_dir() -> PathBuf {
-    env::var("XDG_CONFIG_HOME").map_or_else(
-        |_| home_dir().unwrap_or_default().join(".config"),
-        PathBuf::from,
-    )
-}
-
-/// Get XDG data directory.
-fn dirs_for_data() -> PathBuf {
-    env::var("XDG_DATA_HOME").map_or_else(
-        |_| home_dir().unwrap_or_default().join(".local").join("share"),
-        PathBuf::from,
-    )
-}
-
-/// Install shell completions automatically.
-fn cmd_completions_install(shell_arg: Option<Shell>) -> Result<()> {
-    let shell = match shell_arg {
-        Some(s) => s,
-        None => detect_shell_type().context(
-            "Could not detect your shell. Please specify it explicitly:\n  \
-             hisiflash completions --install bash",
-        )?,
-    };
-
-    let path = get_completion_install_path(shell)?;
-
-    // Generate the completion script to a buffer
-    let mut buf = Vec::new();
-    let mut cmd = Cli::command();
-    let name = cmd.get_name().to_string();
-    generate(shell, &mut cmd, name, &mut buf);
-
-    // Create parent directory
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)
-            .with_context(|| format!("Failed to create directory: {}", parent.display()))?;
-    }
-
-    // Write the completion file
-    fs::write(&path, &buf)
-        .with_context(|| format!("Failed to write completion file: {}", path.display()))?;
-
-    eprintln!(
-        "{} Installed {} completions to {}",
-        style("✓").green().bold(),
-        style(format!("{shell:?}")).cyan(),
-        style(path.display()).yellow()
-    );
-
-    // Shell-specific post-install instructions
-    match shell {
-        Shell::Bash => {
-            eprintln!();
-            eprintln!("Completions will be loaded automatically on new terminals.");
-            eprintln!(
-                "To activate now: {}",
-                style(format!("source {}", path.display())).cyan()
-            );
-        },
-        Shell::Zsh => {
-            let home = home_dir().unwrap_or_default();
-            let zshrc = home.join(".zshrc");
-            let fpath_line = "fpath=(~/.zfunc $fpath)";
-
-            // Check if fpath line already exists in .zshrc
-            let needs_fpath = if let Ok(content) = fs::read_to_string(&zshrc) {
-                !content.contains(fpath_line)
-            } else {
-                true
-            };
-
-            if needs_fpath {
-                // Append fpath line to .zshrc
-                let mut file = fs::OpenOptions::new()
-                    .create(true)
-                    .append(true)
-                    .open(&zshrc)
-                    .with_context(|| format!("Failed to update {}", zshrc.display()))?;
-                writeln!(file, "\n# hisiflash completions")?;
-                writeln!(file, "{fpath_line}")?;
-                writeln!(file, "autoload -Uz compinit && compinit")?;
-                eprintln!(
-                    "{} Added fpath to {}",
-                    style("✓").green().bold(),
-                    style(zshrc.display()).yellow()
-                );
-            }
-
-            eprintln!();
-            eprintln!("Restart your shell or run: {}", style("exec zsh").cyan());
-        },
-        Shell::Fish => {
-            eprintln!();
-            eprintln!("Completions will be loaded automatically on new Fish sessions.");
-        },
-        Shell::PowerShell => {
-            eprintln!();
-            eprintln!("Add this to your PowerShell profile to load on startup:");
-            eprintln!(
-                "  {}",
-                style(format!("Import-Module {}", path.display())).cyan()
-            );
-        },
-        Shell::Elvish => {
-            eprintln!();
-            eprintln!("Completions will be loaded automatically on new Elvish sessions.");
-        },
-        _ => {},
-    }
-
-    Ok(())
-}
-
-/// Build a clap `Command` with fully localized help output.
-///
-/// Uses clap as the single source of truth for structure (args, subcommands),
-/// while replacing all user-visible text (section headings, command descriptions,
-/// argument help) with translations from the locale files.
-fn build_localized_command() -> clap::Command {
-    // Leak localized heading strings once (CLI runs once, tiny and harmless)
-    let args_heading: &'static str =
-        Box::leak(t!("help.arguments_heading").to_string().into_boxed_str());
-    let opts_heading: &'static str =
-        Box::leak(t!("help.options_heading").to_string().into_boxed_str());
-
-    let tpl = format!(
-        "{bin} {version}\n\n{about}\n\n\
-         {usage_h}:\n  {usage}\n\n\
-         {cmds_h}:\n{subcommands}\n\n\
-         {opts_h}:\n{options}\n\n\
-         {after_help}\n",
-        bin = "{bin}",
-        version = "{version}",
-        about = "{about}",
-        usage_h = t!("help.usage_heading"),
-        usage = "{usage}",
-        cmds_h = t!("help.commands_heading"),
-        subcommands = "{subcommands}",
-        opts_h = t!("help.options_heading"),
-        options = "{options}",
-        after_help = "{after-help}",
-    );
-
-    let sub_tpl = format!(
-        "{bin} {version}\n\n{about}\n\n\
-         {usage_h}:\n  {usage}\n\n\
-         {all_args}\n",
-        bin = "{bin}",
-        version = "{version}",
-        about = "{about}",
-        usage_h = t!("help.usage_heading"),
-        usage = "{usage}",
-        all_args = "{all-args}",
-    );
-
-    Cli::command()
-        .help_template(&tpl)
-        .about(t!("app.about").to_string())
-        .after_help(t!("app.after_help").to_string())
-        .disable_help_flag(true)
-        .disable_version_flag(true)
-        .arg(
-            clap::Arg::new("help")
-                .short('h')
-                .long("help")
-                .help(t!("arg.help_flag.help").to_string())
-                .help_heading(opts_heading)
-                .action(clap::ArgAction::Help)
-                .global(true),
-        )
-        .arg(
-            clap::Arg::new("version")
-                .short('V')
-                .long("version")
-                .help(t!("arg.version_flag.help").to_string())
-                .help_heading(opts_heading)
-                .action(clap::ArgAction::Version)
-                .global(true),
-        )
-        .mut_args(move |arg| {
-            let arg = localize_arg(arg);
-            if arg.get_short().is_none() && arg.get_long().is_none() {
-                arg.help_heading(args_heading)
-            } else {
-                arg.help_heading(opts_heading)
-            }
-        })
-        .mut_subcommands(move |sub| {
-            let name = sub.get_name().to_string();
-            let about_key = format!("cmd.{}.about", name.replace('-', "_"));
-            let localized = t!(&about_key).to_string();
-            let sub = if localized != about_key {
-                sub.about(localized)
-            } else {
-                sub
-            };
-            sub.help_template(sub_tpl.clone()).mut_args(move |arg| {
-                let arg = localize_arg(arg);
-                if arg.get_short().is_none() && arg.get_long().is_none() {
-                    arg.help_heading(args_heading)
-                } else {
-                    arg.help_heading(opts_heading)
-                }
-            })
-        })
-        .disable_help_subcommand(true)
-        .subcommand(clap::Command::new("help").about(t!("cmd.help.about").to_string()))
-}
-
-/// Replace an arg's help text with its localized version if available.
-///
-/// Looks up `arg.<id>.help` in the current locale. If found, replaces the
-/// arg's help text; otherwise keeps the original (English from doc comments).
-fn localize_arg(arg: clap::Arg) -> clap::Arg {
-    let id = arg.get_id().as_str().to_string();
-    let key = format!("arg.{id}.help");
-    let localized = t!(&key).to_string();
-    if localized != key {
-        arg.help(localized)
-    } else {
-        arg
-    }
-}
-
 #[cfg(test)]
 mod locale_tests {
-    use super::*;
+    use crate::help::SUPPORTED_LOCALES;
 
     /// Helper to test locale matching logic without sys_locale
     fn match_locale(locale: &str) -> String {
@@ -1665,6 +540,8 @@ mod locale_tests {
 #[cfg(test)]
 mod cli_tests {
     use super::*;
+    use crate::commands::info::partition_type_str;
+    use crate::help::{build_localized_command, localize_arg};
     use clap::CommandFactory;
     use std::sync::Mutex;
 
