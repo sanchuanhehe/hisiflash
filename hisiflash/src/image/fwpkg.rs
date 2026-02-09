@@ -635,6 +635,48 @@ mod tests {
     }
 
     #[test]
+    fn test_partition_type_roundtrip() {
+        for i in 0..=16 {
+            let pt = PartitionType::from(i);
+            assert_eq!(pt.as_u32(), i);
+        }
+        let unknown = PartitionType::from(999);
+        assert_eq!(unknown.as_u32(), 999);
+    }
+
+    #[test]
+    fn test_partition_type_all_variants() {
+        let cases = [
+            (0, PartitionType::Loader),
+            (1, PartitionType::Normal),
+            (2, PartitionType::KvNv),
+            (3, PartitionType::Efuse),
+            (4, PartitionType::Otp),
+            (5, PartitionType::Flashboot),
+            (6, PartitionType::Factory),
+            (7, PartitionType::Version),
+            (8, PartitionType::SecurityA),
+            (9, PartitionType::SecurityB),
+            (10, PartitionType::SecurityC),
+            (11, PartitionType::ProtocolA),
+            (12, PartitionType::AppsA),
+            (13, PartitionType::RadioConfig),
+            (14, PartitionType::Rom),
+            (15, PartitionType::Emmc),
+            (16, PartitionType::Database),
+        ];
+        for (val, expected) in &cases {
+            assert_eq!(PartitionType::from(*val), *expected, "Failed for value {val}");
+        }
+    }
+
+    #[test]
+    fn test_partition_type_loaderboot_alias() {
+        assert_eq!(PartitionType::LoaderBoot, PartitionType::Loader);
+        assert_eq!(PartitionType::LoaderBoot.as_u32(), 0);
+    }
+
+    #[test]
     fn test_magic_constants() {
         assert_eq!(FWPKG_MAGIC_V1, 0xEFBEADDF);
         assert_eq!(FWPKG_MAGIC_V2_MIN, 0xEFBEADD0);
@@ -674,5 +716,309 @@ mod tests {
         };
         assert_eq!(v2_header.header_size(), HEADER_SIZE_V2);
         assert_eq!(v2_header.bin_info_size(), BIN_INFO_SIZE_V2);
+    }
+
+    #[test]
+    fn test_header_is_valid() {
+        // Valid V1
+        let h = FwpkgHeader {
+            magic: FWPKG_MAGIC_V1,
+            crc: 0,
+            cnt: 3,
+            len: 1000,
+            name: String::new(),
+            version: FwpkgVersion::V1,
+        };
+        assert!(h.is_valid());
+
+        // Valid V2 (entire range)
+        for magic in FWPKG_MAGIC_V2_MIN..=FWPKG_MAGIC_V2_MAX {
+            let h = FwpkgHeader {
+                magic,
+                crc: 0,
+                cnt: 1,
+                len: 100,
+                name: String::new(),
+                version: FwpkgVersion::V2,
+            };
+            assert!(h.is_valid(), "Magic {magic:#010X} should be valid V2");
+        }
+
+        // Invalid magic
+        let h = FwpkgHeader {
+            magic: 0x12345678,
+            crc: 0,
+            cnt: 1,
+            len: 100,
+            name: String::new(),
+            version: FwpkgVersion::V1,
+        };
+        assert!(!h.is_valid());
+
+        // Too many partitions
+        let h = FwpkgHeader {
+            magic: FWPKG_MAGIC_V1,
+            crc: 0,
+            cnt: 256,
+            len: 100,
+            name: String::new(),
+            version: FwpkgVersion::V1,
+        };
+        assert!(!h.is_valid());
+    }
+
+    /// Build a minimal V1 FWPKG byte buffer in memory.
+    fn build_test_fwpkg_v1(partitions: &[(&str, u32, u32, u32, u32, u32)]) -> Vec<u8> {
+        use byteorder::{LittleEndian, WriteBytesExt};
+
+        let cnt = partitions.len() as u16;
+        let header_size = HEADER_SIZE_V1;
+        let bin_infos_size = partitions.len() * BIN_INFO_SIZE_V1;
+
+        // We need to calculate total data size — sum of all partition lengths
+        let total_data: u32 = partitions.iter().map(|p| p.2).sum();
+        let total_len = (header_size + bin_infos_size) as u32 + total_data;
+
+        // Build header without CRC first
+        let mut data = Vec::new();
+        // magic
+        data.write_u32::<LittleEndian>(FWPKG_MAGIC_V1).unwrap();
+        // crc placeholder
+        data.write_u16::<LittleEndian>(0).unwrap();
+        // cnt
+        data.write_u16::<LittleEndian>(cnt).unwrap();
+        // len
+        data.write_u32::<LittleEndian>(total_len).unwrap();
+
+        // Build BinInfo entries
+        let mut data_offset = (header_size + bin_infos_size) as u32;
+        for (name, _offset, length, burn_addr, burn_size, ptype) in partitions {
+            // name (32 bytes, null-padded)
+            let mut name_bytes = [0u8; NAME_SIZE_V1];
+            let name_b = name.as_bytes();
+            let copy_len = name_b.len().min(NAME_SIZE_V1);
+            name_bytes[..copy_len].copy_from_slice(&name_b[..copy_len]);
+            data.extend_from_slice(&name_bytes);
+            // offset
+            data.write_u32::<LittleEndian>(data_offset).unwrap();
+            // length
+            data.write_u32::<LittleEndian>(*length).unwrap();
+            // burn_addr
+            data.write_u32::<LittleEndian>(*burn_addr).unwrap();
+            // burn_size
+            data.write_u32::<LittleEndian>(*burn_size).unwrap();
+            // type
+            data.write_u32::<LittleEndian>(*ptype).unwrap();
+
+            data_offset += *length;
+        }
+
+        // Calculate CRC over cnt + len + bin_infos (from offset 6)
+        let crc = crate::protocol::crc::crc16_xmodem(&data[6..]);
+        data[4] = (crc & 0xFF) as u8;
+        data[5] = (crc >> 8) as u8;
+
+        // Append dummy partition data
+        for (_, _, length, _, _, _) in partitions {
+            data.extend(vec![0xAA; *length as usize]);
+        }
+
+        data
+    }
+
+    #[test]
+    fn test_header_read_v1() {
+        use byteorder::{LittleEndian, WriteBytesExt};
+        let mut buf = Vec::new();
+        buf.write_u32::<LittleEndian>(FWPKG_MAGIC_V1).unwrap();
+        buf.write_u16::<LittleEndian>(0x1234).unwrap(); // crc
+        buf.write_u16::<LittleEndian>(3).unwrap(); // cnt
+        buf.write_u32::<LittleEndian>(0x5678).unwrap(); // len
+
+        let header = FwpkgHeader::read_v1(&mut std::io::Cursor::new(&buf)).unwrap();
+        assert_eq!(header.magic, FWPKG_MAGIC_V1);
+        assert_eq!(header.crc, 0x1234);
+        assert_eq!(header.cnt, 3);
+        assert_eq!(header.len, 0x5678);
+        assert_eq!(header.version, FwpkgVersion::V1);
+        assert!(header.name.is_empty());
+    }
+
+    #[test]
+    fn test_header_read_from_auto_detect_v1() {
+        use byteorder::{LittleEndian, WriteBytesExt};
+        let mut buf = Vec::new();
+        buf.write_u32::<LittleEndian>(FWPKG_MAGIC_V1).unwrap();
+        buf.write_u16::<LittleEndian>(0).unwrap();
+        buf.write_u16::<LittleEndian>(2).unwrap();
+        buf.write_u32::<LittleEndian>(100).unwrap();
+
+        let header = FwpkgHeader::read_from(&mut std::io::Cursor::new(&buf)).unwrap();
+        assert_eq!(header.version, FwpkgVersion::V1);
+        assert_eq!(header.cnt, 2);
+    }
+
+    #[test]
+    fn test_header_read_from_invalid_magic() {
+        use byteorder::{LittleEndian, WriteBytesExt};
+        let mut buf = Vec::new();
+        buf.write_u32::<LittleEndian>(0xDEADC0DE).unwrap();
+        buf.write_u16::<LittleEndian>(0).unwrap();
+        buf.write_u16::<LittleEndian>(1).unwrap();
+        buf.write_u32::<LittleEndian>(100).unwrap();
+
+        let header = FwpkgHeader::read_from(&mut std::io::Cursor::new(&buf)).unwrap();
+        // read_from returns V1 fallback for invalid magic — but is_valid should fail
+        assert!(!header.is_valid());
+    }
+
+    #[test]
+    fn test_bin_info_read_v1() {
+        use byteorder::{LittleEndian, WriteBytesExt};
+        let mut buf = Vec::new();
+        // name: "flashboot" + padding
+        let mut name = [0u8; NAME_SIZE_V1];
+        name[..9].copy_from_slice(b"flashboot");
+        buf.extend_from_slice(&name);
+        buf.write_u32::<LittleEndian>(64).unwrap(); // offset
+        buf.write_u32::<LittleEndian>(1024).unwrap(); // length
+        buf.write_u32::<LittleEndian>(0x00200000).unwrap(); // burn_addr
+        buf.write_u32::<LittleEndian>(0x10000).unwrap(); // burn_size
+        buf.write_u32::<LittleEndian>(5).unwrap(); // type = Flashboot
+
+        let info = FwpkgBinInfo::read_v1(&mut std::io::Cursor::new(&buf)).unwrap();
+        assert_eq!(info.name, "flashboot");
+        assert_eq!(info.offset, 64);
+        assert_eq!(info.length, 1024);
+        assert_eq!(info.burn_addr, 0x00200000);
+        assert_eq!(info.burn_size, 0x10000);
+        assert_eq!(info.partition_type, PartitionType::Flashboot);
+        assert!(!info.is_loaderboot());
+    }
+
+    #[test]
+    fn test_bin_info_is_loaderboot() {
+        let info = FwpkgBinInfo {
+            name: "loaderboot".to_string(),
+            offset: 0,
+            length: 100,
+            burn_addr: 0,
+            burn_size: 100,
+            partition_type: PartitionType::Loader,
+        };
+        assert!(info.is_loaderboot());
+
+        let info = FwpkgBinInfo {
+            name: "app".to_string(),
+            offset: 0,
+            length: 100,
+            burn_addr: 0,
+            burn_size: 100,
+            partition_type: PartitionType::Normal,
+        };
+        assert!(!info.is_loaderboot());
+    }
+
+    #[test]
+    fn test_fwpkg_from_bytes_valid_v1() {
+        let data = build_test_fwpkg_v1(&[
+            ("loaderboot", 0, 16, 0x0, 16, 0),       // Loader
+            ("flashboot", 0, 32, 0x200000, 32, 5),    // Flashboot
+            ("app", 0, 64, 0x800000, 64, 1),          // Normal
+        ]);
+        let fwpkg = Fwpkg::from_bytes(data).unwrap();
+        assert_eq!(fwpkg.version(), FwpkgVersion::V1);
+        assert_eq!(fwpkg.partition_count(), 3);
+        assert!(fwpkg.package_name().is_empty());
+
+        // Check loaderboot
+        assert!(fwpkg.loaderboot().is_some());
+        assert_eq!(fwpkg.loaderboot().unwrap().name, "loaderboot");
+
+        // Check normal bins
+        let normals: Vec<_> = fwpkg.normal_bins().collect();
+        assert_eq!(normals.len(), 2);
+
+        // Check find_by_name
+        assert!(fwpkg.find_by_name("flashboot").is_some());
+        assert!(fwpkg.find_by_name("nonexistent").is_none());
+    }
+
+    #[test]
+    fn test_fwpkg_from_bytes_too_small() {
+        let data = vec![0u8; 4]; // Too small for header
+        let result = Fwpkg::from_bytes(data);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_fwpkg_from_bytes_invalid_magic() {
+        use byteorder::{LittleEndian, WriteBytesExt};
+        let mut data = Vec::new();
+        data.write_u32::<LittleEndian>(0xBAADF00D).unwrap();
+        data.write_u16::<LittleEndian>(0).unwrap();
+        data.write_u16::<LittleEndian>(0).unwrap();
+        data.write_u32::<LittleEndian>(12).unwrap();
+        let result = Fwpkg::from_bytes(data);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_fwpkg_verify_crc() {
+        let data = build_test_fwpkg_v1(&[
+            ("app", 0, 8, 0x800000, 8, 1),
+        ]);
+        let fwpkg = Fwpkg::from_bytes(data).unwrap();
+        assert!(fwpkg.verify_crc().is_ok());
+    }
+
+    #[test]
+    fn test_fwpkg_verify_crc_mismatch() {
+        let mut data = build_test_fwpkg_v1(&[
+            ("app", 0, 8, 0x800000, 8, 1),
+        ]);
+        // Corrupt the CRC
+        data[4] ^= 0xFF;
+        let fwpkg = Fwpkg::from_bytes(data).unwrap();
+        assert!(fwpkg.verify_crc().is_err());
+    }
+
+    #[test]
+    fn test_fwpkg_bin_data() {
+        let data = build_test_fwpkg_v1(&[
+            ("app", 0, 8, 0x800000, 8, 1),
+        ]);
+        let fwpkg = Fwpkg::from_bytes(data).unwrap();
+        let bin = &fwpkg.bins[0];
+        let bin_data = fwpkg.bin_data(bin).unwrap();
+        assert_eq!(bin_data.len(), 8);
+        assert!(bin_data.iter().all(|&b| b == 0xAA));
+    }
+
+    #[test]
+    fn test_fwpkg_bin_data_out_of_bounds() {
+        let data = build_test_fwpkg_v1(&[
+            ("app", 0, 8, 0x800000, 8, 1),
+        ]);
+        let fwpkg = Fwpkg::from_bytes(data).unwrap();
+        // Create a fake BinInfo pointing beyond data
+        let fake_bin = FwpkgBinInfo {
+            name: "fake".into(),
+            offset: 99999,
+            length: 100,
+            burn_addr: 0,
+            burn_size: 100,
+            partition_type: PartitionType::Normal,
+        };
+        assert!(fwpkg.bin_data(&fake_bin).is_err());
+    }
+
+    #[test]
+    fn test_fwpkg_debug_format() {
+        let data = build_test_fwpkg_v1(&[("app", 0, 4, 0, 4, 1)]);
+        let fwpkg = Fwpkg::from_bytes(data).unwrap();
+        let debug_str = format!("{fwpkg:?}");
+        assert!(debug_str.contains("Fwpkg"));
+        assert!(debug_str.contains("data_len"));
     }
 }

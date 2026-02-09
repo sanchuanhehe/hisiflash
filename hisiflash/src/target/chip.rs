@@ -347,7 +347,21 @@ mod tests {
     fn test_chip_family_from_name() {
         assert_eq!(ChipFamily::from_name("ws63"), Some(ChipFamily::Ws63));
         assert_eq!(ChipFamily::from_name("BS2X"), Some(ChipFamily::Bs2x));
+        assert_eq!(ChipFamily::from_name("bs21"), Some(ChipFamily::Bs2x));
+        assert_eq!(ChipFamily::from_name("bs25"), Some(ChipFamily::Bs25));
+        assert_eq!(ChipFamily::from_name("ws53"), Some(ChipFamily::Ws53));
+        assert_eq!(ChipFamily::from_name("sw39"), Some(ChipFamily::Sw39));
+        assert_eq!(ChipFamily::from_name("generic"), Some(ChipFamily::Generic));
+        assert_eq!(ChipFamily::from_name("auto"), Some(ChipFamily::Generic));
         assert_eq!(ChipFamily::from_name("unknown"), None);
+        assert_eq!(ChipFamily::from_name(""), None);
+    }
+
+    #[test]
+    fn test_chip_family_from_name_case_insensitive() {
+        assert_eq!(ChipFamily::from_name("WS63"), Some(ChipFamily::Ws63));
+        assert_eq!(ChipFamily::from_name("Ws63"), Some(ChipFamily::Ws63));
+        assert_eq!(ChipFamily::from_name("BS25"), Some(ChipFamily::Bs25));
     }
 
     #[test]
@@ -355,5 +369,140 @@ mod tests {
         let config = ChipConfig::new(ChipFamily::Ws63);
         assert_eq!(config.init_baud, 115200);
         assert_eq!(config.target_baud, 921600);
+        assert!(!config.late_baud_switch);
+        assert_eq!(config.handshake_timeout_secs, 30);
+        assert_eq!(config.transfer_timeout_secs, 60);
+    }
+
+    #[test]
+    fn test_chip_config_bs2x_defaults() {
+        let config = ChipConfig::new(ChipFamily::Bs2x);
+        assert_eq!(config.init_baud, 115200);
+        assert_eq!(config.target_baud, 2_000_000);
+    }
+
+    #[test]
+    fn test_chip_config_builder() {
+        let config = ChipConfig::new(ChipFamily::Ws63)
+            .with_baud(460800)
+            .with_late_baud(true)
+            .with_handshake_timeout(10);
+        assert_eq!(config.target_baud, 460800);
+        assert!(config.late_baud_switch);
+        assert_eq!(config.handshake_timeout_secs, 10);
+    }
+
+    #[test]
+    fn test_chip_config_default_trait() {
+        let config = ChipConfig::default();
+        assert_eq!(config.family, ChipFamily::Ws63); // Default is Ws63
+    }
+
+    #[test]
+    fn test_chip_family_default() {
+        let family = ChipFamily::default();
+        assert_eq!(family, ChipFamily::Ws63);
+    }
+
+    #[test]
+    fn test_chip_family_display() {
+        assert_eq!(ChipFamily::Ws63.to_string(), "WS63");
+        assert_eq!(ChipFamily::Bs2x.to_string(), "BS2X");
+        assert_eq!(ChipFamily::Bs25.to_string(), "BS25");
+        assert_eq!(ChipFamily::Ws53.to_string(), "WS53");
+        assert_eq!(ChipFamily::Sw39.to_string(), "SW39");
+        assert_eq!(ChipFamily::Generic.to_string(), "Generic");
+    }
+
+    #[test]
+    fn test_chip_family_default_baud() {
+        // All chips use 115200 as default
+        for family in [
+            ChipFamily::Ws63,
+            ChipFamily::Bs2x,
+            ChipFamily::Bs25,
+            ChipFamily::Generic,
+        ] {
+            assert_eq!(family.default_baud(), 115200, "Failed for {family}");
+        }
+    }
+
+    #[test]
+    fn test_chip_family_high_speed_baud() {
+        assert_eq!(ChipFamily::Ws63.high_speed_baud(), 921_600);
+        assert_eq!(ChipFamily::Bs2x.high_speed_baud(), 2_000_000);
+        assert_eq!(ChipFamily::Bs25.high_speed_baud(), 2_000_000);
+        assert_eq!(ChipFamily::Generic.high_speed_baud(), 921_600);
+    }
+
+    #[test]
+    fn test_chip_family_supported_bauds() {
+        let ws63_bauds = ChipFamily::Ws63.supported_bauds();
+        assert!(ws63_bauds.contains(&115_200));
+        assert!(ws63_bauds.contains(&921_600));
+        assert!(!ws63_bauds.contains(&2_000_000));
+
+        let bs2x_bauds = ChipFamily::Bs2x.supported_bauds();
+        assert!(bs2x_bauds.contains(&2_000_000));
+    }
+
+    #[test]
+    fn test_chip_family_usb_dfu() {
+        assert!(!ChipFamily::Ws63.supports_usb_dfu());
+        assert!(ChipFamily::Bs2x.supports_usb_dfu());
+        assert!(ChipFamily::Bs25.supports_usb_dfu());
+        assert!(!ChipFamily::Generic.supports_usb_dfu());
+    }
+
+    #[test]
+    fn test_chip_family_efuse() {
+        // All chips support eFuse
+        for family in [
+            ChipFamily::Ws63,
+            ChipFamily::Bs2x,
+            ChipFamily::Bs25,
+            ChipFamily::Generic,
+        ] {
+            assert!(family.supports_efuse());
+        }
+    }
+
+    #[test]
+    fn test_chip_family_signed_firmware() {
+        assert!(ChipFamily::Ws63.requires_signed_firmware());
+        assert!(ChipFamily::Bs2x.requires_signed_firmware());
+        assert!(ChipFamily::Bs25.requires_signed_firmware());
+        assert!(!ChipFamily::Generic.requires_signed_firmware());
+    }
+
+    #[test]
+    fn test_chip_family_clone_eq() {
+        let a = ChipFamily::Ws63;
+        let b = a;
+        assert_eq!(a, b);
+
+        let c = ChipFamily::Bs2x;
+        assert_ne!(a, c);
+    }
+
+    #[test]
+    fn test_chip_family_hash() {
+        use std::collections::HashSet;
+        let mut set = HashSet::new();
+        set.insert(ChipFamily::Ws63);
+        set.insert(ChipFamily::Bs2x);
+        set.insert(ChipFamily::Ws63); // duplicate
+        assert_eq!(set.len(), 2);
+    }
+
+    #[cfg(feature = "native")]
+    #[test]
+    fn test_create_flasher_unsupported_chip() {
+        // BS2X, Generic etc. should return Unsupported
+        let result = ChipFamily::Bs2x.create_flasher("/dev/null", 115200, false, 0);
+        assert!(result.is_err());
+
+        let result = ChipFamily::Generic.create_flasher("/dev/null", 115200, false, 0);
+        assert!(result.is_err());
     }
 }

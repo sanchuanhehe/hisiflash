@@ -58,3 +58,59 @@ pub enum Error {
     #[error("Configuration error: {0}")]
     Config(String),
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_error_display_messages() {
+        let err = Error::InvalidFwpkg("bad magic".into());
+        assert!(err.to_string().contains("bad magic"));
+
+        let err = Error::CrcMismatch {
+            expected: 0x1234,
+            actual: 0x5678,
+        };
+        let msg = err.to_string();
+        assert!(msg.contains("1234"));
+        assert!(msg.contains("5678"));
+
+        let err = Error::Timeout("read timed out".into());
+        assert!(err.to_string().contains("read timed out"));
+
+        let err = Error::DeviceNotFound;
+        assert!(!err.to_string().is_empty());
+
+        let err = Error::HandshakeFailed("no ack".into());
+        assert!(err.to_string().contains("no ack"));
+
+        let err = Error::Protocol("invalid frame".into());
+        assert!(err.to_string().contains("invalid frame"));
+
+        let err = Error::Ymodem("transfer aborted".into());
+        assert!(err.to_string().contains("transfer aborted"));
+
+        let err = Error::Unsupported("bs2x".into());
+        assert!(err.to_string().contains("bs2x"));
+
+        let err = Error::Config("missing field".into());
+        assert!(err.to_string().contains("missing field"));
+    }
+
+    #[test]
+    fn test_error_from_io() {
+        let io_err = std::io::Error::new(std::io::ErrorKind::NotFound, "file not found");
+        let err: Error = io_err.into();
+        assert!(matches!(err, Error::Io(_)));
+        assert!(err.to_string().contains("file not found"));
+    }
+
+    #[test]
+    fn test_error_is_send_sync() {
+        fn assert_send<T: Send>() {}
+        fn assert_sync<T: Sync>() {}
+        assert_send::<Error>();
+        assert_sync::<Error>();
+    }
+}

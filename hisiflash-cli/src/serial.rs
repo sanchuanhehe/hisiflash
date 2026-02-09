@@ -294,6 +294,9 @@ pub fn ask_remember_port(port: &DetectedPort, config: &mut Config) -> Result<()>
 #[cfg(test)]
 mod tests {
     use super::*;
+    use hisiflash::connection::detect::{DetectedPort, UsbDevice};
+
+    // ---- SerialOptions ----
 
     #[test]
     fn test_serial_options_default() {
@@ -302,5 +305,115 @@ mod tests {
         assert!(!options.list_all_ports);
         assert!(!options.non_interactive);
         assert!(!options.confirm_port);
+    }
+
+    #[test]
+    fn test_serial_options_with_port() {
+        let options = SerialOptions {
+            port: Some("/dev/ttyUSB0".to_string()),
+            ..Default::default()
+        };
+        assert_eq!(options.port.as_deref(), Some("/dev/ttyUSB0"));
+    }
+
+    #[test]
+    fn test_serial_options_clone() {
+        let options = SerialOptions {
+            port: Some("COM3".to_string()),
+            list_all_ports: true,
+            non_interactive: true,
+            confirm_port: false,
+        };
+        let cloned = options.clone();
+        assert_eq!(cloned.port, options.port);
+        assert_eq!(cloned.list_all_ports, options.list_all_ports);
+        assert_eq!(cloned.non_interactive, options.non_interactive);
+    }
+
+    // ---- is_known_device ----
+
+    #[test]
+    fn test_is_known_device_builtin() {
+        let port = DetectedPort {
+            name: "/dev/ttyUSB0".to_string(),
+            device: UsbDevice::Ch340,
+            vid: Some(0x1A86),
+            pid: Some(0x7523),
+            manufacturer: None,
+            product: None,
+            serial: None,
+        };
+        let config = Config::default();
+        assert!(is_known_device(&port, &config));
+    }
+
+    #[test]
+    fn test_is_known_device_unknown() {
+        let port = DetectedPort {
+            name: "/dev/ttyUSB0".to_string(),
+            device: UsbDevice::Unknown,
+            vid: Some(0x9999),
+            pid: Some(0x9999),
+            manufacturer: None,
+            product: None,
+            serial: None,
+        };
+        let config = Config::default();
+        assert!(!is_known_device(&port, &config));
+    }
+
+    #[test]
+    fn test_is_known_device_from_config() {
+        let port = DetectedPort {
+            name: "/dev/ttyUSB0".to_string(),
+            device: UsbDevice::Unknown,
+            vid: Some(0xABCD),
+            pid: Some(0x1234),
+            manufacturer: None,
+            product: None,
+            serial: None,
+        };
+        let mut config = Config::default();
+        config.port.usb_device.push(crate::config::UsbDevice {
+            vid: 0xABCD,
+            pid: 0x1234,
+        });
+        assert!(is_known_device(&port, &config));
+    }
+
+    #[test]
+    fn test_is_known_device_no_vid_pid() {
+        let port = DetectedPort {
+            name: "/dev/ttyS0".to_string(),
+            device: UsbDevice::Unknown,
+            vid: None,
+            pid: None,
+            manufacturer: None,
+            product: None,
+            serial: None,
+        };
+        let config = Config::default();
+        assert!(!is_known_device(&port, &config));
+    }
+
+    // ---- SelectedPort ----
+
+    #[test]
+    fn test_selected_port_fields() {
+        let sp = SelectedPort {
+            port: DetectedPort {
+                name: "COM1".to_string(),
+                device: UsbDevice::Cp210x,
+                vid: Some(0x10C4),
+                pid: Some(0xEA60),
+                manufacturer: Some("Silicon Labs".to_string()),
+                product: Some("CP2102".to_string()),
+                serial: None,
+            },
+            is_known: true,
+        };
+        assert_eq!(sp.port.name, "COM1");
+        assert!(sp.is_known);
+        assert!(sp.port.device.is_known());
     }
 }

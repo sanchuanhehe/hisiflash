@@ -248,3 +248,111 @@ pub use native::{NativePort, NativePortEnumerator};
 
 #[cfg(feature = "wasm")]
 pub use wasm::{WebSerialPort, WebSerialPortEnumerator};
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_serial_config_new() {
+        let config = SerialConfig::new("/dev/ttyUSB0", 921600);
+        assert_eq!(config.port_name, "/dev/ttyUSB0");
+        assert_eq!(config.baud_rate, 921600);
+        assert_eq!(config.data_bits, DataBits::Eight);
+        assert_eq!(config.parity, Parity::None);
+        assert_eq!(config.stop_bits, StopBits::One);
+        assert_eq!(config.flow_control, FlowControl::None);
+    }
+
+    #[test]
+    fn test_serial_config_default() {
+        let config = SerialConfig::default();
+        assert!(config.port_name.is_empty());
+        assert_eq!(config.baud_rate, 115200);
+        assert_eq!(config.timeout, Duration::from_millis(1000));
+    }
+
+    #[test]
+    fn test_serial_config_with_timeout() {
+        let config = SerialConfig::new("COM3", 9600)
+            .with_timeout(Duration::from_secs(5));
+        assert_eq!(config.timeout, Duration::from_secs(5));
+        assert_eq!(config.baud_rate, 9600);
+    }
+
+    #[test]
+    fn test_serial_config_from_string() {
+        // Test that Into<String> works
+        let config = SerialConfig::new(String::from("/dev/ttyACM0"), 115200);
+        assert_eq!(config.port_name, "/dev/ttyACM0");
+    }
+
+    #[test]
+    fn test_data_bits_default() {
+        assert_eq!(DataBits::default(), DataBits::Eight);
+    }
+
+    #[test]
+    fn test_parity_default() {
+        assert_eq!(Parity::default(), Parity::None);
+    }
+
+    #[test]
+    fn test_stop_bits_default() {
+        assert_eq!(StopBits::default(), StopBits::One);
+    }
+
+    #[test]
+    fn test_flow_control_default() {
+        assert_eq!(FlowControl::default(), FlowControl::None);
+    }
+
+    #[test]
+    fn test_port_info_fields() {
+        let info = PortInfo {
+            name: "/dev/ttyUSB0".to_string(),
+            vid: Some(0x1A86),
+            pid: Some(0x7523),
+            manufacturer: Some("QinHeng".to_string()),
+            product: Some("CH340".to_string()),
+            serial_number: None,
+        };
+        assert_eq!(info.name, "/dev/ttyUSB0");
+        assert_eq!(info.vid, Some(0x1A86));
+        assert_eq!(info.pid, Some(0x7523));
+        assert!(info.serial_number.is_none());
+    }
+
+    #[test]
+    fn test_port_info_clone() {
+        let info = PortInfo {
+            name: "COM3".to_string(),
+            vid: None,
+            pid: None,
+            manufacturer: None,
+            product: None,
+            serial_number: None,
+        };
+        let cloned = info.clone();
+        assert_eq!(info.name, cloned.name);
+    }
+
+    #[test]
+    fn test_enums_are_copy() {
+        let db = DataBits::Eight;
+        let db2 = db; // copy
+        assert_eq!(db, db2);
+
+        let p = Parity::Even;
+        let p2 = p;
+        assert_eq!(p, p2);
+
+        let sb = StopBits::Two;
+        let sb2 = sb;
+        assert_eq!(sb, sb2);
+
+        let fc = FlowControl::Hardware;
+        let fc2 = fc;
+        assert_eq!(fc, fc2);
+    }
+}

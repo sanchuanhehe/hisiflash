@@ -1147,3 +1147,369 @@ mod locale_tests {
         assert_eq!(match_locale("fr_FR"), "en"); // French -> English
     }
 }
+
+#[cfg(test)]
+mod cli_tests {
+    use super::*;
+    use clap::CommandFactory;
+
+    // ---- clap validation ----
+
+    #[test]
+    fn test_cli_command_is_valid() {
+        // Verifies that all derive macros produce a valid clap Command
+        Cli::command().debug_assert();
+    }
+
+    #[test]
+    fn test_cli_parse_flash() {
+        let cli = Cli::try_parse_from([
+            "hisiflash",
+            "--port", "/dev/ttyUSB0",
+            "--baud", "460800",
+            "flash",
+            "firmware.fwpkg",
+        ]);
+        assert!(cli.is_ok());
+        let cli = cli.unwrap();
+        assert_eq!(cli.port.as_deref(), Some("/dev/ttyUSB0"));
+        assert_eq!(cli.baud, 460800);
+        assert!(matches!(cli.command, Commands::Flash { .. }));
+    }
+
+    #[test]
+    fn test_cli_parse_flash_with_all_options() {
+        let cli = Cli::try_parse_from([
+            "hisiflash",
+            "flash",
+            "fw.fwpkg",
+            "--filter", "app,flashboot",
+            "--late-baud",
+            "--skip-verify",
+            "--monitor",
+        ]).unwrap();
+        if let Commands::Flash { firmware, filter, late_baud, skip_verify, monitor } = cli.command {
+            assert_eq!(firmware.to_str().unwrap(), "fw.fwpkg");
+            assert_eq!(filter.as_deref(), Some("app,flashboot"));
+            assert!(late_baud);
+            assert!(skip_verify);
+            assert!(monitor);
+        } else {
+            panic!("Expected Flash command");
+        }
+    }
+
+    #[test]
+    fn test_cli_parse_write() {
+        let cli = Cli::try_parse_from([
+            "hisiflash",
+            "write",
+            "--loaderboot", "lb.bin",
+            "--bin", "app.bin:0x00800000",
+        ]).unwrap();
+        if let Commands::Write { loaderboot, bins, late_baud } = cli.command {
+            assert_eq!(loaderboot.to_str().unwrap(), "lb.bin");
+            assert_eq!(bins.len(), 1);
+            assert_eq!(bins[0].0.to_str().unwrap(), "app.bin");
+            assert_eq!(bins[0].1, 0x00800000);
+            assert!(!late_baud);
+        } else {
+            panic!("Expected Write command");
+        }
+    }
+
+    #[test]
+    fn test_cli_parse_write_program() {
+        let cli = Cli::try_parse_from([
+            "hisiflash",
+            "write-program",
+            "--loaderboot", "lb.bin",
+            "program.bin",
+            "--address", "0x00800000",
+        ]).unwrap();
+        assert!(matches!(cli.command, Commands::WriteProgram { .. }));
+    }
+
+    #[test]
+    fn test_cli_parse_erase() {
+        let cli = Cli::try_parse_from(["hisiflash", "erase", "--all"]).unwrap();
+        if let Commands::Erase { all } = cli.command {
+            assert!(all);
+        } else {
+            panic!("Expected Erase command");
+        }
+    }
+
+    #[test]
+    fn test_cli_parse_info() {
+        let cli = Cli::try_parse_from([
+            "hisiflash", "info", "firmware.fwpkg",
+        ]).unwrap();
+        assert!(matches!(cli.command, Commands::Info { json: false, .. }));
+    }
+
+    #[test]
+    fn test_cli_parse_info_json() {
+        let cli = Cli::try_parse_from([
+            "hisiflash", "info", "--json", "firmware.fwpkg",
+        ]).unwrap();
+        if let Commands::Info { json, .. } = cli.command {
+            assert!(json);
+        } else {
+            panic!("Expected Info command");
+        }
+    }
+
+    #[test]
+    fn test_cli_parse_list_ports() {
+        let cli = Cli::try_parse_from(["hisiflash", "list-ports"]).unwrap();
+        assert!(matches!(cli.command, Commands::ListPorts { json: false }));
+    }
+
+    #[test]
+    fn test_cli_parse_list_ports_json() {
+        let cli = Cli::try_parse_from(["hisiflash", "list-ports", "--json"]).unwrap();
+        if let Commands::ListPorts { json } = cli.command {
+            assert!(json);
+        } else {
+            panic!("Expected ListPorts command");
+        }
+    }
+
+    #[test]
+    fn test_cli_parse_monitor() {
+        let cli = Cli::try_parse_from([
+            "hisiflash", "monitor", "--monitor-baud", "9600",
+        ]).unwrap();
+        if let Commands::Monitor { monitor_baud } = cli.command {
+            assert_eq!(monitor_baud, 9600);
+        } else {
+            panic!("Expected Monitor command");
+        }
+    }
+
+    #[test]
+    fn test_cli_parse_monitor_default_baud() {
+        let cli = Cli::try_parse_from(["hisiflash", "monitor"]).unwrap();
+        if let Commands::Monitor { monitor_baud } = cli.command {
+            assert_eq!(monitor_baud, 115200);
+        } else {
+            panic!("Expected Monitor command");
+        }
+    }
+
+    #[test]
+    fn test_cli_parse_completions() {
+        let cli = Cli::try_parse_from(["hisiflash", "completions", "bash"]).unwrap();
+        assert!(matches!(cli.command, Commands::Completions { .. }));
+    }
+
+    #[test]
+    fn test_cli_default_values() {
+        let cli = Cli::try_parse_from(["hisiflash", "list-ports"]).unwrap();
+        assert_eq!(cli.baud, 921600);
+        assert!(matches!(cli.chip, Chip::Ws63));
+        assert!(!cli.quiet);
+        assert!(!cli.non_interactive);
+        assert!(!cli.confirm_port);
+        assert!(!cli.list_all_ports);
+        assert!(cli.port.is_none());
+        assert!(cli.lang.is_none());
+        assert!(cli.config_path.is_none());
+        assert_eq!(cli.verbose, 0);
+    }
+
+    #[test]
+    fn test_cli_global_options() {
+        let cli = Cli::try_parse_from([
+            "hisiflash",
+            "--port", "COM3",
+            "--baud", "115200",
+            "--chip", "bs2x",
+            "--lang", "zh-CN",
+            "-vv",
+            "--quiet",
+            "--non-interactive",
+            "--confirm-port",
+            "--list-all-ports",
+            "--config", "/tmp/config.toml",
+            "list-ports",
+        ]).unwrap();
+        assert_eq!(cli.port.as_deref(), Some("COM3"));
+        assert_eq!(cli.baud, 115200);
+        assert!(matches!(cli.chip, Chip::Bs2x));
+        assert_eq!(cli.lang.as_deref(), Some("zh-CN"));
+        assert_eq!(cli.verbose, 2);
+        assert!(cli.quiet);
+        assert!(cli.non_interactive);
+        assert!(cli.confirm_port);
+        assert!(cli.list_all_ports);
+    }
+
+    #[test]
+    fn test_cli_missing_subcommand() {
+        let result = Cli::try_parse_from(["hisiflash"]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_cli_invalid_chip() {
+        let result = Cli::try_parse_from([
+            "hisiflash", "--chip", "invalid_chip", "list-ports"
+        ]);
+        assert!(result.is_err());
+    }
+
+    // ---- parse_bin_arg ----
+
+    #[test]
+    fn test_parse_bin_arg_valid() {
+        let (path, addr) = parse_bin_arg("app.bin:0x00800000").unwrap();
+        assert_eq!(path.to_str().unwrap(), "app.bin");
+        assert_eq!(addr, 0x00800000);
+    }
+
+    #[test]
+    fn test_parse_bin_arg_no_prefix() {
+        let (path, addr) = parse_bin_arg("data.bin:800000").unwrap();
+        assert_eq!(path.to_str().unwrap(), "data.bin");
+        assert_eq!(addr, 0x00800000);
+    }
+
+    #[test]
+    fn test_parse_bin_arg_invalid_no_colon() {
+        assert!(parse_bin_arg("app.bin").is_err());
+    }
+
+    #[test]
+    fn test_parse_bin_arg_invalid_too_many_colons() {
+        assert!(parse_bin_arg("a:b:c").is_err());
+    }
+
+    #[test]
+    fn test_parse_bin_arg_invalid_address() {
+        assert!(parse_bin_arg("app.bin:ZZZZ").is_err());
+    }
+
+    // ---- parse_hex_u32 ----
+
+    #[test]
+    fn test_parse_hex_u32_with_prefix() {
+        assert_eq!(parse_hex_u32("0x00800000").unwrap(), 0x00800000);
+        assert_eq!(parse_hex_u32("0X00800000").unwrap(), 0x00800000);
+    }
+
+    #[test]
+    fn test_parse_hex_u32_without_prefix() {
+        assert_eq!(parse_hex_u32("DEADBEEF").unwrap(), 0xDEADBEEF);
+        assert_eq!(parse_hex_u32("ff").unwrap(), 0xFF);
+    }
+
+    #[test]
+    fn test_parse_hex_u32_with_underscores() {
+        assert_eq!(parse_hex_u32("0x00_80_00_00").unwrap(), 0x00800000);
+    }
+
+    #[test]
+    fn test_parse_hex_u32_with_whitespace() {
+        assert_eq!(parse_hex_u32("  0xFF  ").unwrap(), 0xFF);
+    }
+
+    #[test]
+    fn test_parse_hex_u32_invalid() {
+        assert!(parse_hex_u32("not_hex").is_err());
+        assert!(parse_hex_u32("0xGG").is_err());
+    }
+
+    #[test]
+    fn test_parse_hex_u32_overflow() {
+        assert!(parse_hex_u32("0x1FFFFFFFF").is_err());
+    }
+
+    #[test]
+    fn test_parse_hex_u32_zero() {
+        assert_eq!(parse_hex_u32("0x0").unwrap(), 0);
+        assert_eq!(parse_hex_u32("0").unwrap(), 0);
+    }
+
+    // ---- Chip conversion ----
+
+    #[test]
+    fn test_chip_to_chip_family() {
+        use hisiflash::ChipFamily;
+        assert_eq!(ChipFamily::from(Chip::Ws63), ChipFamily::Ws63);
+        assert_eq!(ChipFamily::from(Chip::Bs2x), ChipFamily::Bs2x);
+        assert_eq!(ChipFamily::from(Chip::Bs25), ChipFamily::Bs25);
+    }
+
+    // ---- partition_type_str ----
+
+    #[test]
+    fn test_partition_type_str_values() {
+        use hisiflash::PartitionType;
+        assert_eq!(partition_type_str(PartitionType::Loader), "Loader");
+        assert_eq!(partition_type_str(PartitionType::Normal), "Normal");
+        assert_eq!(partition_type_str(PartitionType::KvNv), "KV-NV");
+        assert_eq!(partition_type_str(PartitionType::Flashboot), "FlashBoot");
+        assert_eq!(partition_type_str(PartitionType::Factory), "Factory");
+        assert_eq!(partition_type_str(PartitionType::Unknown(99)), "Unknown");
+    }
+
+    // ---- build_localized_command ----
+
+    #[test]
+    fn test_build_localized_command_creates_valid_command() {
+        rust_i18n::set_locale("en");
+        let cmd = build_localized_command();
+        // Should be valid
+        cmd.clone().debug_assert();
+        assert_eq!(cmd.get_name(), "hisiflash");
+    }
+
+    #[test]
+    fn test_build_localized_command_has_subcommands() {
+        rust_i18n::set_locale("en");
+        let cmd = build_localized_command();
+        let subcmd_names: Vec<_> = cmd.get_subcommands().map(|s| s.get_name().to_string()).collect();
+        assert!(subcmd_names.contains(&"flash".to_string()));
+        assert!(subcmd_names.contains(&"write".to_string()));
+        assert!(subcmd_names.contains(&"erase".to_string()));
+        assert!(subcmd_names.contains(&"info".to_string()));
+        assert!(subcmd_names.contains(&"list-ports".to_string()));
+        assert!(subcmd_names.contains(&"monitor".to_string()));
+        assert!(subcmd_names.contains(&"completions".to_string()));
+    }
+
+    #[test]
+    fn test_build_localized_command_zh_cn() {
+        rust_i18n::set_locale("zh-CN");
+        let cmd = build_localized_command();
+        cmd.clone().debug_assert();
+        // About should be Chinese
+        let about = cmd.get_about().map(|a| a.to_string()).unwrap_or_default();
+        assert!(about.contains("海思"), "About should be in Chinese: {about}");
+    }
+
+    // ---- localize_arg ----
+
+    #[test]
+    fn test_localize_arg_known_key() {
+        rust_i18n::set_locale("zh-CN");
+        let arg = clap::Arg::new("port").help("original help");
+        let localized = localize_arg(arg);
+        let help = localized.get_help().map(|h| h.to_string()).unwrap_or_default();
+        // Should be Chinese translation
+        assert!(!help.is_empty());
+        assert_ne!(help, "original help");
+    }
+
+    #[test]
+    fn test_localize_arg_unknown_key() {
+        rust_i18n::set_locale("en");
+        let arg = clap::Arg::new("nonexistent_arg_xyz").help("keep this");
+        let localized = localize_arg(arg);
+        let help = localized.get_help().map(|h| h.to_string()).unwrap_or_default();
+        // Should keep original since no translation exists
+        assert_eq!(help, "keep this");
+    }
+}

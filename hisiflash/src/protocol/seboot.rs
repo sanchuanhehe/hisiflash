@@ -463,6 +463,28 @@ mod tests {
     }
 
     #[test]
+    fn test_command_type_swapped() {
+        assert_eq!(CommandType::Handshake.swapped(), 0x0F);
+        assert_eq!(CommandType::Ack.swapped(), 0x1E);
+        assert_eq!(CommandType::SetBaudRate.swapped(), 0xA5);
+        assert_eq!(CommandType::Reset.swapped(), 0x78);
+    }
+
+    #[test]
+    fn test_command_type_reversed_is_bitwise_not() {
+        let cmds = [
+            CommandType::Handshake,
+            CommandType::Ack,
+            CommandType::DownloadFlashImage,
+            CommandType::Reset,
+            CommandType::SetBaudRate,
+        ];
+        for cmd in cmds {
+            assert_eq!(cmd.reversed(), !(cmd as u8));
+        }
+    }
+
+    #[test]
     fn test_handshake_frame_length() {
         let frame = SebootFrame::handshake(115200);
         let data = frame.build();
@@ -478,6 +500,20 @@ mod tests {
     }
 
     #[test]
+    fn test_handshake_frame_baud_rate() {
+        let frame = SebootFrame::handshake(921600);
+        let data = frame.build();
+        // Baud rate at offset 8 (after magic+length+type+~type)
+        let baud = u32::from_le_bytes([data[8], data[9], data[10], data[11]]);
+        assert_eq!(baud, 921600);
+        // DataBits=8, StopBits=1, Parity=None, FlowCtrl=None
+        assert_eq!(data[12], 8);
+        assert_eq!(data[13], 1);
+        assert_eq!(data[14], 0);
+        assert_eq!(data[15], 0);
+    }
+
+    #[test]
     fn test_download_flash_image_frame() {
         let frame = SebootFrame::download_flash_image(0x00800000, 0x1000, 0x1000, false);
         let data = frame.build();
@@ -489,11 +525,30 @@ mod tests {
     }
 
     #[test]
+    fn test_download_flash_image_rom_flag() {
+        let frame_rom = SebootFrame::download_flash_image(0, 0, 0, true);
+        let data = frame_rom.build();
+        // formal = 1 for ROM
+        assert_eq!(data[20], 1);
+        assert_eq!(data[21], 0xFE); // !1
+
+        let frame_normal = SebootFrame::download_flash_image(0, 0, 0, false);
+        let data = frame_normal.build();
+        assert_eq!(data[20], 0);
+        assert_eq!(data[21], 0xFF); // !0
+    }
+
+    #[test]
     fn test_erase_all_frame() {
         let frame = SebootFrame::erase_all();
         let data = frame.build();
         // Check erase_size is 0xFFFFFFFF
         assert_eq!(&data[16..20], &[0xFF, 0xFF, 0xFF, 0xFF]);
+        // addr and len should be 0
+        let addr = u32::from_le_bytes([data[8], data[9], data[10], data[11]]);
+        let len = u32::from_le_bytes([data[12], data[13], data[14], data[15]]);
+        assert_eq!(addr, 0);
+        assert_eq!(len, 0);
     }
 
     #[test]
@@ -507,10 +562,158 @@ mod tests {
     }
 
     #[test]
+    fn test_set_baud_rate_frame() {
+        let frame = SebootFrame::set_baud_rate(921600);
+        let data = frame.build();
+        assert_eq!(data[6], CommandType::SetBaudRate as u8);
+        assert_eq!(data[7], CommandType::SetBaudRate.reversed());
+        let baud = u32::from_le_bytes([data[8], data[9], data[10], data[11]]);
+        assert_eq!(baud, 921600);
+    }
+
+    #[test]
+    fn test_switch_dfu_frame() {
+        let frame = SebootFrame::switch_dfu();
+        let data = frame.build();
+        assert_eq!(data[6], CommandType::SwitchDfu as u8);
+    }
+
+    #[test]
+    fn test_flash_lock_frame() {
+        let frame = SebootFrame::flash_lock(0x1234);
+        let data = frame.build();
+        assert_eq!(data[6], CommandType::FlashLock as u8);
+        let param = u16::from_le_bytes([data[8], data[9]]);
+        assert_eq!(param, 0x1234);
+    }
+
+    #[test]
+    fn test_upload_data_frame() {
+        let frame = SebootFrame::upload_data(0x800000, 0x100);
+        let data = frame.build();
+        assert_eq!(data[6], CommandType::UploadData as u8);
+    }
+
+    #[test]
+    fn test_read_otp_efuse_frame() {
+        let frame = SebootFrame::read_otp_efuse(0x10, 0x20);
+        let data = frame.build();
+        assert_eq!(data[6], CommandType::ReadOtpEfuse as u8);
+        let start = u16::from_le_bytes([data[8], data[9]]);
+        let width = u16::from_le_bytes([data[10], data[11]]);
+        assert_eq!(start, 0x10);
+        assert_eq!(width, 0x20);
+    }
+
+    #[test]
+    fn test_download_nv_frame() {
+        let frame = SebootFrame::download_nv(0x1000, 0x200, 0x400, true);
+        let data = frame.build();
+        assert_eq!(data[6], CommandType::DownloadNv as u8);
+    }
+
+    #[test]
+    fn test_download_version_frame() {
+        let frame = SebootFrame::download_version(0x100);
+        let data = frame.build();
+        assert_eq!(data[6], CommandType::DownloadVersion as u8);
+    }
+
+    #[test]
+    fn test_frame_command_type_getter() {
+        let frame = SebootFrame::handshake(115200);
+        assert_eq!(frame.command_type(), CommandType::Handshake);
+
+        let frame = SebootFrame::reset();
+        assert_eq!(frame.command_type(), CommandType::Reset);
+    }
+
+    #[test]
+    fn test_frame_crc_is_appended() {
+        let frame = SebootFrame::handshake(115200);
+        let data = frame.build();
+        // Verify CRC matches recalculated value
+        let crc_data = &data[..data.len() - 2];
+        let expected_crc = crate::protocol::crc::crc16_xmodem(crc_data);
+        let actual_crc = u16::from_le_bytes([data[data.len() - 2], data[data.len() - 1]]);
+        assert_eq!(actual_crc, expected_crc);
+    }
+
+    #[test]
     fn test_contains_handshake_ack() {
         let mut data = vec![0x00, 0x00];
         data.extend_from_slice(&SebootAck::HANDSHAKE_ACK[..10]);
         data.extend_from_slice(&[0x00, 0x00]);
         assert!(contains_handshake_ack(&data));
+    }
+
+    #[test]
+    fn test_contains_handshake_ack_at_start() {
+        let mut data = Vec::new();
+        data.extend_from_slice(&SebootAck::HANDSHAKE_ACK[..10]);
+        assert!(contains_handshake_ack(&data));
+    }
+
+    #[test]
+    fn test_contains_handshake_ack_not_found() {
+        let data = vec![0x00; 20];
+        assert!(!contains_handshake_ack(&data));
+    }
+
+    #[test]
+    fn test_contains_handshake_ack_too_short() {
+        let data = vec![0xEF, 0xBE, 0xAD];
+        assert!(!contains_handshake_ack(&data));
+    }
+
+    #[test]
+    fn test_seboot_ack_parse_success() {
+        let ack = SebootAck::parse(&SebootAck::HANDSHAKE_ACK);
+        assert!(ack.is_some());
+        let ack = ack.unwrap();
+        assert!(ack.is_success());
+        assert!(ack.is_handshake_ack());
+        assert_eq!(ack.frame_type, CommandType::Ack as u8);
+    }
+
+    #[test]
+    fn test_seboot_ack_parse_failure() {
+        let mut data = SebootAck::HANDSHAKE_ACK;
+        data[8] = 0x00; // Change result from success to failure
+        let ack = SebootAck::parse(&data).unwrap();
+        assert!(!ack.is_success());
+        assert!(!ack.is_handshake_ack());
+    }
+
+    #[test]
+    fn test_seboot_ack_parse_too_short() {
+        let data = vec![0x00; 4];
+        assert!(SebootAck::parse(&data).is_none());
+    }
+
+    #[test]
+    fn test_seboot_ack_parse_no_magic() {
+        let data = vec![0x00; 20];
+        assert!(SebootAck::parse(&data).is_none());
+    }
+
+    #[test]
+    fn test_seboot_ack_parse_with_prefix() {
+        // Magic buried in noise
+        let mut data = vec![0xFF; 5];
+        data.extend_from_slice(&SebootAck::HANDSHAKE_ACK);
+        let ack = SebootAck::parse(&data);
+        assert!(ack.is_some());
+        assert!(ack.unwrap().is_success());
+    }
+
+    #[test]
+    fn test_image_type_from_u32() {
+        assert_eq!(ImageType::from(0), ImageType::Loader);
+        assert_eq!(ImageType::from(2), ImageType::KvNv);
+        assert_eq!(ImageType::from(5), ImageType::FlashBoot);
+        assert_eq!(ImageType::from(1), ImageType::Normal);
+        // Unknown values default to Normal
+        assert_eq!(ImageType::from(999), ImageType::Normal);
     }
 }

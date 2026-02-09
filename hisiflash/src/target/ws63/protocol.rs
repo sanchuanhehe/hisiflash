@@ -278,4 +278,119 @@ mod tests {
         // Should not find ACK in random data
         assert!(!contains_handshake_ack(&[0x00; 20]));
     }
+
+    #[test]
+    fn test_response_frame_parse_handshake_ack() {
+        // Build a valid response frame: magic + len(12) + cmd(0xE1) + scmd(0x1E) + data(0x5A, 0x00) + crc
+        let mut buf = Vec::new();
+        buf.extend_from_slice(&FRAME_MAGIC.to_le_bytes());
+        buf.extend_from_slice(&12u16.to_le_bytes()); // len
+        buf.push(0xE1); // cmd
+        buf.push(0x1E); // scmd
+        buf.push(0x5A); // ACK success
+        buf.push(0x00); // error code
+        let crc = crate::protocol::crc::crc16_xmodem(&buf);
+        buf.extend_from_slice(&crc.to_le_bytes());
+
+        let resp = ResponseFrame::parse(&buf);
+        assert!(resp.is_some());
+        let resp = resp.unwrap();
+        assert!(resp.is_handshake_ack());
+        assert!(resp.is_ack());
+        assert_eq!(resp.cmd, 0xE1);
+        assert_eq!(resp.scmd, 0x1E);
+    }
+
+    #[test]
+    fn test_response_frame_parse_failure() {
+        let mut buf = Vec::new();
+        buf.extend_from_slice(&FRAME_MAGIC.to_le_bytes());
+        buf.extend_from_slice(&12u16.to_le_bytes());
+        buf.push(0xE1);
+        buf.push(0x1E);
+        buf.push(0x00); // Not ACK
+        buf.push(0x01); // error code
+        let crc = crate::protocol::crc::crc16_xmodem(&buf);
+        buf.extend_from_slice(&crc.to_le_bytes());
+
+        let resp = ResponseFrame::parse(&buf).unwrap();
+        assert!(!resp.is_ack());
+        assert!(!resp.is_handshake_ack());
+    }
+
+    #[test]
+    fn test_response_frame_parse_too_short() {
+        assert!(ResponseFrame::parse(&[0; 5]).is_none());
+    }
+
+    #[test]
+    fn test_response_frame_parse_no_magic() {
+        let data = vec![0x00; 20];
+        assert!(ResponseFrame::parse(&data).is_none());
+    }
+
+    #[test]
+    fn test_response_frame_parse_with_prefix() {
+        let mut buf = vec![0xFF; 3];
+        buf.extend_from_slice(&FRAME_MAGIC.to_le_bytes());
+        buf.extend_from_slice(&12u16.to_le_bytes());
+        buf.push(0xE1);
+        buf.push(0x1E);
+        buf.push(0x5A);
+        buf.push(0x00);
+        let crc = crate::protocol::crc::crc16_xmodem(&buf[3..]);
+        buf.extend_from_slice(&crc.to_le_bytes());
+
+        let resp = ResponseFrame::parse(&buf);
+        assert!(resp.is_some());
+    }
+
+    #[test]
+    fn test_command_frame_command_getter() {
+        let frame = CommandFrame::handshake(115200);
+        assert_eq!(frame.command(), Command::Handshake);
+
+        let frame = CommandFrame::reset();
+        assert_eq!(frame.command(), Command::Reset);
+
+        let frame = CommandFrame::set_baud_rate(921600);
+        assert_eq!(frame.command(), Command::SetBaudRate);
+
+        let frame = CommandFrame::download(0, 0, 0);
+        assert_eq!(frame.command(), Command::Download);
+    }
+
+    #[test]
+    fn test_reset_frame_structure() {
+        let frame = CommandFrame::reset();
+        let data = frame.build();
+        assert_eq!(data[6], Command::Reset as u8);
+        assert_eq!(data[7], Command::Reset.swapped());
+        // Total: magic(4) + len(2) + cmd(1) + scmd(1) + data(2) + crc(2) = 12
+        assert_eq!(data.len(), 12);
+    }
+
+    #[test]
+    fn test_frame_magic_bytes() {
+        let frame = CommandFrame::handshake(115200);
+        let data = frame.build();
+        // Little-endian 0xDEADBEEF = EF BE AD DE
+        assert_eq!(&data[0..4], &[0xEF, 0xBE, 0xAD, 0xDE]);
+    }
+
+    #[test]
+    fn test_frame_length_field_matches_actual() {
+        let frame = CommandFrame::handshake(115200);
+        let data = frame.build();
+        let len_field = u16::from_le_bytes([data[4], data[5]]) as usize;
+        assert_eq!(len_field, data.len());
+    }
+
+    #[test]
+    fn test_constants() {
+        assert_eq!(FRAME_MAGIC, 0xDEADBEEF);
+        assert_eq!(DEFAULT_BAUD, 115200);
+        assert_eq!(HIGH_BAUD, 921600);
+        assert_eq!(HANDSHAKE_ACK.len(), 10);
+    }
 }
