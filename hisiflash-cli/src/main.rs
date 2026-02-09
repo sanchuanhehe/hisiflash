@@ -1075,9 +1075,7 @@ fn get_completion_install_path(shell: Shell) -> Result<PathBuf> {
     match shell {
         Shell::Bash => {
             // ~/.local/share/bash-completion/completions/hisiflash
-            let dir = dirs_for_data()
-                .join("bash-completion")
-                .join("completions");
+            let dir = dirs_for_data().join("bash-completion").join("completions");
             Ok(dir.join("hisiflash"))
         },
         Shell::Zsh => {
@@ -1089,7 +1087,10 @@ fn get_completion_install_path(shell: Shell) -> Result<PathBuf> {
         Shell::Fish => {
             // ~/.config/fish/completions/hisiflash.fish
             let config_dir = xdg_config_dir();
-            Ok(config_dir.join("fish").join("completions").join("hisiflash.fish"))
+            Ok(config_dir
+                .join("fish")
+                .join("completions")
+                .join("hisiflash.fish"))
         },
         Shell::PowerShell => {
             // $PROFILE directory / hisiflash.ps1
@@ -1100,10 +1101,7 @@ fn get_completion_install_path(shell: Shell) -> Result<PathBuf> {
                 Ok(dir.join("hisiflash.ps1"))
             } else {
                 let home = home_dir()?;
-                let dir = home
-                    .join(".config")
-                    .join("powershell")
-                    .join("completions");
+                let dir = home.join(".config").join("powershell").join("completions");
                 Ok(dir.join("hisiflash.ps1"))
             }
         },
@@ -1125,19 +1123,16 @@ fn home_dir() -> Result<PathBuf> {
 
 /// Get XDG config directory (~/.config by default).
 fn xdg_config_dir() -> PathBuf {
-    env::var("XDG_CONFIG_HOME")
-        .map_or_else(|_| home_dir().unwrap_or_default().join(".config"), PathBuf::from)
+    env::var("XDG_CONFIG_HOME").map_or_else(
+        |_| home_dir().unwrap_or_default().join(".config"),
+        PathBuf::from,
+    )
 }
 
 /// Get XDG data directory.
 fn dirs_for_data() -> PathBuf {
     env::var("XDG_DATA_HOME").map_or_else(
-        |_| {
-            home_dir()
-                .unwrap_or_default()
-                .join(".local")
-                .join("share")
-        },
+        |_| home_dir().unwrap_or_default().join(".local").join("share"),
         PathBuf::from,
     )
 }
@@ -1205,9 +1200,7 @@ fn cmd_completions_install(shell_arg: Option<Shell>) -> Result<()> {
                     .create(true)
                     .append(true)
                     .open(&zshrc)
-                    .with_context(|| {
-                        format!("Failed to update {}", zshrc.display())
-                    })?;
+                    .with_context(|| format!("Failed to update {}", zshrc.display()))?;
                 writeln!(file, "\n# hisiflash completions")?;
                 writeln!(file, "{fpath_line}")?;
                 writeln!(file, "autoload -Uz compinit && compinit")?;
@@ -1219,10 +1212,7 @@ fn cmd_completions_install(shell_arg: Option<Shell>) -> Result<()> {
             }
 
             eprintln!();
-            eprintln!(
-                "Restart your shell or run: {}",
-                style("exec zsh").cyan()
-            );
+            eprintln!("Restart your shell or run: {}", style("exec zsh").cyan());
         },
         Shell::Fish => {
             eprintln!();
@@ -1230,9 +1220,7 @@ fn cmd_completions_install(shell_arg: Option<Shell>) -> Result<()> {
         },
         Shell::PowerShell => {
             eprintln!();
-            eprintln!(
-                "Add this to your PowerShell profile to load on startup:"
-            );
+            eprintln!("Add this to your PowerShell profile to load on startup:");
             eprintln!(
                 "  {}",
                 style(format!("Import-Module {}", path.display())).cyan()
