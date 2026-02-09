@@ -116,6 +116,7 @@ arg.monitor_baud.help: "监视器波特率 (默认: 115200)"
 
 # completions 命令选项
 arg.shell.help: "Shell 补全脚本类型"
+arg.install.help: "自动安装补全脚本到 Shell 配置"
 
 serial.multiple_ports: "发现多个串口。请使用 -p 参数指定端口或禁用 --non-interactive 选项。"
 serial.no_ports_available: "没有可用的串口。"

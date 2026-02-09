@@ -116,6 +116,7 @@ arg.monitor_baud.help: "Baud rate for monitoring (default: 115200)"
 
 # Completions command options
 arg.shell.help: "Shell type for completions"
+arg.install.help: "Automatically install completions to your shell configuration"
 
 serial.multiple_ports: "Multiple serial ports found. Use -p to specify a port or disable --non-interactive."
 serial.no_ports_available: "No serial ports available."
