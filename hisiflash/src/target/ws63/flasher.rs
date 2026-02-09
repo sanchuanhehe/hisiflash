@@ -44,11 +44,14 @@ use std::time::{Duration, Instant};
 /// Timeout for waiting for handshake.
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(30);
 
-/// Delay after sending a command before reading response.
-const COMMAND_DELAY: Duration = Duration::from_millis(50);
-
 /// Delay after changing baud rate.
 const BAUD_CHANGE_DELAY: Duration = Duration::from_millis(100);
+
+/// Delay between partition transfers to prevent serial data stale.
+const PARTITION_DELAY: Duration = Duration::from_millis(100);
+
+/// Timeout for waiting for SEBOOT magic response.
+const MAGIC_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Delay between connection retry attempts.
 const CONNECT_RETRY_DELAY: Duration = Duration::from_millis(500);
@@ -224,19 +227,37 @@ impl<P: Port> Ws63Flasher<P> {
         Ok(())
     }
 
-    /// Wait for YMODEM 'C' character.
-    fn wait_for_c(&mut self, timeout: Duration) -> Result<()> {
+    /// Wait for SEBOOT magic (0xDEADBEEF) response from device.
+    ///
+    /// After LoaderBoot YMODEM transfer or after sending a download command,
+    /// the device responds with a SEBOOT frame starting with the magic bytes.
+    /// This function reads bytes until the magic sequence is found, then
+    /// drains the remaining frame data.
+    fn wait_for_magic(&mut self, timeout: Duration) -> Result<()> {
+        let magic: [u8; 4] = [0xEF, 0xBE, 0xAD, 0xDE]; // Little-endian DEADBEEF
         let start = Instant::now();
-        let mut buf = [0u8; 1];
+        let mut match_idx = 0;
+
+        debug!("Waiting for SEBOOT magic...");
 
         while start.elapsed() < timeout {
+            let mut buf = [0u8; 1];
             match self.port.read(&mut buf) {
-                Ok(1) if buf[0] == b'C' => {
-                    debug!("Received 'C', ready for YMODEM transfer");
-                    return Ok(());
-                },
                 Ok(1) => {
-                    trace!("Received: 0x{:02X}", buf[0]);
+                    if buf[0] == magic[match_idx] {
+                        match_idx += 1;
+                        if match_idx == magic.len() {
+                            // Found magic, drain remaining frame data
+                            thread::sleep(Duration::from_millis(50));
+                            let mut drain = [0u8; 256];
+                            let _ = self.port.read(&mut drain);
+                            debug!("Received SEBOOT magic response");
+                            return Ok(());
+                        }
+                    } else {
+                        // Reset match, check if current byte starts a new match
+                        match_idx = if buf[0] == magic[0] { 1 } else { 0 };
+                    }
                 },
                 Ok(_) => {},
                 Err(e) if e.kind() == std::io::ErrorKind::TimedOut => {},
@@ -244,7 +265,44 @@ impl<P: Port> Ws63Flasher<P> {
             }
         }
 
-        Err(Error::Timeout("Timeout waiting for 'C'".into()))
+        Err(Error::Timeout("Timeout waiting for SEBOOT magic".into()))
+    }
+
+    /// Transfer LoaderBoot via YMODEM without sending a download command.
+    ///
+    /// After handshake, the device enters YMODEM mode directly for LoaderBoot.
+    /// No download command (0xD2) should be sent. This matches the official
+    /// fbb_burntool behavior where LOADER type partitions skip the download
+    /// command and go straight to YMODEM transfer.
+    fn transfer_loaderboot<F>(
+        &mut self,
+        name: &str,
+        data: &[u8],
+        progress: &mut F,
+    ) -> Result<()>
+    where
+        F: FnMut(&str, usize, usize),
+    {
+        debug!(
+            "Transferring LoaderBoot {} ({} bytes) via YMODEM",
+            name,
+            data.len()
+        );
+
+        let config = YmodemConfig {
+            char_timeout: Duration::from_millis(1000),
+            c_timeout: Duration::from_secs(30),
+            max_retries: 10,
+            verbose: self.verbose,
+        };
+
+        let mut ymodem = YmodemTransfer::with_config(&mut self.port, config);
+        ymodem.transfer(name, data, |current, total| {
+            progress(name, current, total);
+        })?;
+
+        debug!("LoaderBoot transfer complete");
+        Ok(())
     }
 
     /// Flash a FWPKG firmware package.
@@ -270,14 +328,13 @@ impl<P: Port> Ws63Flasher<P> {
 
         info!("Flashing LoaderBoot: {}", loaderboot.name);
 
-        // Send download command for LoaderBoot
+        // LoaderBoot: NO download command. After handshake ACK, the device
+        // enters YMODEM mode directly. This matches fbb_burntool and ws63flash.
         let lb_data = fwpkg.bin_data(loaderboot)?;
-        self.download_binary(
-            &loaderboot.name,
-            lb_data,
-            loaderboot.burn_addr,
-            &mut progress,
-        )?;
+        self.transfer_loaderboot(&loaderboot.name, lb_data, &mut progress)?;
+
+        // Wait for LoaderBoot to initialize (device sends SEBOOT magic when ready)
+        self.wait_for_magic(MAGIC_TIMEOUT)?;
 
         // Change baud rate if in late mode
         if self.late_baud && self.target_baud != DEFAULT_BAUD {
@@ -301,6 +358,10 @@ impl<P: Port> Ws63Flasher<P> {
 
             let bin_data = fwpkg.bin_data(bin)?;
             self.download_binary(&bin.name, bin_data, bin.burn_addr, &mut progress)?;
+
+            // Inter-partition delay to prevent serial data stale
+            // (MCU won't respond if next command follows immediately)
+            thread::sleep(PARTITION_DELAY);
         }
 
         info!("Flashing complete!");
@@ -373,15 +434,22 @@ impl<P: Port> Ws63Flasher<P> {
             addr
         );
 
+        // Calculate aligned erase size (align up to 0x1000 = 4KB boundary)
+        // This matches the official fbb_burntool behavior.
+        let erase_size = (len + 0xFFF) & !0xFFF;
+
         // Send download command
-        let frame = CommandFrame::download(addr, len, len);
+        let frame = CommandFrame::download(addr, len, erase_size);
         self.send_command(&frame)?;
 
-        // Wait for 'C'
-        thread::sleep(COMMAND_DELAY);
-        self.wait_for_c(Duration::from_secs(10))?;
+        // Wait for ACK frame (SEBOOT magic response) from device
+        // The device responds with a SEBOOT frame after processing the download command.
+        // ws63flash calls uart_read_until_magic() here.
+        self.wait_for_magic(MAGIC_TIMEOUT)?;
 
         // Transfer using YMODEM
+        // Note: ymodem.transfer() internally calls wait_for_c(), so we don't need
+        // to call it here. The device sends 'C' after the ACK frame.
         let config = YmodemConfig {
             char_timeout: Duration::from_millis(1000),
             c_timeout: Duration::from_secs(30),
@@ -407,8 +475,11 @@ impl<P: Port> Ws63Flasher<P> {
     pub fn write_bins(&mut self, loaderboot: &[u8], bins: &[(&[u8], u32)]) -> Result<()> {
         info!("Writing LoaderBoot ({} bytes)", loaderboot.len());
 
-        // Download LoaderBoot first
-        self.download_binary("loaderboot", loaderboot, 0, &mut |_, _, _| {})?;
+        // Transfer LoaderBoot (no download command)
+        self.transfer_loaderboot("loaderboot", loaderboot, &mut |_, _, _| {})?;
+
+        // Wait for LoaderBoot to initialize
+        self.wait_for_magic(MAGIC_TIMEOUT)?;
 
         // Change baud rate if in late mode
         if self.late_baud && self.target_baud != DEFAULT_BAUD {
@@ -420,6 +491,9 @@ impl<P: Port> Ws63Flasher<P> {
             let name = format!("binary_{i}");
             info!("Writing {} ({} bytes) to 0x{:08X}", name, data.len(), addr);
             self.download_binary(&name, data, *addr, &mut |_, _, _| {})?;
+
+            // Inter-partition delay
+            thread::sleep(PARTITION_DELAY);
         }
 
         Ok(())

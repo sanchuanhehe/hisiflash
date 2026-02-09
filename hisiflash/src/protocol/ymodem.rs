@@ -268,8 +268,8 @@ impl<'a, P: Read + Write> YmodemTransfer<'a, P> {
         // Send file info (block 0)
         self.send_file_info(filename, data.len())?;
 
-        // Wait for 'C' again before data
-        self.wait_for_c()?;
+        // Note: WS63 device does NOT send a second 'C' after block 0 ACK.
+        // Proceed directly to data blocks (confirmed by fbb_burntool and ws63flash).
 
         // Send data blocks
         let mut seq: u8 = 1;
@@ -292,10 +292,8 @@ impl<'a, P: Read + Write> YmodemTransfer<'a, P> {
         // Send EOT
         self.send_eot()?;
 
-        // Wait for 'C' and send finish block
-        if let Ok(()) = self.wait_for_c() {
-            let _ = self.send_finish();
-        }
+        // Send finish block directly (no 'C' wait, matching ws63flash behavior)
+        let _ = self.send_finish();
 
         debug!("YMODEM transfer complete");
         Ok(())
