@@ -97,6 +97,12 @@ jobs:
             artifact: hisiflash.exe
             archive: zip
 
+          # Windows ARM64
+          - target: aarch64-pc-windows-msvc
+            os: windows-latest
+            artifact: hisiflash.exe
+            archive: zip
+
     steps:
       - uses: actions/checkout@v4
 
