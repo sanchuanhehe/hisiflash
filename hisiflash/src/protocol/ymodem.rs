@@ -352,10 +352,7 @@ mod tests {
     impl std::io::Read for MockSerial {
         fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
             if self.read_buf.is_empty() {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::TimedOut,
-                    "no data",
-                ));
+                return Err(std::io::Error::new(std::io::ErrorKind::TimedOut, "no data"));
             }
             let n = buf.len().min(self.read_buf.len());
             for b in buf.iter_mut().take(n) {
@@ -392,7 +389,7 @@ mod tests {
         // Simulate device that sends: C, ACK(block0), ACK(data), ACK(EOT), ACK(finish)
         // NO second 'C' between block 0 ACK and data blocks.
         let mut response = Vec::new();
-        response.push(control::C);   // Initial 'C' for YMODEM start
+        response.push(control::C); // Initial 'C' for YMODEM start
         response.push(control::ACK); // ACK for block 0 (file info)
         response.push(control::ACK); // ACK for data block 1
         response.push(control::ACK); // ACK for EOT
@@ -427,7 +424,7 @@ mod tests {
     fn test_ymodem_no_c_before_finish() {
         // Response sequence without any extra 'C' between EOT ACK and finish
         let mut response = Vec::new();
-        response.push(control::C);   // Initial 'C'
+        response.push(control::C); // Initial 'C'
         response.push(control::ACK); // ACK for block 0
         response.push(control::ACK); // ACK for data block 1
         response.push(control::ACK); // ACK for EOT
@@ -458,7 +455,7 @@ mod tests {
     #[test]
     fn test_ymodem_transfer_exact_block_size() {
         let mut response = Vec::new();
-        response.push(control::C);   // Initial 'C'
+        response.push(control::C); // Initial 'C'
         response.push(control::ACK); // ACK for block 0
         response.push(control::ACK); // ACK for data block 1
         response.push(control::ACK); // ACK for EOT
@@ -488,7 +485,7 @@ mod tests {
     fn test_ymodem_transfer_multi_block() {
         let num_blocks = 3;
         let mut response = Vec::new();
-        response.push(control::C);   // Initial 'C'
+        response.push(control::C); // Initial 'C'
         response.push(control::ACK); // ACK for block 0
         for _ in 0..num_blocks {
             response.push(control::ACK); // ACK for each data block

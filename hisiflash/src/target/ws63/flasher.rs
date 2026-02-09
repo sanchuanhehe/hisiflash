@@ -274,12 +274,7 @@ impl<P: Port> Ws63Flasher<P> {
     /// No download command (0xD2) should be sent. This matches the official
     /// fbb_burntool behavior where LOADER type partitions skip the download
     /// command and go straight to YMODEM transfer.
-    fn transfer_loaderboot<F>(
-        &mut self,
-        name: &str,
-        data: &[u8],
-        progress: &mut F,
-    ) -> Result<()>
+    fn transfer_loaderboot<F>(&mut self, name: &str, data: &[u8], progress: &mut F) -> Result<()>
     where
         F: FnMut(&str, usize, usize),
     {
@@ -1041,7 +1036,10 @@ mod tests {
 
         let mut flasher = Ws63Flasher::new(port, 921600);
         let result = flasher.wait_for_magic(Duration::from_millis(500));
-        assert!(result.is_ok(), "wait_for_magic should succeed when magic is present");
+        assert!(
+            result.is_ok(),
+            "wait_for_magic should succeed when magic is present"
+        );
     }
 
     /// Regression: wait_for_magic times out when no magic present.
@@ -1051,7 +1049,10 @@ mod tests {
         // No data in buffer -> should timeout
         let mut flasher = Ws63Flasher::new(port, 921600);
         let result = flasher.wait_for_magic(Duration::from_millis(100));
-        assert!(result.is_err(), "wait_for_magic should timeout with no data");
+        assert!(
+            result.is_err(),
+            "wait_for_magic should timeout with no data"
+        );
     }
 
     /// Regression: wait_for_magic with magic preceded by partial match.
@@ -1071,7 +1072,10 @@ mod tests {
 
         let mut flasher = Ws63Flasher::new(port, 921600);
         let result = flasher.wait_for_magic(Duration::from_millis(500));
-        assert!(result.is_ok(), "wait_for_magic should handle partial matches");
+        assert!(
+            result.is_ok(),
+            "wait_for_magic should handle partial matches"
+        );
     }
 
     /// Regression: LoaderBoot must NOT send download command (0xD2).
@@ -1132,7 +1136,11 @@ mod tests {
         );
 
         // Verify the result succeeded
-        assert!(result.is_ok(), "LoaderBoot transfer should succeed: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "LoaderBoot transfer should succeed: {:?}",
+            result.err()
+        );
     }
 
     /// Regression: download_binary for normal partitions MUST send download command (0xD2).
@@ -1206,7 +1214,10 @@ mod tests {
         let frame2 = CommandFrame::download(0x00800000, 0x1000, (0x1000u32 + 0xFFF) & !0xFFF);
         let data2 = frame2.build();
         let erase_size2 = u32::from_le_bytes([data2[16], data2[17], data2[18], data2[19]]);
-        assert_eq!(erase_size2, 0x1000, "erase_size for exactly 4KB should remain 0x1000");
+        assert_eq!(
+            erase_size2, 0x1000,
+            "erase_size for exactly 4KB should remain 0x1000"
+        );
 
         // Test with 4KB + 1
         let frame3 = CommandFrame::download(0x00800000, 0x1001, (0x1001u32 + 0xFFF) & !0xFFF);
