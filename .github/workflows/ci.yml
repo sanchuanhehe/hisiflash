@@ -107,7 +107,7 @@ jobs:
             artifact: hisiflash.exe
 
           - target: aarch64-pc-windows-msvc
-            os: windows-latest
+            os: windows-11-arm
             artifact: hisiflash.exe
 
     steps:
