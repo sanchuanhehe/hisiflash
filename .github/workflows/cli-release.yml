@@ -73,12 +73,11 @@ jobs:
             artifact: hisiflash
             archive: zip
 
-          # Linux ARM64
+          # Linux ARM64 (native ARM runner)
           - target: aarch64-unknown-linux-gnu
-            os: ubuntu-latest
+            os: ubuntu-24.04-arm
             artifact: hisiflash
             archive: zip
-            cross: true
 
           # macOS x86_64
           - target: x86_64-apple-darwin
@@ -112,29 +111,15 @@ jobs:
 
       # Linux dependencies
       - name: Install dependencies (Linux)
-        if: runner.os == 'Linux' && !matrix.cross
+        if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libudev-dev zip
 
-      - name: Install dependencies (Linux cross)
-        if: runner.os == 'Linux' && matrix.cross
-        run: sudo apt-get update && sudo apt-get install -y zip
-
-      # Cross compilation for ARM64 Linux
-      - name: Install cross
-        if: matrix.cross
-        uses: taiki-e/install-action@cross
-
-      - name: Build with cross
-        if: matrix.cross
-        run: cross build --release --target ${{ matrix.target }}
-
       - name: Build release
-        if: ${{ !matrix.cross }}
         run: cargo build --release --target ${{ matrix.target }}
 
       # Generate shell completion scripts
       - name: Generate completions (Unix)
-        if: runner.os != 'Windows' && !matrix.cross
+        if: runner.os != 'Windows'
         run: |
           mkdir -p completions
           target/${{ matrix.target }}/release/${{ matrix.artifact }} completions bash > completions/hisiflash.bash
@@ -153,18 +138,6 @@ jobs:
           & "target/${{ matrix.target }}/release/${{ matrix.artifact }}" completions fish > completions/hisiflash.fish
           & "target/${{ matrix.target }}/release/${{ matrix.artifact }}" completions powershell > completions/_hisiflash.ps1
           & "target/${{ matrix.target }}/release/${{ matrix.artifact }}" completions elvish > completions/hisiflash.elv
-
-      - name: Generate completions (Cross-compiled)
-        if: matrix.cross
-        run: |
-          # For cross-compiled builds, build a host binary just for generating completions
-          cargo build --release
-          mkdir -p completions
-          target/release/hisiflash completions bash > completions/hisiflash.bash
-          target/release/hisiflash completions zsh > completions/_hisiflash
-          target/release/hisiflash completions fish > completions/hisiflash.fish
-          target/release/hisiflash completions powershell > completions/_hisiflash.ps1
-          target/release/hisiflash completions elvish > completions/hisiflash.elv
 
       # Package artifacts
       - name: Create archive (Unix)
