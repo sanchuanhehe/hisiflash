@@ -35,12 +35,11 @@ rust_i18n::i18n!("locales", fallback = "en");
 /// hisiflash - A cross-platform tool for flashing HiSilicon chips.
 ///
 /// Environment variables:
-///   HISIFLASH_PORT    - Default serial port
-///   HISIFLASH_BAUD    - Default baud rate (default: 921600)
-///   HISIFLASH_CHIP    - Default chip type (ws63, bs2x, bs25)
-///   HISIFLASH_BEFORE  - Reset mode before operation
-///   HISIFLASH_AFTER   - Reset mode after operation
-///   HISIFLASH_LANG    - Language/locale (en, zh-CN)
+///   HISIFLASH_PORT              - Default serial port
+///   HISIFLASH_BAUD              - Default baud rate (default: 921600)
+///   HISIFLASH_CHIP              - Default chip type (ws63, bs2x, bs25)
+///   HISIFLASH_LANG              - Language/locale (en, zh-CN)
+///   HISIFLASH_NON_INTERACTIVE   - Non-interactive mode (disable prompts)
 #[derive(Parser)]
 #[command(name = "hisiflash")]
 #[command(author, version, about, long_about = None)]

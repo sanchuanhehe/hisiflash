@@ -76,23 +76,28 @@ hisiflash/
 │   ├── ARCHITECTURE.md           # Architecture design
 │   ├── REQUIREMENTS.md           # Requirements spec
 │   └── protocols/                # Protocol documentation
-│       ├── SEBOOT_PROTOCOL.md    # SEBOOT protocol spec
-│       └── WS63_PROTOCOL.md      # WS63 specifics
+│       └── PROTOCOL.md           # SEBOOT protocol spec (HiSilicon + YMODEM + FWPKG)
 │
 ├── hisiflash/                    # Core library crate
 │   └── src/
 │       ├── lib.rs                # Library entry point
 │       ├── error.rs              # Error definitions
-│       ├── connection/           # Serial port handling
+│       ├── connection/           # Serial port handling (legacy, being replaced by port/)
 │       │   ├── serial.rs         # Serial port abstraction
 │       │   └── detect.rs         # USB VID/PID auto-detection
+│       ├── port/                 # New port abstraction (cross-platform)
+│       │   ├── mod.rs            # Port trait definition
+│       │   ├── native.rs         # Native serial port (Linux/macOS/Windows)
+│       │   └── wasm.rs           # WASM/Web Serial API (experimental)
 │       ├── protocol/             # Communication protocols
 │       │   ├── seboot.rs         # HiSilicon SEBOOT protocol
 │       │   ├── ymodem.rs         # YMODEM file transfer
 │       │   └── crc.rs            # CRC16-XMODEM
 │       ├── target/               # Chip-specific implementations
-│       │   ├── chip.rs           # Chip family abstraction
+│       │   ├── chip.rs           # Chip family abstraction + Flasher trait
 │       │   └── ws63/             # WS63 implementation
+│       │       ├── flasher.rs    # WS63 flasher with retry mechanisms
+│       │       └── protocol.rs   # WS63 command frame building
 │       └── image/                # Firmware image handling
 │           └── fwpkg.rs          # FWPKG format parser
 │
@@ -200,7 +205,7 @@ cargo test -- --nocapture
 ### Modifying Protocol
 
 1. Update `protocol/seboot.rs` for frame changes
-2. Update `docs/protocols/SEBOOT_PROTOCOL.md`
+2. Update `docs/protocols/PROTOCOL.md`
 3. Add/update tests in the same file
 
 ## Dependencies
@@ -224,6 +229,10 @@ cargo test -- --nocapture
 - `toml` - Configuration file parsing
 - `serde` - Serialization/deserialization
 - `ctrlc` - Ctrl-C handling
+- `rust-i18n` - Internationalization (i18n)
+- `sys-locale` - System locale detection
+- `env_logger` - Logging output
+- `serialport` - Serial port (for monitor command)
 
 ## Environment Variables
 
@@ -232,6 +241,7 @@ cargo test -- --nocapture
 | `HISIFLASH_PORT` | Default serial port |
 | `HISIFLASH_BAUD` | Default baud rate |
 | `HISIFLASH_CHIP` | Default chip type |
+| `HISIFLASH_LANG` | Language/locale (en, zh-CN) |
 | `HISIFLASH_NON_INTERACTIVE` | Disable interactive prompts |
 | `RUST_LOG` | Logging level (debug, info, warn, error) |
 
@@ -246,7 +256,7 @@ hisiflash supports TOML configuration files:
 Example configuration:
 
 ```toml
-[connection]
+[port.connection]
 serial = "/dev/ttyUSB0"
 baud = 921600
 
@@ -254,7 +264,7 @@ baud = 921600
 late_baud = false
 
 # Known USB devices for auto-detection
-[[usb_device]]
+[[port.usb_device]]
 vid = 0x1A86
 pid = 0x7523
 ```

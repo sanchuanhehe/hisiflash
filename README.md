@@ -257,7 +257,7 @@ hisiflash 支持 TOML 格式的配置文件：
 **全局配置**: `~/.config/hisiflash/config.toml`
 
 ```toml
-[connection]
+[port.connection]
 serial = "/dev/ttyUSB0"
 baud = 921600
 
@@ -265,7 +265,7 @@ baud = 921600
 late_baud = false
 
 # 自定义 USB 设备用于自动检测
-[[usb_device]]
+[[port.usb_device]]
 vid = 0x1A86
 pid = 0x7523
 ```
@@ -299,18 +299,19 @@ hisiflash = "0.1"
 示例代码:
 
 ```rust
-use hisiflash::{Ws63Flasher, Fwpkg};
+use hisiflash::{ChipFamily, Fwpkg};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 解析固件包
     let fwpkg = Fwpkg::from_file("firmware.fwpkg")?;
     
     // 创建烧录器并连接
-    let mut flasher = Ws63Flasher::new("/dev/ttyUSB0", 921600)?;
+    let chip = ChipFamily::Ws63;
+    let mut flasher = chip.create_flasher("/dev/ttyUSB0", 921600, false, 0)?;
     flasher.connect()?;
     
     // 烧录固件
-    flasher.flash_fwpkg(&fwpkg, None, |name, current, total| {
+    flasher.flash_fwpkg(&fwpkg, None, &mut |name, current, total| {
         println!("Flashing {}: {}/{}", name, current, total);
     })?;
     
@@ -338,12 +339,17 @@ hisiflash/
 │   └── src/
 │       ├── lib.rs
 │       ├── error.rs        # 错误类型
-│       ├── connection/     # 连接抽象
+│       ├── connection/     # 连接抽象 (旧版)
 │       │   ├── mod.rs
 │       │   ├── serial.rs
 │       │   └── detect.rs   # USB VID/PID 检测
+│       ├── port/           # Port 抽象 (跨平台)
+│       │   ├── mod.rs
+│       │   ├── native.rs
+│       │   └── wasm.rs
 │       ├── protocol/       # 协议实现
 │       │   ├── mod.rs
+│       │   ├── seboot.rs   # SEBOOT 协议
 │       │   ├── crc.rs      # CRC16-XMODEM
 │       │   └── ymodem.rs   # YMODEM-1K
 │       ├── image/          # 固件格式
@@ -351,17 +357,22 @@ hisiflash/
 │       │   └── fwpkg.rs    # FWPKG 解析
 │       └── target/         # 芯片支持
 │           ├── mod.rs
+│           ├── chip.rs     # Flasher trait
 │           └── ws63/
 │               ├── mod.rs
 │               ├── protocol.rs
 │               └── flasher.rs
 └── hisiflash-cli/          # CLI 工具
     ├── Cargo.toml
+    ├── locales/            # 国际化翻译
+    │   ├── en.yml
+    │   └── zh-CN.yml
     └── src/
         ├── main.rs
         ├── config.rs       # 配置文件支持
         ├── serial.rs       # 交互式串口选择
         └── commands/
+            └── mod.rs      # 预留模块
 ```
 
 ## 开发

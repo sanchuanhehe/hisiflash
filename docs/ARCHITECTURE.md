@@ -6,8 +6,8 @@
 hisiflash/
 ├── Cargo.toml                    # 工作空间配置
 ├── README.md                     # 项目说明
-├── LICENSE                       # 许可证
 ├── CHANGELOG.md                  # 变更日志
+├── CONTRIBUTING.md               # 贡献指南
 ├── rustfmt.toml                  # 代码格式化配置
 ├── .gitignore
 │
@@ -15,71 +15,54 @@ hisiflash/
 │   ├── REQUIREMENTS.md           # 需求规格说明书
 │   ├── ARCHITECTURE.md           # 架构设计文档 (本文件)
 │   ├── COMPARISON.md             # 功能对比文档
-│   ├── CONTRIBUTING.md           # 贡献指南
 │   └── protocols/                # 协议文档
-│       ├── WS63_PROTOCOL.md      # WS63 烧录协议分析
-│       └── ymodem.md
+│       └── PROTOCOL.md           # SEBOOT 协议规范 (HiSilicon + YMODEM + FWPKG)
 │
 ├── hisiflash/                    # 核心库 crate
 │   ├── Cargo.toml
-│   ├── README.md
-│   ├── src/
-│   │   ├── lib.rs                # 库入口
-│   │   ├── error.rs              # 错误定义
-│   │   │
-│   │   ├── connection/           # 连接模块
-│   │   │   ├── mod.rs
-│   │   │   ├── serial.rs         # 串口连接
-│   │   │   ├── detect.rs         # USB VID/PID 自动检测
-│   │   │   └── reset.rs          # 复位策略
-│   │   │
-│   │   ├── target/               # 目标芯片模块
-│   │   │   ├── mod.rs
-│   │   │   ├── chip.rs           # 芯片类型抽象 (WS63/BS2X/BS25等)
-│   │   │   ├── traits.rs         # 芯片特征 trait
-│   │   │   └── ws63/             # WS63 芯片实现
-│   │   │       ├── mod.rs
-│   │   │       ├── commands.rs   # 命令定义
-│   │   │       ├── protocol.rs   # 帧协议实现
-│   │   │       └── sign.rs       # 签名功能
-│   │   │
-│   │   ├── flasher/              # 烧写模块
-│   │   │   ├── mod.rs
-│   │   │   ├── flash_data.rs     # 烧写数据结构
-│   │   │   └── progress.rs       # 进度回调
-│   │   │
-│   │   ├── protocol/             # 传输协议模块
-│   │   │   ├── mod.rs
-│   │   │   ├── seboot.rs         # HiSilicon SEBOOT 官方协议
-│   │   │   ├── ymodem.rs         # YMODEM 协议
-│   │   │   └── crc.rs            # CRC16-XMODEM
-│   │   │
-│   │   └── image/                # 镜像处理模块
-│   │       ├── mod.rs
-│   │       ├── fwpkg.rs          # FWPKG 格式解析
-│   │       └── bin.rs            # BIN 格式
-│   │
-│   ├── resources/                # 资源文件
-│   │   └── ws63_loaderboot.bin   # 内置 LoaderBoot
-│   │
-│   └── tests/                    # 集成测试
-│       ├── fwpkg_tests.rs
-│       ├── ymodem_tests.rs
-│       └── protocol_tests.rs
+│   └── src/
+│       ├── lib.rs                # 库入口
+│       ├── error.rs              # 错误定义
+│       │
+│       ├── connection/           # 连接模块 (旧版，正被 port/ 替代)
+│       │   ├── mod.rs
+│       │   ├── serial.rs         # 串口连接
+│       │   └── detect.rs         # USB VID/PID 自动检测
+│       │
+│       ├── port/                 # 新 Port 抽象 (跨平台)
+│       │   ├── mod.rs            # Port trait 定义
+│       │   ├── native.rs         # 原生串口 (Linux/macOS/Windows)
+│       │   └── wasm.rs           # WASM/Web Serial API (实验性)
+│       │
+│       ├── target/               # 目标芯片模块
+│       │   ├── mod.rs
+│       │   ├── chip.rs           # 芯片类型抽象 + Flasher trait
+│       │   └── ws63/             # WS63 芯片实现
+│       │       ├── mod.rs
+│       │       ├── flasher.rs    # WS63 烧写器 (含重试机制)
+│       │       └── protocol.rs   # WS63 命令帧构建
+│       │
+│       ├── protocol/             # 传输协议模块
+│       │   ├── mod.rs
+│       │   ├── seboot.rs         # HiSilicon SEBOOT 官方协议
+│       │   ├── ymodem.rs         # YMODEM-1K 协议
+│       │   └── crc.rs            # CRC16-XMODEM
+│       │
+│       └── image/                # 镜像处理模块
+│           ├── mod.rs
+│           └── fwpkg.rs          # FWPKG 格式解析 (V1 + V2)
 │
 └── hisiflash-cli/                # CLI 工具 crate
     ├── Cargo.toml
-    ├── README.md
+    ├── locales/                  # 国际化翻译文件
+    │   ├── en.yml                # 英文
+    │   └── zh-CN.yml             # 简体中文
     └── src/
-        ├── main.rs               # CLI 入口
-        ├── args.rs               # 命令行参数定义
-        │
-        └── commands/             # 子命令实现
-            ├── mod.rs
-            ├── flash.rs          # flash 命令
-            ├── write.rs          # write 命令
-            ├── erase.rs          # erase 命令
-            └── info.rs           # info 命令
+        ├── main.rs               # CLI 入口 + 所有子命令实现
+        ├── config.rs             # TOML 配置文件加载/保存
+        ├── serial.rs             # 交互式串口选择
+        └── commands/             # 子命令模块 (预留)
+            └── mod.rs
 ```
 
 ## 支持的芯片系列
