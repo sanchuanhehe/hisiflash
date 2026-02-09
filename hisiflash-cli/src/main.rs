@@ -547,6 +547,31 @@ mod cli_tests {
     use clap::CommandFactory;
     use std::sync::Mutex;
 
+    // ---- use_fancy_output ----
+
+    #[test]
+    fn test_use_fancy_output_follows_tty_flag() {
+        // When STDERR_IS_TTY is false, use_fancy_output should return false.
+        STDERR_IS_TTY.store(false, std::sync::atomic::Ordering::Relaxed);
+        assert!(!use_fancy_output());
+        // Restore to true for other tests.
+        STDERR_IS_TTY.store(true, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    // ---- parse_hex_u32 additional edge cases ----
+
+    #[test]
+    fn test_cli_parse_flash_without_firmware() {
+        // firmware is now optional: `flash` alone should parse successfully
+        let cli = Cli::try_parse_from(["hisiflash", "flash"]);
+        assert!(cli.is_ok());
+        if let Commands::Flash { firmware, .. } = &cli.unwrap().command {
+            assert!(firmware.is_none());
+        } else {
+            panic!("Expected Flash command");
+        }
+    }
+
     /// Global lock for `rust_i18n::set_locale` which mutates global state.
     /// Only held during set_locale + command construction; assertions run
     /// lock-free so tests can maximally overlap.

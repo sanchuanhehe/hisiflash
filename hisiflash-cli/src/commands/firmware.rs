@@ -388,6 +388,48 @@ mod tests {
     }
 
     #[test]
+    fn test_display_label_with_base() {
+        let base = PathBuf::from("/home/user/project");
+        let c = FirmwareCandidate {
+            path: PathBuf::from("/home/user/project/output/app.fwpkg"),
+            size: 1024,
+            modified: None,
+            priority: 0,
+        };
+        let label = c.display_label(&base);
+        assert!(label.contains("output/app.fwpkg"));
+        assert!(label.contains("1.0 KB"));
+    }
+
+    #[test]
+    fn test_display_label_no_common_prefix() {
+        let base = PathBuf::from("/other/dir");
+        let c = FirmwareCandidate {
+            path: PathBuf::from("/home/user/app.fwpkg"),
+            size: 500,
+            modified: None,
+            priority: 0,
+        };
+        let label = c.display_label(&base);
+        // Falls back to full path.
+        assert!(label.contains("app.fwpkg"));
+        assert!(label.contains("500 B"));
+    }
+
+    #[test]
+    fn test_display_label_exact_base() {
+        let base = PathBuf::from("/project");
+        let c = FirmwareCandidate {
+            path: PathBuf::from("/project/fw.fwpkg"),
+            size: 2 * 1024 * 1024,
+            modified: None,
+            priority: 0,
+        };
+        let label = c.display_label(&base);
+        assert_eq!(label, "fw.fwpkg (2.0 MB)");
+    }
+
+    #[test]
     fn test_resolve_with_explicit_path() {
         let p = PathBuf::from("/some/firmware.fwpkg");
         let result = resolve_firmware(Some(&p), false, false).unwrap();
@@ -421,16 +463,25 @@ mod tests {
         assert!(result.is_err());
     }
 
+    /// Global lock for tests that change the process-wide working directory.
+    static CWD_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
     /// RAII guard that temporarily changes the working directory.
+    /// Also holds `CWD_LOCK` to prevent parallel tests from interfering.
     struct TempCwdGuard {
         original: PathBuf,
+        _lock: std::sync::MutexGuard<'static, ()>,
     }
 
     impl TempCwdGuard {
         fn new(path: &Path) -> Self {
+            let lock = CWD_LOCK.lock().unwrap();
             let original = std::env::current_dir().unwrap();
             std::env::set_current_dir(path).unwrap();
-            Self { original }
+            Self {
+                original,
+                _lock: lock,
+            }
         }
     }
 

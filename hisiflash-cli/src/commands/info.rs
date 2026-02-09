@@ -247,3 +247,140 @@ pub(crate) fn format_partition_type(pt: PartitionType) -> String {
         PartitionType::Unknown(v) => format!("Unknown({v})"),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use hisiflash::PartitionType;
+
+    // ---- partition_type_str ----
+
+    #[test]
+    fn test_partition_type_str_all_variants() {
+        assert_eq!(partition_type_str(PartitionType::Loader), "Loader");
+        assert_eq!(partition_type_str(PartitionType::Normal), "Normal");
+        assert_eq!(partition_type_str(PartitionType::KvNv), "KV-NV");
+        assert_eq!(partition_type_str(PartitionType::Efuse), "eFuse");
+        assert_eq!(partition_type_str(PartitionType::Otp), "OTP");
+        assert_eq!(partition_type_str(PartitionType::Flashboot), "FlashBoot");
+        assert_eq!(partition_type_str(PartitionType::Factory), "Factory");
+        assert_eq!(partition_type_str(PartitionType::Version), "Version");
+        assert_eq!(partition_type_str(PartitionType::SecurityA), "Security-A");
+        assert_eq!(partition_type_str(PartitionType::SecurityB), "Security-B");
+        assert_eq!(partition_type_str(PartitionType::SecurityC), "Security-C");
+        assert_eq!(partition_type_str(PartitionType::ProtocolA), "Protocol-A");
+        assert_eq!(partition_type_str(PartitionType::AppsA), "Apps-A");
+        assert_eq!(
+            partition_type_str(PartitionType::RadioConfig),
+            "RadioConfig"
+        );
+        assert_eq!(partition_type_str(PartitionType::Rom), "ROM");
+        assert_eq!(partition_type_str(PartitionType::Emmc), "eMMC");
+        assert_eq!(partition_type_str(PartitionType::Database), "Database");
+        assert_eq!(partition_type_str(PartitionType::Unknown(99)), "Unknown");
+    }
+
+    // ---- format_partition_type ----
+
+    #[test]
+    fn test_format_partition_type_normal_no_color() {
+        // "Normal" has no ANSI styling — output should be the plain string.
+        let result = format_partition_type(PartitionType::Normal);
+        assert!(result.contains("Normal"));
+    }
+
+    #[test]
+    fn test_format_partition_type_version_no_color() {
+        let result = format_partition_type(PartitionType::Version);
+        assert!(result.contains("Version"));
+    }
+
+    #[test]
+    fn test_format_partition_type_loader_contains_text() {
+        let result = format_partition_type(PartitionType::Loader);
+        // May contain ANSI codes, but the text should be present.
+        assert!(result.contains("Loader"));
+    }
+
+    #[test]
+    fn test_format_partition_type_flashboot_contains_text() {
+        let result = format_partition_type(PartitionType::Flashboot);
+        assert!(result.contains("FlashBoot"));
+    }
+
+    #[test]
+    fn test_format_partition_type_efuse_contains_text() {
+        let result = format_partition_type(PartitionType::Efuse);
+        assert!(result.contains("eFuse"));
+    }
+
+    #[test]
+    fn test_format_partition_type_kvnv_contains_text() {
+        let result = format_partition_type(PartitionType::KvNv);
+        assert!(result.contains("KV-NV"));
+    }
+
+    #[test]
+    fn test_format_partition_type_database_contains_text() {
+        let result = format_partition_type(PartitionType::Database);
+        assert!(result.contains("Database"));
+    }
+
+    #[test]
+    fn test_format_partition_type_unknown_with_value() {
+        let result = format_partition_type(PartitionType::Unknown(42));
+        assert!(result.contains("Unknown(42)"));
+    }
+
+    #[test]
+    fn test_format_partition_type_all_variants_non_empty() {
+        let types = [
+            PartitionType::Loader,
+            PartitionType::Normal,
+            PartitionType::KvNv,
+            PartitionType::Efuse,
+            PartitionType::Otp,
+            PartitionType::Flashboot,
+            PartitionType::Factory,
+            PartitionType::Version,
+            PartitionType::SecurityA,
+            PartitionType::SecurityB,
+            PartitionType::SecurityC,
+            PartitionType::ProtocolA,
+            PartitionType::AppsA,
+            PartitionType::RadioConfig,
+            PartitionType::Rom,
+            PartitionType::Emmc,
+            PartitionType::Database,
+            PartitionType::Unknown(255),
+        ];
+        for pt in &types {
+            let s = format_partition_type(*pt);
+            assert!(
+                !s.is_empty(),
+                "format_partition_type({pt:?}) returned empty"
+            );
+        }
+    }
+
+    #[test]
+    fn test_partition_type_str_matches_format_for_plain_variants() {
+        // For variants that don't have ANSI colors, the two functions should agree.
+        let plain_types = [
+            PartitionType::Normal,
+            PartitionType::Version,
+            PartitionType::ProtocolA,
+            PartitionType::AppsA,
+            PartitionType::RadioConfig,
+            PartitionType::Rom,
+            PartitionType::Emmc,
+        ];
+        for pt in &plain_types {
+            assert_eq!(
+                partition_type_str(*pt),
+                format_partition_type(*pt),
+                "Mismatch for {pt:?}"
+            );
+        }
+    }
+}

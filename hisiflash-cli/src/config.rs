@@ -255,6 +255,11 @@ impl Config {
 mod tests {
     use super::*;
 
+    /// Global lock for tests that change the process-wide working directory.
+    /// Required because `std::env::set_current_dir` is process-global and
+    /// tests run in parallel threads.
+    static CWD_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
     // ---- Default values ----
 
     #[test]
@@ -554,6 +559,134 @@ chip = "bs2x"
         let dir = Config::global_config_dir();
         if let Some(d) = dir {
             assert!(d.to_str().unwrap().contains("hisiflash"));
+        }
+    }
+
+    // ---- save_port ----
+
+    #[test]
+    fn test_save_port_creates_valid_toml() {
+        let tmp = tempfile::tempdir().unwrap();
+        let _guard = TempCwdGuard::new(tmp.path());
+
+        let config = Config::default();
+        config
+            .save_port("/dev/ttyACM0", Some(0x10C4), Some(0xEA60))
+            .unwrap();
+
+        let path = tmp.path().join("hisiflash_ports.toml");
+        assert!(path.exists(), "hisiflash_ports.toml should be created");
+
+        let content = fs::read_to_string(&path).unwrap();
+        let parsed: PortConfig = toml::from_str(&content).unwrap();
+        assert_eq!(parsed.connection.serial.as_deref(), Some("/dev/ttyACM0"));
+        assert_eq!(parsed.usb_device.len(), 1);
+        assert_eq!(parsed.usb_device[0].vid, 0x10C4);
+        assert_eq!(parsed.usb_device[0].pid, 0xEA60);
+    }
+
+    #[test]
+    fn test_save_port_without_vid_pid() {
+        let tmp = tempfile::tempdir().unwrap();
+        let _guard = TempCwdGuard::new(tmp.path());
+
+        let config = Config::default();
+        config.save_port("COM3", None, None).unwrap();
+
+        let content = fs::read_to_string(tmp.path().join("hisiflash_ports.toml")).unwrap();
+        assert!(content.contains("COM3"));
+        let parsed: PortConfig = toml::from_str(&content).unwrap();
+        assert!(parsed.usb_device.is_empty());
+    }
+
+    #[test]
+    fn test_save_port_serialization_only() {
+        // Test the serialization logic without file I/O.
+        let mut port_config = PortConfig::default();
+        port_config.connection.serial = Some("/dev/ttyUSB0".to_string());
+        port_config.usb_device.push(UsbDevice {
+            vid: 0x1A86,
+            pid: 0x7523,
+        });
+        let content = toml::to_string_pretty(&port_config).unwrap();
+        assert!(content.contains("/dev/ttyUSB0"));
+        assert!(content.contains("vid"));
+        assert!(content.contains("pid"));
+
+        // Roundtrip
+        let parsed: PortConfig = toml::from_str(&content).unwrap();
+        assert_eq!(parsed.connection.serial.as_deref(), Some("/dev/ttyUSB0"));
+        assert_eq!(parsed.usb_device.len(), 1);
+    }
+
+    // ---- remember_usb_device ----
+
+    #[test]
+    fn test_remember_usb_device_creates_file() {
+        let tmp = tempfile::tempdir().unwrap();
+        let _guard = TempCwdGuard::new(tmp.path());
+        // Create an hisiflash.toml so it chooses local path
+        fs::write(tmp.path().join("hisiflash.toml"), "").unwrap();
+
+        let mut config = Config::default();
+        config.remember_usb_device(0x1A86, 0x7523).unwrap();
+
+        assert_eq!(config.port.usb_device.len(), 1);
+        assert_eq!(config.port.usb_device[0].vid, 0x1A86);
+        assert_eq!(config.port.usb_device[0].pid, 0x7523);
+
+        let path = tmp.path().join("hisiflash_ports.toml");
+        assert!(path.exists());
+    }
+
+    #[test]
+    fn test_remember_usb_device_no_duplicates() {
+        let tmp = tempfile::tempdir().unwrap();
+        let _guard = TempCwdGuard::new(tmp.path());
+        fs::write(tmp.path().join("hisiflash.toml"), "").unwrap();
+
+        let mut config = Config::default();
+        config.remember_usb_device(0x1A86, 0x7523).unwrap();
+        config.remember_usb_device(0x1A86, 0x7523).unwrap(); // duplicate
+
+        assert_eq!(config.port.usb_device.len(), 1);
+    }
+
+    #[test]
+    fn test_remember_usb_device_multiple_different() {
+        let tmp = tempfile::tempdir().unwrap();
+        let _guard = TempCwdGuard::new(tmp.path());
+        fs::write(tmp.path().join("hisiflash.toml"), "").unwrap();
+
+        let mut config = Config::default();
+        config.remember_usb_device(0x1A86, 0x7523).unwrap();
+        config.remember_usb_device(0x10C4, 0xEA60).unwrap();
+
+        assert_eq!(config.port.usb_device.len(), 2);
+    }
+
+    /// RAII guard that temporarily changes the working directory.
+    /// Also holds `CWD_LOCK` to prevent parallel tests from interfering.
+    struct TempCwdGuard {
+        original: PathBuf,
+        _lock: std::sync::MutexGuard<'static, ()>,
+    }
+
+    impl TempCwdGuard {
+        fn new(path: &Path) -> Self {
+            let lock = CWD_LOCK.lock().unwrap();
+            let original = std::env::current_dir().unwrap();
+            std::env::set_current_dir(path).unwrap();
+            Self {
+                original,
+                _lock: lock,
+            }
+        }
+    }
+
+    impl Drop for TempCwdGuard {
+        fn drop(&mut self) {
+            let _ = std::env::set_current_dir(&self.original);
         }
     }
 }
