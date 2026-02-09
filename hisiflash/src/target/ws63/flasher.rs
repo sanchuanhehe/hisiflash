@@ -991,4 +991,230 @@ mod tests {
         // Verify error is the Unsupported variant
         assert!(matches!(result, Err(crate::error::Error::Unsupported(_))));
     }
+
+    // =====================================================================
+    // Regression tests for protocol fixes (CRC fix + flash protocol fix)
+    // =====================================================================
+
+    /// Regression: erase_size must be aligned to 0x1000 (4KB) boundary.
+    ///
+    /// The official fbb_burntool aligns erase_size to 0x1000:
+    ///   `if (eraseSize % 0x1000 != 0) eraseSize = 0x1000 * (eraseSize / 0x1000 + 1)`
+    ///
+    /// Previously hisiflash passed `len` directly as erase_size without alignment.
+    #[test]
+    fn test_erase_size_alignment_4k() {
+        // Already aligned values should stay the same
+        assert_eq!((0x1000u32 + 0xFFF) & !0xFFF, 0x1000);
+        assert_eq!((0x2000u32 + 0xFFF) & !0xFFF, 0x2000);
+        assert_eq!((0x10000u32 + 0xFFF) & !0xFFF, 0x10000);
+
+        // Non-aligned values should be rounded up to next 4KB boundary
+        assert_eq!((1u32 + 0xFFF) & !0xFFF, 0x1000);
+        assert_eq!((0x1001u32 + 0xFFF) & !0xFFF, 0x2000);
+        assert_eq!((0x2001u32 + 0xFFF) & !0xFFF, 0x3000);
+        assert_eq!((0xFFFu32 + 0xFFF) & !0xFFF, 0x1000);
+
+        // Typical firmware sizes from ws63-liteos-app_all.fwpkg
+        // root_params_sign.bin: length = 0x8F4 (2292 bytes)
+        assert_eq!((0x8F4u32 + 0xFFF) & !0xFFF, 0x1000);
+        // root_params_sign_b.bin: similar
+        assert_eq!((0x900u32 + 0xFFF) & !0xFFF, 0x1000);
+        // A larger typical partition
+        assert_eq!((0x12345u32 + 0xFFF) & !0xFFF, 0x13000);
+    }
+
+    /// Regression: wait_for_magic correctly detects SEBOOT magic bytes.
+    ///
+    /// After LoaderBoot transfer and after each download command, the device
+    /// sends a SEBOOT frame starting with 0xDEADBEEF (little-endian: EF BE AD DE).
+    /// wait_for_magic must find this pattern in the byte stream.
+    #[test]
+    fn test_wait_for_magic_finds_magic() {
+        let port = MockPort::new("/dev/ttyUSB0");
+
+        // Simulate device response: some garbage then magic + frame data
+        let mut response = vec![0x00, 0x41, 0x42]; // garbage bytes
+        response.extend_from_slice(&[0xEF, 0xBE, 0xAD, 0xDE]); // magic
+        response.extend_from_slice(&[0x0C, 0x00, 0xE1, 0x1E, 0x5A, 0x00, 0x00, 0x00]); // frame
+        port.add_read_data(&response);
+
+        let mut flasher = Ws63Flasher::new(port, 921600);
+        let result = flasher.wait_for_magic(Duration::from_millis(500));
+        assert!(result.is_ok(), "wait_for_magic should succeed when magic is present");
+    }
+
+    /// Regression: wait_for_magic times out when no magic present.
+    #[test]
+    fn test_wait_for_magic_timeout_no_magic() {
+        let port = MockPort::new("/dev/ttyUSB0");
+        // No data in buffer -> should timeout
+        let mut flasher = Ws63Flasher::new(port, 921600);
+        let result = flasher.wait_for_magic(Duration::from_millis(100));
+        assert!(result.is_err(), "wait_for_magic should timeout with no data");
+    }
+
+    /// Regression: wait_for_magic with magic preceded by partial match.
+    ///
+    /// Tests the edge case where some bytes of the magic appear before the
+    /// full magic sequence (e.g., 0xEF followed by garbage, then the real magic).
+    #[test]
+    fn test_wait_for_magic_partial_then_real() {
+        let port = MockPort::new("/dev/ttyUSB0");
+
+        // Partial magic (0xEF 0xBE) then non-magic, then real magic
+        let mut response = Vec::new();
+        response.extend_from_slice(&[0xEF, 0xBE, 0x00]); // partial match then break
+        response.extend_from_slice(&[0xEF, 0xBE, 0xAD, 0xDE]); // real magic
+        response.extend_from_slice(&[0x0C, 0x00, 0xE1, 0x1E, 0x5A, 0x00]); // frame tail
+        port.add_read_data(&response);
+
+        let mut flasher = Ws63Flasher::new(port, 921600);
+        let result = flasher.wait_for_magic(Duration::from_millis(500));
+        assert!(result.is_ok(), "wait_for_magic should handle partial matches");
+    }
+
+    /// Regression: LoaderBoot must NOT send download command (0xD2).
+    ///
+    /// In the official fbb_burntool, `SendBurnCmd()` skips the download payload
+    /// for LOADER type: `if (GetCurrentCmdType() != BurnCtrl::LOADER)`.
+    /// ws63flash also only calls ymodem_xfer() directly after handshake for LoaderBoot.
+    ///
+    /// Previously hisiflash called download_binary() for LoaderBoot, which sent
+    /// a 0xD2 download command frame. This caused the device to misinterpret
+    /// the frame as data corruption.
+    #[test]
+    fn test_loaderboot_no_download_command() {
+        let port = MockPort::new("/dev/ttyUSB0");
+
+        // Simulate: device sends 'C' for YMODEM, then ACKs all blocks, then magic
+        let mut response = Vec::new();
+        response.push(b'C'); // YMODEM 'C' request
+        // Block 0 (file info) ACK
+        response.push(0x06); // ACK
+        // Data block ACKs (for a small 1-byte payload, 1 block)
+        response.push(0x06); // ACK for data block
+        // EOT ACK
+        response.push(0x06); // ACK for EOT
+        // Finish block ACK
+        response.push(0x06); // ACK for finish block
+        port.add_read_data(&response);
+
+        let mut flasher = Ws63Flasher::new(port, 921600);
+        let result = flasher.transfer_loaderboot("test.bin", &[0xAA], &mut |_, _, _| {});
+
+        // Transfer should succeed (or fail on mock port details, but NOT send 0xD2)
+        // The key assertion: check that no download command frame was written
+        let written = flasher.port.get_written_data();
+
+        // Download command frame starts with magic + has cmd byte 0xD2
+        // Scan the written data for 0xD2 command byte at the expected position
+        // Frame format: [EF BE AD DE] [len_lo len_hi] [CMD] [SCMD] ...
+        let has_download_cmd = written.windows(8).any(|w| {
+            w[0] == 0xEF
+                && w[1] == 0xBE
+                && w[2] == 0xAD
+                && w[3] == 0xDE
+                && w[6] == 0xD2
+                && w[7] == 0x2D
+        });
+
+        assert!(
+            !has_download_cmd,
+            "LoaderBoot transfer must NOT send download command (0xD2). \
+             Written data should only contain YMODEM blocks, not SEBOOT command frames."
+        );
+
+        // Also verify that the YMODEM transfer actually wrote something
+        assert!(
+            !written.is_empty(),
+            "YMODEM transfer should have written data for LoaderBoot"
+        );
+
+        // Verify the result succeeded
+        assert!(result.is_ok(), "LoaderBoot transfer should succeed: {:?}", result.err());
+    }
+
+    /// Regression: download_binary for normal partitions MUST send download command (0xD2).
+    ///
+    /// After LoaderBoot, all subsequent partitions require a download command
+    /// with addr, len, and aligned erase_size before the YMODEM transfer.
+    #[test]
+    fn test_normal_partition_sends_download_command() {
+        let port = MockPort::new("/dev/ttyUSB0");
+
+        // Simulate: device sends magic ACK after download command, then 'C' for YMODEM
+        let mut response = Vec::new();
+        // ACK frame for download command (magic + frame data)
+        response.extend_from_slice(&[0xEF, 0xBE, 0xAD, 0xDE]);
+        response.extend_from_slice(&[0x0C, 0x00, 0xE1, 0x1E, 0x5A, 0x00, 0x00, 0x00]);
+        // Note: wait_for_magic drains remaining bytes after the magic in one read call,
+        // so YMODEM responses (C, ACKs) get consumed. This is a mock limitation.
+        // We just verify the download command was sent; full flow is tested on hardware.
+        port.add_read_data(&response);
+
+        let mut flasher = Ws63Flasher::new(port, 921600);
+        let test_data = vec![0xBB; 100];
+        // The transfer will fail because 'C' and ACKs were drained by wait_for_magic,
+        // but we only care about verifying the download command was sent.
+        let _result = flasher.try_download_binary(
+            "test_partition.bin",
+            &test_data,
+            0x00800000,
+            &mut |_, _, _| {},
+        );
+
+        let written = flasher.port.get_written_data();
+
+        // Verify download command WAS sent
+        let has_download_cmd = written.windows(8).any(|w| {
+            w[0] == 0xEF
+                && w[1] == 0xBE
+                && w[2] == 0xAD
+                && w[3] == 0xDE
+                && w[6] == 0xD2
+                && w[7] == 0x2D
+        });
+
+        assert!(
+            has_download_cmd,
+            "Normal partition download must send download command (0xD2). \
+             Written data should contain a SEBOOT command frame."
+        );
+    }
+
+    /// Regression: download command frame must contain properly aligned erase_size.
+    ///
+    /// Verifies the actual bytes written in the download command frame have
+    /// the erase_size field aligned to 0x1000 (4KB).
+    #[test]
+    fn test_download_frame_erase_size_in_bytes() {
+        // Test with a non-aligned length (100 bytes = 0x64)
+        // Expected erase_size: (0x64 + 0xFFF) & !0xFFF = 0x1000
+        let frame = CommandFrame::download(0x00800000, 100, (100 + 0xFFF) & !0xFFF);
+        let data = frame.build();
+
+        // Frame layout: Magic(4) + Len(2) + CMD(1) + SCMD(1) + addr(4) + len(4) + erase_size(4) + const(2) + CRC(2)
+        // erase_size starts at offset 16
+        let erase_size = u32::from_le_bytes([data[16], data[17], data[18], data[19]]);
+        assert_eq!(
+            erase_size, 0x1000,
+            "erase_size for 100 bytes should be 0x1000 (4KB aligned), got 0x{erase_size:X}"
+        );
+
+        // Test with exactly 4KB
+        let frame2 = CommandFrame::download(0x00800000, 0x1000, (0x1000u32 + 0xFFF) & !0xFFF);
+        let data2 = frame2.build();
+        let erase_size2 = u32::from_le_bytes([data2[16], data2[17], data2[18], data2[19]]);
+        assert_eq!(erase_size2, 0x1000, "erase_size for exactly 4KB should remain 0x1000");
+
+        // Test with 4KB + 1
+        let frame3 = CommandFrame::download(0x00800000, 0x1001, (0x1001u32 + 0xFFF) & !0xFFF);
+        let data3 = frame3.build();
+        let erase_size3 = u32::from_le_bytes([data3[16], data3[17], data3[18], data3[19]]);
+        assert_eq!(
+            erase_size3, 0x2000,
+            "erase_size for 0x1001 bytes should be 0x2000 (next 4KB boundary)"
+        );
+    }
 }

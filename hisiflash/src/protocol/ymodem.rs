@@ -327,4 +327,201 @@ mod tests {
         assert_eq!(block[2], 0xFA);
         assert_eq!(block.len(), 3 + STX_BLOCK_SIZE + 2);
     }
+
+    // =====================================================================
+    // Regression tests for YMODEM protocol fixes
+    // =====================================================================
+
+    /// Mock serial port with separate read/write buffers for YMODEM testing.
+    ///
+    /// Unlike `Cursor<Vec<u8>>`, this keeps reads and writes independent.
+    struct MockSerial {
+        read_buf: std::collections::VecDeque<u8>,
+        write_buf: Vec<u8>,
+    }
+
+    impl MockSerial {
+        fn new(response: &[u8]) -> Self {
+            Self {
+                read_buf: response.iter().copied().collect(),
+                write_buf: Vec::new(),
+            }
+        }
+    }
+
+    impl std::io::Read for MockSerial {
+        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+            if self.read_buf.is_empty() {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::TimedOut,
+                    "no data",
+                ));
+            }
+            let n = buf.len().min(self.read_buf.len());
+            for b in buf.iter_mut().take(n) {
+                *b = self.read_buf.pop_front().unwrap();
+            }
+            Ok(n)
+        }
+    }
+
+    impl std::io::Write for MockSerial {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            self.write_buf.extend_from_slice(buf);
+            Ok(buf.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    /// Regression: YMODEM transfer must only call wait_for_c ONCE at the start.
+    ///
+    /// WS63 device sends a single 'C' after acknowledging the download command
+    /// (or after handshake for LoaderBoot). It does NOT send a second 'C' after
+    /// block 0 (file info) ACK. Previously hisiflash called wait_for_c twice
+    /// (once in transfer(), once before data blocks), causing a timeout on the
+    /// second wait.
+    ///
+    /// Reference: ws63flash ymodem_xfer() only waits for 'C' once at the start,
+    /// then sends block 0, then immediately proceeds to data blocks.
+    /// fbb_burntool HandleWaitStartC also transitions to data sending after
+    /// one 'C' received.
+    #[test]
+    fn test_ymodem_transfer_single_c_wait() {
+        // Simulate device that sends: C, ACK(block0), ACK(data), ACK(EOT), ACK(finish)
+        // NO second 'C' between block 0 ACK and data blocks.
+        let mut response = Vec::new();
+        response.push(control::C);   // Initial 'C' for YMODEM start
+        response.push(control::ACK); // ACK for block 0 (file info)
+        response.push(control::ACK); // ACK for data block 1
+        response.push(control::ACK); // ACK for EOT
+        response.push(control::ACK); // ACK for finish block
+
+        let mut port = MockSerial::new(&response);
+        let config = YmodemConfig {
+            char_timeout: Duration::from_millis(100),
+            c_timeout: Duration::from_millis(200),
+            max_retries: 1,
+            verbose: 0,
+        };
+
+        let mut ymodem = YmodemTransfer::with_config(&mut port, config);
+        let test_data = vec![0x42; 100]; // Small test payload
+        let result = ymodem.transfer("test.bin", &test_data, |_, _| {});
+
+        assert!(
+            result.is_ok(),
+            "YMODEM transfer should succeed with single 'C' (no second 'C' after block 0). \
+             Error: {:?}",
+            result.err()
+        );
+    }
+
+    /// Regression: YMODEM transfer must NOT wait for 'C' before finish block.
+    ///
+    /// After EOT is ACKed, ws63flash sends the finish block immediately.
+    /// Previously hisiflash waited for 'C' before send_finish(), which could
+    /// timeout if the device doesn't send 'C' at that point.
+    #[test]
+    fn test_ymodem_no_c_before_finish() {
+        // Response sequence without any extra 'C' between EOT ACK and finish
+        let mut response = Vec::new();
+        response.push(control::C);   // Initial 'C'
+        response.push(control::ACK); // ACK for block 0
+        response.push(control::ACK); // ACK for data block 1
+        response.push(control::ACK); // ACK for EOT
+        // Note: NO 'C' here before finish block
+        response.push(control::ACK); // ACK for finish block
+
+        let mut port = MockSerial::new(&response);
+        let config = YmodemConfig {
+            char_timeout: Duration::from_millis(100),
+            c_timeout: Duration::from_millis(200),
+            max_retries: 1,
+            verbose: 0,
+        };
+
+        let mut ymodem = YmodemTransfer::with_config(&mut port, config);
+        let test_data = vec![0x55; 50];
+        let result = ymodem.transfer("test.bin", &test_data, |_, _| {});
+
+        assert!(
+            result.is_ok(),
+            "YMODEM should complete without waiting for 'C' before finish block. \
+             Error: {:?}",
+            result.err()
+        );
+    }
+
+    /// Regression: YMODEM transfer with exactly 1024 bytes (one full STX block).
+    #[test]
+    fn test_ymodem_transfer_exact_block_size() {
+        let mut response = Vec::new();
+        response.push(control::C);   // Initial 'C'
+        response.push(control::ACK); // ACK for block 0
+        response.push(control::ACK); // ACK for data block 1
+        response.push(control::ACK); // ACK for EOT
+        response.push(control::ACK); // ACK for finish block
+
+        let mut port = MockSerial::new(&response);
+        let config = YmodemConfig {
+            char_timeout: Duration::from_millis(100),
+            c_timeout: Duration::from_millis(200),
+            max_retries: 1,
+            verbose: 0,
+        };
+
+        let mut ymodem = YmodemTransfer::with_config(&mut port, config);
+        let test_data = vec![0xCC; STX_BLOCK_SIZE]; // Exactly 1024 bytes
+        let result = ymodem.transfer("exact_block.bin", &test_data, |_, _| {});
+
+        assert!(
+            result.is_ok(),
+            "YMODEM should handle exactly 1024-byte payload. Error: {:?}",
+            result.err()
+        );
+    }
+
+    /// Regression: YMODEM transfer with multi-block data.
+    #[test]
+    fn test_ymodem_transfer_multi_block() {
+        let num_blocks = 3;
+        let mut response = Vec::new();
+        response.push(control::C);   // Initial 'C'
+        response.push(control::ACK); // ACK for block 0
+        for _ in 0..num_blocks {
+            response.push(control::ACK); // ACK for each data block
+        }
+        response.push(control::ACK); // ACK for EOT
+        response.push(control::ACK); // ACK for finish block
+
+        let mut port = MockSerial::new(&response);
+        let config = YmodemConfig {
+            char_timeout: Duration::from_millis(100),
+            c_timeout: Duration::from_millis(200),
+            max_retries: 1,
+            verbose: 0,
+        };
+
+        let mut ymodem = YmodemTransfer::with_config(&mut port, config);
+        // 3 full blocks = 3072 bytes
+        let test_data = vec![0xDD; STX_BLOCK_SIZE * num_blocks];
+        let mut progress_calls = 0;
+        let result = ymodem.transfer("multi_block.bin", &test_data, |current, total| {
+            assert_eq!(total, STX_BLOCK_SIZE * num_blocks);
+            assert!(current <= total);
+            progress_calls += 1;
+        });
+
+        assert!(
+            result.is_ok(),
+            "YMODEM should handle multi-block transfer. Error: {:?}",
+            result.err()
+        );
+        assert_eq!(
+            progress_calls, num_blocks,
+            "Progress should be called once per block"
+        );
+    }
 }
