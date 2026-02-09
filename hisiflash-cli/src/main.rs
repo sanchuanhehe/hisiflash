@@ -329,15 +329,20 @@ fn main() -> Result<()> {
     // print localized help via clap with translated section headings.
     // This intercepts before clap's auto-help so we can apply help_template
     // with i18n strings.
-    let wants_help = raw_args.iter().any(|a| a == "-h" || a == "--help");
+    let wants_short_help = raw_args.iter().any(|a| a == "-h");
+    let wants_long_help = raw_args.iter().any(|a| a == "--help");
+    let wants_help = wants_short_help || wants_long_help;
+    let has_help_subcmd = raw_args.iter().skip(1).any(|a| a == "help");
     let no_args = raw_args.len() <= 1;
 
-    if wants_help || no_args {
+    if wants_help || no_args || has_help_subcmd {
         let mut app = build_localized_command();
+        let use_long = wants_long_help || has_help_subcmd;
 
-        // Determine subcommand if provided
+        // Collect real subcommand names (exclude our synthetic "help" entry)
         let subcmd_names: Vec<String> = app
             .get_subcommands()
+            .filter(|s| s.get_name() != "help")
             .map(|s| s.get_name().to_string())
             .collect();
         let found = raw_args
@@ -346,13 +351,20 @@ fn main() -> Result<()> {
             .find(|token| subcmd_names.iter().any(|n| n == token.as_str()));
 
         if let Some(cmd_name) = found {
-            // Print subcommand help
+            // Build the parent command to propagate global args to subcommands
+            app.build();
             if let Some(sub) = app
-                .get_subcommands()
+                .get_subcommands_mut()
                 .find(|s| s.get_name() == cmd_name.as_str())
             {
-                let _ = sub.clone().print_help();
+                if use_long {
+                    let _ = sub.print_long_help();
+                } else {
+                    let _ = sub.print_help();
+                }
             }
+        } else if use_long {
+            let _ = app.print_long_help();
         } else {
             let _ = app.print_help();
         }
@@ -1246,6 +1258,12 @@ fn cmd_completions_install(shell_arg: Option<Shell>) -> Result<()> {
 /// while replacing all user-visible text (section headings, command descriptions,
 /// argument help) with translations from the locale files.
 fn build_localized_command() -> clap::Command {
+    // Leak localized heading strings once (CLI runs once, tiny and harmless)
+    let args_heading: &'static str =
+        Box::leak(t!("help.arguments_heading").to_string().into_boxed_str());
+    let opts_heading: &'static str =
+        Box::leak(t!("help.options_heading").to_string().into_boxed_str());
+
     let tpl = format!(
         "{bin} {version}\n\n{about}\n\n\
          {usage_h}:\n  {usage}\n\n\
@@ -1267,21 +1285,47 @@ fn build_localized_command() -> clap::Command {
     let sub_tpl = format!(
         "{bin} {version}\n\n{about}\n\n\
          {usage_h}:\n  {usage}\n\n\
-         {opts_h}:\n{options}\n",
+         {all_args}\n",
         bin = "{bin}",
         version = "{version}",
         about = "{about}",
         usage_h = t!("help.usage_heading"),
         usage = "{usage}",
-        opts_h = t!("help.options_heading"),
-        options = "{options}",
+        all_args = "{all-args}",
     );
 
     Cli::command()
         .help_template(&tpl)
         .about(t!("app.about").to_string())
         .after_help(t!("app.after_help").to_string())
-        .mut_args(localize_arg)
+        .disable_help_flag(true)
+        .disable_version_flag(true)
+        .arg(
+            clap::Arg::new("help")
+                .short('h')
+                .long("help")
+                .help(t!("arg.help_flag.help").to_string())
+                .help_heading(opts_heading)
+                .action(clap::ArgAction::Help)
+                .global(true),
+        )
+        .arg(
+            clap::Arg::new("version")
+                .short('V')
+                .long("version")
+                .help(t!("arg.version_flag.help").to_string())
+                .help_heading(opts_heading)
+                .action(clap::ArgAction::Version)
+                .global(true),
+        )
+        .mut_args(move |arg| {
+            let arg = localize_arg(arg);
+            if arg.get_short().is_none() && arg.get_long().is_none() {
+                arg.help_heading(args_heading)
+            } else {
+                arg.help_heading(opts_heading)
+            }
+        })
         .mut_subcommands(move |sub| {
             let name = sub.get_name().to_string();
             let about_key = format!("cmd.{}.about", name.replace('-', "_"));
@@ -1291,8 +1335,17 @@ fn build_localized_command() -> clap::Command {
             } else {
                 sub
             };
-            sub.help_template(sub_tpl.clone()).mut_args(localize_arg)
+            sub.help_template(sub_tpl.clone()).mut_args(move |arg| {
+                let arg = localize_arg(arg);
+                if arg.get_short().is_none() && arg.get_long().is_none() {
+                    arg.help_heading(args_heading)
+                } else {
+                    arg.help_heading(opts_heading)
+                }
+            })
         })
+        .disable_help_subcommand(true)
+        .subcommand(clap::Command::new("help").about(t!("cmd.help.about").to_string()))
 }
 
 /// Replace an arg's help text with its localized version if available.
@@ -1367,6 +1420,12 @@ mod locale_tests {
 mod cli_tests {
     use super::*;
     use clap::CommandFactory;
+    use std::sync::Mutex;
+
+    /// Global lock for tests that depend on `rust_i18n::set_locale`.
+    /// `set_locale` modifies global state, so locale-dependent tests
+    /// must not run in parallel.
+    static LOCALE_LOCK: Mutex<()> = Mutex::new(());
 
     // ---- clap validation ----
 
@@ -1692,8 +1751,30 @@ mod cli_tests {
 
     // ---- build_localized_command ----
 
+    /// Render a command's short help to a String for assertion.
+    fn render_help(cmd: &mut clap::Command) -> String {
+        cmd.build();
+        cmd.render_help().to_string()
+    }
+
+    /// Render a command's long help to a String for assertion.
+    fn render_long_help(cmd: &mut clap::Command) -> String {
+        cmd.build();
+        cmd.render_long_help().to_string()
+    }
+
+    /// Get a built subcommand by name from the localized command.
+    fn get_subcmd(app: &mut clap::Command, name: &str) -> clap::Command {
+        app.build();
+        app.get_subcommands()
+            .find(|s| s.get_name() == name)
+            .unwrap()
+            .clone()
+    }
+
     #[test]
     fn test_build_localized_command_creates_valid_command() {
+        let _lock = LOCALE_LOCK.lock().unwrap();
         rust_i18n::set_locale("en");
         let cmd = build_localized_command();
         // Should be valid
@@ -1703,6 +1784,7 @@ mod cli_tests {
 
     #[test]
     fn test_build_localized_command_has_subcommands() {
+        let _lock = LOCALE_LOCK.lock().unwrap();
         rust_i18n::set_locale("en");
         let cmd = build_localized_command();
         let subcmd_names: Vec<_> = cmd
@@ -1720,6 +1802,7 @@ mod cli_tests {
 
     #[test]
     fn test_build_localized_command_zh_cn() {
+        let _lock = LOCALE_LOCK.lock().unwrap();
         rust_i18n::set_locale("zh-CN");
         let cmd = build_localized_command();
         cmd.clone().debug_assert();
@@ -1738,6 +1821,7 @@ mod cli_tests {
 
     #[test]
     fn test_localize_arg_known_key() {
+        let _lock = LOCALE_LOCK.lock().unwrap();
         rust_i18n::set_locale("zh-CN");
         let arg = clap::Arg::new("port").help("original help");
         let localized = localize_arg(arg);
@@ -1752,6 +1836,7 @@ mod cli_tests {
 
     #[test]
     fn test_localize_arg_unknown_key() {
+        let _lock = LOCALE_LOCK.lock().unwrap();
         rust_i18n::set_locale("en");
         let arg = clap::Arg::new("nonexistent_arg_xyz").help("keep this");
         let localized = localize_arg(arg);
@@ -1761,5 +1846,332 @@ mod cli_tests {
             .unwrap_or_default();
         // Should keep original since no translation exists
         assert_eq!(help, "keep this");
+    }
+
+    // ---- Regression tests for help localization (all paths) ----
+
+    #[test]
+    fn test_main_help_zh_cn_has_localized_headings() {
+        let _lock = LOCALE_LOCK.lock().unwrap();
+        rust_i18n::set_locale("zh-CN");
+        let mut app = build_localized_command();
+        let help = render_help(&mut app);
+        assert!(help.contains("用法:"), "Missing '用法:' heading:\n{help}");
+        assert!(help.contains("命令:"), "Missing '命令:' heading:\n{help}");
+        assert!(help.contains("选项:"), "Missing '选项:' heading:\n{help}");
+    }
+
+    #[test]
+    fn test_main_help_en_has_english_headings() {
+        let _lock = LOCALE_LOCK.lock().unwrap();
+        rust_i18n::set_locale("en");
+        let mut app = build_localized_command();
+        let help = render_help(&mut app);
+        assert!(help.contains("USAGE:"), "Missing 'USAGE:' heading:\n{help}");
+        assert!(
+            help.contains("COMMANDS:"),
+            "Missing 'COMMANDS:' heading:\n{help}"
+        );
+        assert!(
+            help.contains("OPTIONS:"),
+            "Missing 'OPTIONS:' heading:\n{help}"
+        );
+    }
+
+    #[test]
+    fn test_main_help_zh_cn_command_descriptions() {
+        let _lock = LOCALE_LOCK.lock().unwrap();
+        rust_i18n::set_locale("zh-CN");
+        let mut app = build_localized_command();
+        let help = render_help(&mut app);
+        assert!(
+            help.contains("烧录 FWPKG 固件包"),
+            "flash description not localized:\n{help}"
+        );
+        assert!(
+            help.contains("列出可用串口"),
+            "list-ports description not localized:\n{help}"
+        );
+        assert!(
+            help.contains("打印帮助信息或指定子命令的帮助"),
+            "help description not localized:\n{help}"
+        );
+    }
+
+    #[test]
+    fn test_main_help_zh_cn_option_descriptions() {
+        let _lock = LOCALE_LOCK.lock().unwrap();
+        rust_i18n::set_locale("zh-CN");
+        let mut app = build_localized_command();
+        let help = render_help(&mut app);
+        assert!(
+            help.contains("使用的串口"),
+            "--port help not localized:\n{help}"
+        );
+        assert!(
+            help.contains("数据传输波特率"),
+            "--baud help not localized:\n{help}"
+        );
+        assert!(
+            help.contains("打印帮助信息"),
+            "--help help not localized:\n{help}"
+        );
+        assert!(
+            help.contains("打印版本信息"),
+            "--version help not localized:\n{help}"
+        );
+    }
+
+    #[test]
+    fn test_main_help_no_english_leaks_zh_cn() {
+        let _lock = LOCALE_LOCK.lock().unwrap();
+        rust_i18n::set_locale("zh-CN");
+        let mut app = build_localized_command();
+        let help = render_help(&mut app);
+        // These English strings should NOT appear in zh-CN output
+        assert!(
+            !help.contains("Print help"),
+            "English 'Print help' leaked into zh-CN:\n{help}"
+        );
+        assert!(
+            !help.contains("Print version"),
+            "English 'Print version' leaked into zh-CN:\n{help}"
+        );
+        assert!(
+            !help.contains("USAGE:"),
+            "English 'USAGE:' leaked into zh-CN:\n{help}"
+        );
+        assert!(
+            !help.contains("Commands:"),
+            "English 'Commands:' leaked into zh-CN:\n{help}"
+        );
+        assert!(
+            !help.contains("Options:"),
+            "English 'Options:' heading leaked into zh-CN:\n{help}"
+        );
+    }
+
+    #[test]
+    fn test_subcmd_help_flash_zh_cn_has_localized_content() {
+        let _lock = LOCALE_LOCK.lock().unwrap();
+        rust_i18n::set_locale("zh-CN");
+        let mut app = build_localized_command();
+        let mut sub = get_subcmd(&mut app, "flash");
+        let help = render_help(&mut sub);
+        assert!(
+            help.contains("烧录 FWPKG 固件包"),
+            "flash about not localized:\n{help}"
+        );
+        assert!(
+            help.contains("FWPKG 固件文件路径"),
+            "firmware arg not localized:\n{help}"
+        );
+        assert!(
+            help.contains("仅烧录指定分区"),
+            "filter arg not localized:\n{help}"
+        );
+    }
+
+    #[test]
+    fn test_subcmd_help_flash_zh_cn_has_localized_headings() {
+        let _lock = LOCALE_LOCK.lock().unwrap();
+        rust_i18n::set_locale("zh-CN");
+        let mut app = build_localized_command();
+        let mut sub = get_subcmd(&mut app, "flash");
+        let help = render_help(&mut sub);
+        assert!(
+            help.contains("用法:"),
+            "Missing '用法:' in flash help:\n{help}"
+        );
+        assert!(
+            help.contains("参数:"),
+            "Missing '参数:' in flash help:\n{help}"
+        );
+        assert!(
+            help.contains("选项:"),
+            "Missing '选项:' in flash help:\n{help}"
+        );
+    }
+
+    #[test]
+    fn test_subcmd_help_flash_en_has_english_headings() {
+        let _lock = LOCALE_LOCK.lock().unwrap();
+        rust_i18n::set_locale("en");
+        let mut app = build_localized_command();
+        let mut sub = get_subcmd(&mut app, "flash");
+        let help = render_long_help(&mut sub);
+        assert!(
+            help.contains("USAGE:"),
+            "Missing 'USAGE:' in flash help:\n{help}"
+        );
+        assert!(
+            help.contains("ARGUMENTS:"),
+            "Missing 'ARGUMENTS:' in flash help:\n{help}"
+        );
+        assert!(
+            help.contains("OPTIONS:"),
+            "Missing 'OPTIONS:' in flash help:\n{help}"
+        );
+    }
+
+    #[test]
+    fn test_subcmd_help_flash_global_args_propagated() {
+        let _lock = LOCALE_LOCK.lock().unwrap();
+        rust_i18n::set_locale("zh-CN");
+        let mut app = build_localized_command();
+        let mut sub = get_subcmd(&mut app, "flash");
+        let help = render_help(&mut sub);
+        // Global options should appear in subcommand help
+        assert!(
+            help.contains("--port"),
+            "Global --port missing from flash help:\n{help}"
+        );
+        assert!(
+            help.contains("--baud"),
+            "Global --baud missing from flash help:\n{help}"
+        );
+        assert!(
+            help.contains("--chip"),
+            "Global --chip missing from flash help:\n{help}"
+        );
+        assert!(
+            help.contains("-h, --help"),
+            "Global -h/--help missing from flash help:\n{help}"
+        );
+        assert!(
+            help.contains("-V, --version"),
+            "Global -V/--version missing from flash help:\n{help}"
+        );
+    }
+
+    #[test]
+    fn test_subcmd_help_flash_no_english_leaks_zh_cn() {
+        let _lock = LOCALE_LOCK.lock().unwrap();
+        rust_i18n::set_locale("zh-CN");
+        let mut app = build_localized_command();
+        let mut sub = get_subcmd(&mut app, "flash");
+        let help = render_long_help(&mut sub);
+        assert!(
+            !help.contains("Print help"),
+            "English 'Print help' leaked into flash zh-CN:\n{help}"
+        );
+        assert!(
+            !help.contains("Print version"),
+            "English 'Print version' leaked into flash zh-CN:\n{help}"
+        );
+        assert!(
+            !help.contains("Options:"),
+            "English 'Options:' heading leaked into flash zh-CN:\n{help}"
+        );
+        assert!(
+            !help.contains("Arguments:"),
+            "English 'Arguments:' heading leaked into flash zh-CN:\n{help}"
+        );
+    }
+
+    #[test]
+    fn test_subcmd_erase_no_arguments_heading() {
+        // Erase has no positional args — should not have an "参数:" section
+        let _lock = LOCALE_LOCK.lock().unwrap();
+        rust_i18n::set_locale("zh-CN");
+        let mut app = build_localized_command();
+        let mut sub = get_subcmd(&mut app, "erase");
+        let help = render_help(&mut sub);
+        assert!(
+            !help.contains("参数:\n"),
+            "Erase should not have '参数:' heading with no positionals:\n{help}"
+        );
+    }
+
+    #[test]
+    fn test_subcmd_write_zh_cn_localized() {
+        let _lock = LOCALE_LOCK.lock().unwrap();
+        rust_i18n::set_locale("zh-CN");
+        let mut app = build_localized_command();
+        let mut sub = get_subcmd(&mut app, "write");
+        let help = render_help(&mut sub);
+        assert!(
+            help.contains("将原始二进制文件写入 Flash"),
+            "write about not localized:\n{help}"
+        );
+    }
+
+    #[test]
+    fn test_subcmd_completions_zh_cn_localized() {
+        let _lock = LOCALE_LOCK.lock().unwrap();
+        rust_i18n::set_locale("zh-CN");
+        let mut app = build_localized_command();
+        let mut sub = get_subcmd(&mut app, "completions");
+        let help = render_help(&mut sub);
+        assert!(
+            help.contains("生成 Shell 补全脚本"),
+            "completions about not localized:\n{help}"
+        );
+        assert!(
+            help.contains("自动安装补全脚本"),
+            "install arg not localized:\n{help}"
+        );
+    }
+
+    #[test]
+    fn test_long_help_has_more_detail_than_short() {
+        let _lock = LOCALE_LOCK.lock().unwrap();
+        rust_i18n::set_locale("zh-CN");
+        let mut app = build_localized_command();
+        let short = render_help(&mut app);
+        let mut app2 = build_localized_command();
+        let long = render_long_help(&mut app2);
+        assert!(
+            long.len() > short.len(),
+            "Long help should be longer than short help"
+        );
+    }
+
+    #[test]
+    fn test_subcmd_long_help_has_more_detail_than_short() {
+        let _lock = LOCALE_LOCK.lock().unwrap();
+        rust_i18n::set_locale("zh-CN");
+        let mut app = build_localized_command();
+        let mut sub_short = get_subcmd(&mut app, "flash");
+        let short = render_help(&mut sub_short);
+        let mut app2 = build_localized_command();
+        let mut sub_long = get_subcmd(&mut app2, "flash");
+        let long = render_long_help(&mut sub_long);
+        assert!(
+            long.len() > short.len(),
+            "Flash long help should be longer than short help"
+        );
+    }
+
+    #[test]
+    fn test_all_subcommands_have_localized_about_zh_cn() {
+        let _lock = LOCALE_LOCK.lock().unwrap();
+        rust_i18n::set_locale("zh-CN");
+        let mut app = build_localized_command();
+        app.build();
+        let expected = [
+            ("flash", "烧录"),
+            ("write", "写入"),
+            ("write-program", "写入"),
+            ("erase", "擦除"),
+            ("info", "显示"),
+            ("list-ports", "列出"),
+            ("monitor", "监视器"),
+            ("completions", "补全"),
+            ("help", "帮助"),
+        ];
+        for (name, keyword) in expected {
+            let sub = app.get_subcommands().find(|s| s.get_name() == name);
+            assert!(sub.is_some(), "Subcommand '{name}' not found");
+            let about = sub
+                .unwrap()
+                .get_about()
+                .map(std::string::ToString::to_string)
+                .unwrap_or_default();
+            assert!(
+                about.contains(keyword),
+                "Subcommand '{name}' about should contain '{keyword}', got: '{about}'"
+            );
+        }
     }
 }

@@ -62,6 +62,7 @@ serial.no_ports_found: "未找到串口。请连接设备或使用 -p 参数指�
 # 帮助模板标题（用于 clap help_template 本地化）
 help.usage_heading: "用法"
 help.commands_heading: "命令"
+help.arguments_heading: "参数"
 help.options_heading: "选项"
 
 # 应用级帮助文本
@@ -77,6 +78,7 @@ cmd.info.about: "显示固件文件信息"
 cmd.list_ports.about: "列出可用串口"
 cmd.monitor.about: "打开串口监视器"
 cmd.completions.about: "生成 Shell 补全脚本"
+cmd.help.about: "打印帮助信息或指定子命令的帮助"
 
 # 全局选项
 arg.port.help: "使用的串口 (未指定时自动检测)"
@@ -117,6 +119,10 @@ arg.monitor_baud.help: "监视器波特率 (默认: 115200)"
 # completions 命令选项
 arg.shell.help: "Shell 补全脚本类型"
 arg.install.help: "自动安装补全脚本到 Shell 配置"
+
+# 内置参数
+arg.help_flag.help: "打印帮助信息 (使用 '--help' 查看更多)"
+arg.version_flag.help: "打印版本信息"
 
 serial.multiple_ports: "发现多个串口。请使用 -p 参数指定端口或禁用 --non-interactive 选项。"
 serial.no_ports_available: "没有可用的串口。"
