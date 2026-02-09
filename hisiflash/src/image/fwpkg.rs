@@ -771,12 +771,14 @@ mod tests {
     fn build_test_fwpkg_v1(partitions: &[(&str, u32, u32, u32, u32, u32)]) -> Vec<u8> {
         use byteorder::{LittleEndian, WriteBytesExt};
 
+        #[allow(clippy::cast_possible_truncation)]
         let cnt = partitions.len() as u16;
         let header_size = HEADER_SIZE_V1;
         let bin_infos_size = partitions.len() * BIN_INFO_SIZE_V1;
 
         // We need to calculate total data size — sum of all partition lengths
         let total_data: u32 = partitions.iter().map(|p| p.2).sum();
+        #[allow(clippy::cast_possible_truncation)]
         let total_len = (header_size + bin_infos_size) as u32 + total_data;
 
         // Build header without CRC first
@@ -791,6 +793,7 @@ mod tests {
         data.write_u32::<LittleEndian>(total_len).unwrap();
 
         // Build BinInfo entries
+        #[allow(clippy::cast_possible_truncation)]
         let mut data_offset = (header_size + bin_infos_size) as u32;
         for (name, _offset, length, burn_addr, burn_size, ptype) in partitions {
             // name (32 bytes, null-padded)

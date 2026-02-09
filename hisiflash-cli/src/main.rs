@@ -1486,7 +1486,7 @@ mod cli_tests {
         let cmd = build_localized_command();
         cmd.clone().debug_assert();
         // About should be Chinese
-        let about = cmd.get_about().map(|a| a.to_string()).unwrap_or_default();
+        let about = cmd.get_about().map(std::string::ToString::to_string).unwrap_or_default();
         assert!(about.contains("海思"), "About should be in Chinese: {about}");
     }
 
@@ -1497,7 +1497,7 @@ mod cli_tests {
         rust_i18n::set_locale("zh-CN");
         let arg = clap::Arg::new("port").help("original help");
         let localized = localize_arg(arg);
-        let help = localized.get_help().map(|h| h.to_string()).unwrap_or_default();
+        let help = localized.get_help().map(std::string::ToString::to_string).unwrap_or_default();
         // Should be Chinese translation
         assert!(!help.is_empty());
         assert_ne!(help, "original help");
@@ -1508,7 +1508,7 @@ mod cli_tests {
         rust_i18n::set_locale("en");
         let arg = clap::Arg::new("nonexistent_arg_xyz").help("keep this");
         let localized = localize_arg(arg);
-        let help = localized.get_help().map(|h| h.to_string()).unwrap_or_default();
+        let help = localized.get_help().map(std::string::ToString::to_string).unwrap_or_default();
         // Should keep original since no translation exists
         assert_eq!(help, "keep this");
     }
