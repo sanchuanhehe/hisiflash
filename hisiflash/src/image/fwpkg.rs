@@ -10,7 +10,7 @@
 //! ### V1 (Original Format)
 //! - Magic: `0xEFBEADDF`
 //! - Header: 12 bytes (no package name)
-//! - BinInfo: 56 bytes (32-byte name field)
+//! - BinInfo: 52 bytes (32-byte name field)
 //!
 //! ### V2 (New Format)
 //! - Magic: `0xEFBEADD0` ~ `0xEFBEADDE`
@@ -23,13 +23,13 @@
 //! +------------------+
 //! |   Header (12B)   |
 //! +------------------+
-//! |  BinInfo[0] 56B  |
+//! |  BinInfo[0] 52B  |
 //! +------------------+
-//! |  BinInfo[1] 56B  |
+//! |  BinInfo[1] 52B  |
 //! +------------------+
 //! |       ...        |
 //! +------------------+
-//! |  BinInfo[n] 56B  |
+//! |  BinInfo[n] 52B  |
 //! +------------------+
 //! |   Binary Data    |
 //! |       ...        |
@@ -89,7 +89,8 @@ pub const HEADER_SIZE_V2: usize = 272;
 pub const HEADER_SIZE: usize = HEADER_SIZE_V1;
 
 /// V1 BinInfo size in bytes.
-pub const BIN_INFO_SIZE_V1: usize = 56;
+/// name[32] + offset(4) + length(4) + burn_addr(4) + burn_size(4) + type(4) = 52
+pub const BIN_INFO_SIZE_V1: usize = 52;
 
 /// V2 BinInfo size in bytes.
 pub const BIN_INFO_SIZE_V2: usize = 284;
@@ -337,7 +338,7 @@ impl PartitionType {
 
 /// FWPKG partition information.
 ///
-/// V1: 56 bytes (32-byte name)
+/// V1: 52 bytes (32-byte name)
 /// V2: 284 bytes (260-byte name)
 #[derive(Debug, Clone)]
 pub struct FwpkgBinInfo {
@@ -356,7 +357,7 @@ pub struct FwpkgBinInfo {
 }
 
 impl FwpkgBinInfo {
-    /// Read V1 BinInfo from a reader (56 bytes).
+    /// Read V1 BinInfo from a reader (52 bytes).
     pub fn read_v1<R: Read>(reader: &mut R) -> Result<Self> {
         let mut name_bytes = [0u8; NAME_SIZE_V1];
         reader.read_exact(&mut name_bytes)?;
@@ -373,10 +374,6 @@ impl FwpkgBinInfo {
         let burn_addr = reader.read_u32::<LittleEndian>()?;
         let burn_size = reader.read_u32::<LittleEndian>()?;
         let type_value = reader.read_u32::<LittleEndian>()?;
-
-        // Skip remaining bytes (56 - 32 - 20 = 4 bytes padding)
-        let mut padding = [0u8; 4];
-        reader.read_exact(&mut padding)?;
 
         Ok(Self {
             name,
@@ -650,7 +647,7 @@ mod tests {
     fn test_header_sizes() {
         assert_eq!(HEADER_SIZE_V1, 12);
         assert_eq!(HEADER_SIZE_V2, 272); // 12 + 260
-        assert_eq!(BIN_INFO_SIZE_V1, 56);
+        assert_eq!(BIN_INFO_SIZE_V1, 52); // 32 + 4*5 = 52 (no padding)
         assert_eq!(BIN_INFO_SIZE_V2, 284); // 260 + 20 + 4 padding
     }
 
