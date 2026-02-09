@@ -137,7 +137,7 @@ impl Write for NativePort {
         self.port
             .as_mut()
             .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotConnected, "port closed"))
-            .and_then(|p| p.flush())
+            .and_then(std::io::Write::flush)
     }
 }
 

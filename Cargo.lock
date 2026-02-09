@@ -483,6 +483,7 @@ dependencies = [
  "log",
  "rust-i18n",
  "serde",
+ "serde_json",
  "serialport",
  "sys-locale",
  "thiserror 2.0.18",

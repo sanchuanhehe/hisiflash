@@ -23,6 +23,14 @@ use std::env;
 use std::io;
 use std::path::PathBuf;
 
+/// Whether stderr is a terminal (set once at startup).
+static STDERR_IS_TTY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+
+/// Check if emoji/animations should be used (TTY and colors enabled).
+fn use_fancy_output() -> bool {
+    STDERR_IS_TTY.load(std::sync::atomic::Ordering::Relaxed) && console::colors_enabled_stderr()
+}
+
 mod commands;
 mod config;
 mod serial;
@@ -95,6 +103,10 @@ struct Cli {
     /// List all available ports (including unknown types).
     #[arg(long, global = true)]
     list_all_ports: bool,
+
+    /// Path to a configuration file.
+    #[arg(long = "config", global = true, value_name = "PATH")]
+    config_path: Option<PathBuf>,
 
     #[command(subcommand)]
     command: Commands,
@@ -190,10 +202,18 @@ enum Commands {
     Info {
         /// Path to the FWPKG firmware file.
         firmware: PathBuf,
+
+        /// Output information as JSON to stdout.
+        #[arg(long)]
+        json: bool,
     },
 
     /// List available serial ports.
-    ListPorts,
+    ListPorts {
+        /// Output port list as JSON to stdout.
+        #[arg(long)]
+        json: bool,
+    },
 
     /// Open serial monitor.
     Monitor {
@@ -276,68 +296,51 @@ fn main() -> Result<()> {
 
     // Extract --lang if provided early so help text is localized
     let mut early_lang: Option<String> = None;
-    for arg in &raw_args {
-        if arg == "--lang" {
-            // next value will be picked after loop when possible
-        }
-        if arg.starts_with("--lang=") {
-            early_lang = Some(arg[7..].to_string());
-        }
-    }
-    // If form '--lang value' present, find next token
     for (i, arg) in raw_args.iter().enumerate() {
-        if arg == "--lang" && i + 1 < raw_args.len() {
+        if let Some(val) = arg.strip_prefix("--lang=") {
+            early_lang = Some(val.to_string());
+        } else if arg == "--lang" && i + 1 < raw_args.len() {
             early_lang = Some(raw_args[i + 1].clone());
         }
     }
 
     let locale = early_lang.clone().unwrap_or_else(detect_locale);
     rust_i18n::set_locale(&locale);
+
+    // --- NO_COLOR and TTY detection (clig.dev best practice) ---
+    let stderr_is_tty = console::Term::stderr().is_term();
+    STDERR_IS_TTY.store(stderr_is_tty, std::sync::atomic::Ordering::Relaxed);
+
+    if env::var("NO_COLOR").is_ok() || !stderr_is_tty {
+        // Disable all color output
+        console::set_colors_enabled(false);
+        console::set_colors_enabled_stderr(false);
+    }
+
     debug!("Using locale: {}", locale);
 
-    // If user asked for help (-h/--help), print localized help and exit before clap auto-help
+    // If user asked for help (-h/--help), print localized help via clap with
+    // translated section headings. This intercepts before clap's auto-help so
+    // we can apply help_template with i18n strings.
     if raw_args.iter().any(|a| a == "-h" || a == "--help") {
+        let mut app = build_localized_command();
+
         // Determine subcommand if provided
-        let subcommands = [
-            "flash",
-            "write",
-            "write-program",
-            "erase",
-            "info",
-            "list-ports",
-            "monitor",
-            "completions",
-            "help",
-        ];
+        let subcmd_names: Vec<String> = app
+            .get_subcommands()
+            .map(|s| s.get_name().to_string())
+            .collect();
+        let found = raw_args
+            .iter()
+            .skip(1)
+            .find(|token| subcmd_names.iter().any(|n| n == token.as_str()));
 
-        // find first matching subcommand token
-        let mut found: Option<&str> = None;
-        for token in raw_args.iter().skip(1) {
-            if subcommands.contains(&token.as_str()) {
-                found = Some(token);
-                break;
+        if let Some(cmd_name) = found {
+            // Print subcommand help
+            if let Some(sub) = app.get_subcommands().find(|s| s.get_name() == cmd_name.as_str()) {
+                let _ = sub.clone().print_help();
             }
-        }
-
-        if let Some(cmd) = found {
-            // For subcommand help, use our localized cmd_help printer
-            cmd_help(Some(cmd));
         } else {
-            // Localize clap's main help template headings and print
-            let mut app = Cli::command();
-            let tpl = format!(
-                "{bin} {version}\n\n{about}\n\n{usage_heading}:\n{usage}\n\n{subcommands_heading}:\n{subcommands}\n\n{options_heading}:\n{options}\n",
-                bin = "{bin}",
-                version = "{version}",
-                about = "{about}",
-                usage_heading = t!("help.usage_heading"),
-                usage = "{usage}",
-                subcommands_heading = t!("help.commands_heading"),
-                subcommands = "{subcommands}",
-                options_heading = t!("help.options_heading"),
-                options = "{options}"
-            );
-            app = app.help_template(&tpl);
             let _ = app.print_help();
         }
         std::process::exit(0);
@@ -371,7 +374,11 @@ fn main() -> Result<()> {
     );
 
     // Load configuration
-    let mut config = Config::load();
+    let mut config = if let Some(ref path) = cli.config_path {
+        Config::load_from_path(path)
+    } else {
+        Config::load()
+    };
 
     match &cli.command {
         Commands::Flash {
@@ -419,11 +426,11 @@ fn main() -> Result<()> {
         Commands::Erase { all } => {
             cmd_erase(&cli, &mut config, *all)?;
         },
-        Commands::Info { firmware } => {
-            cmd_info(firmware)?;
+        Commands::Info { firmware, json } => {
+            cmd_info(firmware, *json)?;
         },
-        Commands::ListPorts => {
-            cmd_list_ports();
+        Commands::ListPorts { json } => {
+            cmd_list_ports(*json);
         },
         Commands::Monitor { monitor_baud } => {
             cmd_monitor(&cli, &mut config, *monitor_baud)?;
@@ -534,7 +541,7 @@ fn cmd_flash(
     }
 
     // Create progress bar
-    let pb = if cli.quiet {
+    let pb = if cli.quiet || !use_fancy_output() {
         ProgressBar::hidden()
     } else {
         let pb = ProgressBar::new(100);
@@ -716,7 +723,31 @@ fn cmd_erase(cli: &Cli, config: &mut Config, all: bool) -> Result<()> {
     Ok(())
 }
 
-/// Format partition type for display.
+/// Format partition type as a plain string (no ANSI colors) for JSON output.
+fn partition_type_str(pt: PartitionType) -> &'static str {
+    match pt {
+        PartitionType::Loader => "Loader",
+        PartitionType::Normal => "Normal",
+        PartitionType::KvNv => "KV-NV",
+        PartitionType::Efuse => "eFuse",
+        PartitionType::Otp => "OTP",
+        PartitionType::Flashboot => "FlashBoot",
+        PartitionType::Factory => "Factory",
+        PartitionType::Version => "Version",
+        PartitionType::SecurityA => "Security-A",
+        PartitionType::SecurityB => "Security-B",
+        PartitionType::SecurityC => "Security-C",
+        PartitionType::ProtocolA => "Protocol-A",
+        PartitionType::AppsA => "Apps-A",
+        PartitionType::RadioConfig => "RadioConfig",
+        PartitionType::Rom => "ROM",
+        PartitionType::Emmc => "eMMC",
+        PartitionType::Database => "Database",
+        PartitionType::Unknown(_) => "Unknown",
+    }
+}
+
+/// Format partition type for display (with ANSI colors).
 fn format_partition_type(pt: PartitionType) -> String {
     match pt {
         PartitionType::Loader => style("Loader").yellow().to_string(),
@@ -741,7 +772,11 @@ fn format_partition_type(pt: PartitionType) -> String {
 }
 
 /// Info command implementation.
-fn cmd_info(firmware: &PathBuf) -> Result<()> {
+fn cmd_info(firmware: &PathBuf, json: bool) -> Result<()> {
+    if json {
+        return cmd_info_json(firmware);
+    }
+
     eprintln!(
         "{} {}",
         style("📦").cyan(),
@@ -811,11 +846,73 @@ fn cmd_info(firmware: &PathBuf) -> Result<()> {
     Ok(())
 }
 
-/// List ports command implementation.
-fn cmd_list_ports() {
-    eprintln!("{}", style(t!("list_ports.header")).bold().underlined());
+/// Info command --json output: structured JSON to stdout.
+fn cmd_info_json(firmware: &PathBuf) -> Result<()> {
+    let fwpkg = Fwpkg::from_file(firmware)
+        .with_context(|| t!("error.load_firmware", path = firmware.display().to_string()))?;
 
+    let version_str = match fwpkg.version() {
+        FwpkgVersion::V1 => "V1",
+        FwpkgVersion::V2 => "V2",
+    };
+
+    let crc_valid = fwpkg.verify_crc().is_ok();
+
+    let partitions: Vec<serde_json::Value> = fwpkg
+        .bins
+        .iter()
+        .map(|bin| {
+            serde_json::json!({
+                "name": bin.name,
+                "type": partition_type_str(bin.partition_type),
+                "offset": format!("0x{:08X}", bin.offset),
+                "length": bin.length,
+                "burn_addr": format!("0x{:08X}", bin.burn_addr),
+                "burn_size": bin.burn_size,
+                "is_loaderboot": bin.is_loaderboot(),
+            })
+        })
+        .collect();
+
+    let info = serde_json::json!({
+        "format": version_str,
+        "package_name": fwpkg.package_name(),
+        "partition_count": fwpkg.partition_count(),
+        "total_size": fwpkg.header.len,
+        "crc": format!("0x{:04X}", fwpkg.header.crc),
+        "crc_valid": crc_valid,
+        "partitions": partitions,
+    });
+
+    println!("{}", serde_json::to_string_pretty(&info).unwrap_or_default());
+    Ok(())
+}
+
+/// List ports command implementation.
+fn cmd_list_ports(json: bool) {
     let detected = hisiflash::connection::detect::detect_ports();
+
+    if json {
+        let ports: Vec<serde_json::Value> = detected
+            .iter()
+            .map(|p| {
+                serde_json::json!({
+                    "name": p.name,
+                    "device": p.device.name(),
+                    "known": p.device.is_known(),
+                    "vid": p.vid,
+                    "pid": p.pid,
+                    "manufacturer": p.manufacturer,
+                    "product": p.product,
+                    "serial": p.serial,
+                })
+            })
+            .collect();
+        println!("{}", serde_json::to_string_pretty(&ports).unwrap_or_default());
+        return;
+    }
+
+    eprintln!("{}", style(t!("list_ports.header")).bold().underlined());
 
     if detected.is_empty() {
         eprintln!("  {}", style(t!("list_ports.no_ports")).dim());
@@ -919,111 +1016,44 @@ fn cmd_completions(shell: Shell) {
     generate(shell, &mut cmd, name, &mut io::stdout());
 }
 
-/// Localized help printer for subcommands.
-fn cmd_help(cmd: Option<&str>) {
-    // Top-level help
-    if cmd.is_none() {
-        eprintln!("{}", t!("help.header"));
-        eprintln!();
-        eprintln!("  {}", t!("help.usage"));
-        eprintln!("");
-        eprintln!("{}:", t!("help.commands"));
-        eprintln!("  flash    - {}", t!("help.flash.summary"));
-        eprintln!("  write    - {}", t!("help.write.summary"));
-        eprintln!("  write-program - {}", t!("help.write_program.summary"));
-        eprintln!("  erase    - {}", t!("help.erase.summary"));
-        eprintln!("  info     - {}", t!("help.info.summary"));
-        eprintln!("  list-ports - {}", t!("help.list_ports.summary"));
-        eprintln!("  monitor  - {}", t!("help.monitor.summary"));
-        eprintln!("  completions - {}", t!("help.completions.summary"));
-        eprintln!("  help     - {}", t!("help.help.summary"));
-        eprintln!("");
-        eprintln!("{}", t!("help.more"));
-        return;
-    }
+/// Build a clap `Command` with localized help_template applied to all levels.
+///
+/// This uses clap as the single source of truth for options and subcommands,
+/// while localizing section headings (USAGE/COMMANDS/OPTIONS). No need to
+/// maintain a parallel hand-written help printer.
+fn build_localized_command() -> clap::Command {
+    let tpl = format!(
+        "{bin} {version}\n\n{about}\n\n\
+         {usage_h}:\n  {usage}\n\n\
+         {cmds_h}:\n{subcommands}\n\n\
+         {opts_h}:\n{options}\n",
+        bin = "{bin}",
+        version = "{version}",
+        about = "{about}",
+        usage_h = t!("help.usage_heading"),
+        usage = "{usage}",
+        cmds_h = t!("help.commands_heading"),
+        subcommands = "{subcommands}",
+        opts_h = t!("help.options_heading"),
+        options = "{options}",
+    );
 
-    match cmd.unwrap() {
-        "flash" => {
-            eprintln!("{}", t!("help.flash.title"));
-            eprintln!("");
-            eprintln!("{}", t!("help.flash.usage"));
-            eprintln!("");
-            eprintln!("{}", t!("help.flash.description"));
-            eprintln!("");
-            eprintln!("{}", t!("help.flash.options_header"));
-            eprintln!("  - --filter <FILTER>    {}", t!("help.flash.opt.filter"));
-            eprintln!("  - --port <PORT>        {}", t!("help.opt.port"));
-            eprintln!("  - --baud <BAUD>        {}", t!("help.opt.baud"));
-            eprintln!("  - --chip <CHIP>        {}", t!("help.opt.chip"));
-            eprintln!("  - --lang <LANG>        {}", t!("help.opt.lang"));
-            eprintln!(
-                "  - --late-baud          {}",
-                t!("help.flash.opt.late_baud")
-            );
-            eprintln!(
-                "  - --skip-verify        {}",
-                t!("help.flash.opt.skip_verify")
-            );
-            eprintln!("  - --monitor            {}", t!("help.flash.opt.monitor"));
-            eprintln!("  - -v/--verbose         {}", t!("help.opt.verbose"));
-            eprintln!("  - -q/--quiet           {}", t!("help.opt.quiet"));
-        },
-        "write" => {
-            eprintln!("{}", t!("help.write.title"));
-            eprintln!();
-            eprintln!("{}", t!("help.write.usage"));
-            eprintln!("");
-            eprintln!("{}", t!("help.write.description"));
-            eprintln!("");
-            eprintln!("{}", t!("help.write.options_header"));
-            eprintln!(
-                "  - --loaderboot <FILE>  {}",
-                t!("help.write.opt.loaderboot")
-            );
-            eprintln!("  - --bin <FILE:ADDR>    {}", t!("help.write.opt.bins"));
-            eprintln!("  - --late-baud          {}", t!("help.opt.late_baud"));
-        },
-        "erase" => {
-            eprintln!("{}", t!("help.erase.title"));
-            eprintln!("");
-            eprintln!("{}", t!("help.erase.usage"));
-            eprintln!("");
-            eprintln!("{}", t!("help.erase.description"));
-            eprintln!("");
-            eprintln!("  --all    {}", t!("help.erase.opt.all"));
-        },
-        "info" => {
-            eprintln!("{}", t!("help.info.title"));
-            eprintln!("");
-            eprintln!("{}", t!("help.info.usage"));
-            eprintln!("");
-            eprintln!("{}", t!("help.info.description"));
-        },
-        "list-ports" => {
-            eprintln!("{}", t!("help.list_ports.title"));
-            eprintln!("");
-            eprintln!("{}", t!("help.list_ports.usage"));
-            eprintln!("");
-            eprintln!("{}", t!("help.list_ports.description"));
-            eprintln!("  --list-all-ports  {}", t!("help.list_ports.opt.list_all"));
-        },
-        "monitor" => {
-            eprintln!("{}", t!("help.monitor.title"));
-            eprintln!("");
-            eprintln!("{}", t!("help.monitor.usage"));
-            eprintln!("");
-            eprintln!("{}", t!("help.monitor.description"));
-            eprintln!("  --monitor-baud <BAUD> {}", t!("help.monitor.opt.baud"));
-        },
-        "completions" => {
-            eprintln!("{}", t!("help.completions.title"));
-            eprintln!("");
-            eprintln!("{}", t!("help.completions.description"));
-        },
-        other => {
-            eprintln!("{}: {}", t!("help.unknown"), other);
-        },
-    }
+    let sub_tpl = format!(
+        "{bin} {version}\n\n{about}\n\n\
+         {usage_h}:\n  {usage}\n\n\
+         {opts_h}:\n{options}\n",
+        bin = "{bin}",
+        version = "{version}",
+        about = "{about}",
+        usage_h = t!("help.usage_heading"),
+        usage = "{usage}",
+        opts_h = t!("help.options_heading"),
+        options = "{options}",
+    );
+
+    Cli::command()
+        .help_template(&tpl)
+        .mut_subcommands(move |sub| sub.help_template(sub_tpl.clone()))
 }
 
 #[cfg(test)]

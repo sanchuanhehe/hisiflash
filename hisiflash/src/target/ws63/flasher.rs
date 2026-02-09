@@ -256,7 +256,7 @@ impl<P: Port> Ws63Flasher<P> {
                         }
                     } else {
                         // Reset match, check if current byte starts a new match
-                        match_idx = if buf[0] == magic[0] { 1 } else { 0 };
+                        match_idx = usize::from(buf[0] == magic[0]);
                     }
                 },
                 Ok(_) => {},
@@ -582,8 +582,7 @@ mod native_impl {
 
             Err(last_error.unwrap_or_else(|| {
                 Error::Config(format!(
-                    "Failed to open port after {} attempts",
-                    MAX_OPEN_PORT_ATTEMPTS
+                    "Failed to open port after {MAX_OPEN_PORT_ATTEMPTS} attempts"
                 ))
             }))
         }
@@ -619,8 +618,7 @@ mod native_impl {
 
             Err(last_error.unwrap_or_else(|| {
                 Error::Config(format!(
-                    "Failed to open port {} after {} attempts",
-                    port_name, MAX_OPEN_PORT_ATTEMPTS
+                    "Failed to open port {port_name} after {MAX_OPEN_PORT_ATTEMPTS} attempts"
                 ))
             }))
         }

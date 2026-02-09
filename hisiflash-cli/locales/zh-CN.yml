@@ -59,65 +59,11 @@ serial.selection_cancelled: "已取消端口选择"
 serial.remember_prompt: "是否记住此串口以便将来使用?"
 serial.no_ports_found: "未找到串口。请连接设备或使用 -p 参数指定端口。"
 
-# 帮助命令翻译
-help.header: "hisiflash 帮助"
-help.usage: "用法: hisiflash [OPTIONS] <COMMAND>"
-help.commands: "命令"
-help.more: "运行 'hisiflash help <command>' 查看该命令的本地化帮助。要查看完整参数列表，请运行 'hisiflash <command> --help'。"
-
-help.help.summary: "显示帮助信息"
-
-help.flash.summary: "烧录 FWPKG 固件包"
-help.flash.title: "Flash - 烧录 FWPKG"
-help.flash.usage: "hisiflash flash [OPTIONS] <FIRMWARE>"
-help.flash.description: "将 FWPKG 固件包烧录到连接的设备上。"
-help.flash.options_header: "选项"
-help.flash.opt.filter: "只烧录指定分区（以逗号分隔）"
-help.flash.opt.late_baud: "在 LoaderBoot 之后切换高波特率"
-help.flash.opt.skip_verify: "跳过 CRC 校验"
-help.flash.opt.monitor: "烧录后打开串口监视器"
-
-help.write.summary: "写入裸机二进制到 Flash"
-help.write.title: "Write - 写入裸机二进制"
-help.write.usage: "hisiflash write --loaderboot <FILE> --bin <FILE:ADDR>..."
-help.write.description: "写入 loaderboot 和通过地址指定的二进制文件到 Flash。"
-help.write.options_header: "选项"
-help.write.opt.loaderboot: "LoaderBoot 二进制文件"
-help.write.opt.bins: "二进制文件，格式 file:address，可重复"
-
-help.write_program.summary: "写入单个程序二进制"
-
-help.erase.summary: "擦除 Flash 存储"
-help.erase.title: "Erase - 擦除 Flash"
-help.erase.usage: "hisiflash erase --all"
-help.erase.description: "擦除设备的整个 Flash。此操作会破坏数据，需确认。"
-help.erase.opt.all: "确认擦除整个 Flash"
-
-help.info.summary: "显示固件信息"
-help.info.title: "Info - FWPKG 信息"
-help.info.usage: "hisiflash info <FIRMWARE>"
-help.info.description: "显示 FWPKG 文件的信息（分区、大小、CRC）。"
-
-help.list_ports.summary: "列出可用串口"
-help.list_ports.title: "列出串口"
-help.list_ports.usage: "hisiflash list-ports"
-help.list_ports.description: "枚举可用串口并尝试自动检测。"
-help.list_ports.opt.list_all: "包含未知类型的端口"
-
-help.monitor.summary: "打开串口监视器"
-help.monitor.title: "Monitor - 串口监视"
-help.monitor.usage: "hisiflash monitor [--monitor-baud <BAUD>]"
-help.monitor.description: "打开串口监视器以查看设备输出。"
-help.monitor.opt.baud: "监视波特率（默认: 115200）"
-
-help.completions.summary: "生成 Shell 补全脚本"
-help.completions.title: "Completions - 生成补全脚本"
-help.completions.description: "为支持的 shell 生成补全脚本。"
-
-help.unknown: "未知命令"
+# 帮助模板标题（用于 clap help_template 本地化）
 help.usage_heading: "用法"
 help.commands_heading: "命令"
 help.options_heading: "选项"
+
 serial.multiple_ports: "发现多个串口。请使用 -p 参数指定端口或禁用 --non-interactive 选项。"
 serial.no_ports_available: "没有可用的串口。"
 

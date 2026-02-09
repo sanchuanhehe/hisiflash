@@ -59,65 +59,11 @@ serial.selection_cancelled: "Port selection cancelled"
 serial.remember_prompt: "Remember this serial port for future use?"
 serial.no_ports_found: "No serial ports found. Please connect a device or specify a port with -p."
 
-# Help command translations
-help.header: "hisiflash Help"
-help.usage: "Usage: hisiflash [OPTIONS] <COMMAND>"
-help.commands: "Commands"
-help.more: "Run 'hisiflash help <command>' for localized help for that command. For full flag list, run 'hisiflash <command> --help'."
-
-help.help.summary: "Show help information"
-
-help.flash.summary: "Flash a FWPKG firmware package"
-help.flash.title: "Flash - FWPKG flashing"
-help.flash.usage: "hisiflash flash [OPTIONS] <FIRMWARE>"
-help.flash.description: "Flash a FWPKG firmware package to a connected device."
-help.flash.options_header: "Options"
-help.flash.opt.filter: "Only flash specified partitions (comma-separated)"
-help.flash.opt.late_baud: "Use late baud rate change (after LoaderBoot)"
-help.flash.opt.skip_verify: "Skip CRC verification"
-help.flash.opt.monitor: "Open serial monitor after flashing"
-
-help.write.summary: "Write raw binaries to flash"
-help.write.title: "Write - raw binary write"
-help.write.usage: "hisiflash write --loaderboot <FILE> --bin <FILE:ADDR>..."
-help.write.description: "Write loaderboot and binaries to flash using direct addresses."
-help.write.options_header: "Options"
-help.write.opt.loaderboot: "LoaderBoot binary file"
-help.write.opt.bins: "Binary files in format file:address (repeatable)"
-
-help.write_program.summary: "Write a single program binary"
-
-help.erase.summary: "Erase flash memory"
-help.erase.title: "Erase - Flash erase"
-help.erase.usage: "hisiflash erase --all"
-help.erase.description: "Erase the device's entire flash. This is destructive and requires confirmation."
-help.erase.opt.all: "Confirm erasing the entire flash"
-
-help.info.summary: "Show firmware information"
-help.info.title: "Info - FWPKG information"
-help.info.usage: "hisiflash info <FIRMWARE>"
-help.info.description: "Show information about a FWPKG file (partitions, sizes, CRC)."
-
-help.list_ports.summary: "List available serial ports"
-help.list_ports.title: "List Ports"
-help.list_ports.usage: "hisiflash list-ports"
-help.list_ports.description: "Enumerate available serial ports and attempt auto-detection."
-help.list_ports.opt.list_all: "Include unknown ports in the list"
-
-help.monitor.summary: "Open serial monitor"
-help.monitor.title: "Monitor - serial monitor"
-help.monitor.usage: "hisiflash monitor [--monitor-baud <BAUD>]"
-help.monitor.description: "Open a serial monitor to view device output."
-help.monitor.opt.baud: "Baud rate for monitoring (default: 115200)"
-
-help.completions.summary: "Generate shell completion scripts"
-help.completions.title: "Completions - shell completion generation"
-help.completions.description: "Generate shell completion scripts for supported shells."
-
-help.unknown: "Unknown command"
+# Help template headings (used by clap help_template localization)
 help.usage_heading: "USAGE"
 help.commands_heading: "COMMANDS"
 help.options_heading: "OPTIONS"
+
 serial.multiple_ports: "Multiple serial ports found. Use -p to specify a port or disable --non-interactive."
 serial.no_ports_available: "No serial ports available."
 

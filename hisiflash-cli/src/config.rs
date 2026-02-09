@@ -101,6 +101,17 @@ impl Config {
         config
     }
 
+    /// Load configuration from a specific file path (--config flag).
+    pub fn load_from_path(path: &Path) -> Self {
+        if let Some(config) = Self::load_from_file(path) {
+            debug!("Loaded config from {}", path.display());
+            config
+        } else {
+            warn!("Could not load config from {}, using defaults", path.display());
+            Self::default()
+        }
+    }
+
     /// Load configuration from a specific file.
     fn load_from_file(path: &Path) -> Option<Self> {
         if !path.exists() {
