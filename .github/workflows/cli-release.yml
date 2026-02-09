@@ -132,19 +132,54 @@ jobs:
         if: ${{ !matrix.cross }}
         run: cargo build --release --target ${{ matrix.target }}
 
+      # Generate shell completion scripts
+      - name: Generate completions (Unix)
+        if: runner.os != 'Windows' && !matrix.cross
+        run: |
+          mkdir -p completions
+          target/${{ matrix.target }}/release/${{ matrix.artifact }} completions bash > completions/hisiflash.bash
+          target/${{ matrix.target }}/release/${{ matrix.artifact }} completions zsh > completions/_hisiflash
+          target/${{ matrix.target }}/release/${{ matrix.artifact }} completions fish > completions/hisiflash.fish
+          target/${{ matrix.target }}/release/${{ matrix.artifact }} completions powershell > completions/_hisiflash.ps1
+          target/${{ matrix.target }}/release/${{ matrix.artifact }} completions elvish > completions/hisiflash.elv
+
+      - name: Generate completions (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path completions
+          & "target/${{ matrix.target }}/release/${{ matrix.artifact }}" completions bash > completions/hisiflash.bash
+          & "target/${{ matrix.target }}/release/${{ matrix.artifact }}" completions zsh > completions/_hisiflash
+          & "target/${{ matrix.target }}/release/${{ matrix.artifact }}" completions fish > completions/hisiflash.fish
+          & "target/${{ matrix.target }}/release/${{ matrix.artifact }}" completions powershell > completions/_hisiflash.ps1
+          & "target/${{ matrix.target }}/release/${{ matrix.artifact }}" completions elvish > completions/hisiflash.elv
+
+      - name: Generate completions (Cross-compiled)
+        if: matrix.cross
+        run: |
+          # For cross-compiled builds, build a host binary just for generating completions
+          cargo build --release
+          mkdir -p completions
+          target/release/hisiflash completions bash > completions/hisiflash.bash
+          target/release/hisiflash completions zsh > completions/_hisiflash
+          target/release/hisiflash completions fish > completions/hisiflash.fish
+          target/release/hisiflash completions powershell > completions/_hisiflash.ps1
+          target/release/hisiflash completions elvish > completions/hisiflash.elv
+
       # Package artifacts
       - name: Create archive (Unix)
         if: runner.os != 'Windows'
         run: |
           cd target/${{ matrix.target }}/release
           zip ../../../hisiflash-cli-${{ matrix.target }}.zip ${{ matrix.artifact }}
+          cd ../../../
+          zip -r hisiflash-cli-${{ matrix.target }}.zip completions/
 
       - name: Create archive (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          cd target/${{ matrix.target }}/release
-          Compress-Archive -Path ${{ matrix.artifact }} -DestinationPath ../../../hisiflash-cli-${{ matrix.target }}.zip
+          Compress-Archive -Path "target/${{ matrix.target }}/release/${{ matrix.artifact }}", "completions" -DestinationPath "hisiflash-cli-${{ matrix.target }}.zip"
 
       # Upload to release
       - name: Upload release asset
