@@ -1422,10 +1422,27 @@ mod cli_tests {
     use clap::CommandFactory;
     use std::sync::Mutex;
 
-    /// Global lock for tests that depend on `rust_i18n::set_locale`.
-    /// `set_locale` modifies global state, so locale-dependent tests
-    /// must not run in parallel.
+    /// Global lock for `rust_i18n::set_locale` which mutates global state.
+    /// Only held during set_locale + command construction; assertions run
+    /// lock-free so tests can maximally overlap.
     static LOCALE_LOCK: Mutex<()> = Mutex::new(());
+
+    /// Build a localized command for the given locale.
+    /// Holds the lock only during `set_locale` + `build_localized_command`;
+    /// the returned `Command` has all i18n strings baked in and is safe
+    /// to inspect without the lock.
+    fn localized_cmd(locale: &str) -> clap::Command {
+        let _lock = LOCALE_LOCK.lock().unwrap();
+        rust_i18n::set_locale(locale);
+        build_localized_command()
+    }
+
+    /// Call `localize_arg` under the locale lock.
+    fn localized_arg(locale: &str, arg: clap::Arg) -> clap::Arg {
+        let _lock = LOCALE_LOCK.lock().unwrap();
+        rust_i18n::set_locale(locale);
+        localize_arg(arg)
+    }
 
     // ---- clap validation ----
 
@@ -1774,9 +1791,7 @@ mod cli_tests {
 
     #[test]
     fn test_build_localized_command_creates_valid_command() {
-        let _lock = LOCALE_LOCK.lock().unwrap();
-        rust_i18n::set_locale("en");
-        let cmd = build_localized_command();
+        let cmd = localized_cmd("en");
         // Should be valid
         cmd.clone().debug_assert();
         assert_eq!(cmd.get_name(), "hisiflash");
@@ -1784,9 +1799,7 @@ mod cli_tests {
 
     #[test]
     fn test_build_localized_command_has_subcommands() {
-        let _lock = LOCALE_LOCK.lock().unwrap();
-        rust_i18n::set_locale("en");
-        let cmd = build_localized_command();
+        let cmd = localized_cmd("en");
         let subcmd_names: Vec<_> = cmd
             .get_subcommands()
             .map(|s| s.get_name().to_string())
@@ -1802,9 +1815,7 @@ mod cli_tests {
 
     #[test]
     fn test_build_localized_command_zh_cn() {
-        let _lock = LOCALE_LOCK.lock().unwrap();
-        rust_i18n::set_locale("zh-CN");
-        let cmd = build_localized_command();
+        let cmd = localized_cmd("zh-CN");
         cmd.clone().debug_assert();
         // About should be Chinese
         let about = cmd
@@ -1821,10 +1832,7 @@ mod cli_tests {
 
     #[test]
     fn test_localize_arg_known_key() {
-        let _lock = LOCALE_LOCK.lock().unwrap();
-        rust_i18n::set_locale("zh-CN");
-        let arg = clap::Arg::new("port").help("original help");
-        let localized = localize_arg(arg);
+        let localized = localized_arg("zh-CN", clap::Arg::new("port").help("original help"));
         let help = localized
             .get_help()
             .map(std::string::ToString::to_string)
@@ -1836,10 +1844,8 @@ mod cli_tests {
 
     #[test]
     fn test_localize_arg_unknown_key() {
-        let _lock = LOCALE_LOCK.lock().unwrap();
-        rust_i18n::set_locale("en");
-        let arg = clap::Arg::new("nonexistent_arg_xyz").help("keep this");
-        let localized = localize_arg(arg);
+        let localized =
+            localized_arg("en", clap::Arg::new("nonexistent_arg_xyz").help("keep this"));
         let help = localized
             .get_help()
             .map(std::string::ToString::to_string)
@@ -1852,9 +1858,7 @@ mod cli_tests {
 
     #[test]
     fn test_main_help_zh_cn_has_localized_headings() {
-        let _lock = LOCALE_LOCK.lock().unwrap();
-        rust_i18n::set_locale("zh-CN");
-        let mut app = build_localized_command();
+        let mut app = localized_cmd("zh-CN");
         let help = render_help(&mut app);
         assert!(help.contains("用法:"), "Missing '用法:' heading:\n{help}");
         assert!(help.contains("命令:"), "Missing '命令:' heading:\n{help}");
@@ -1863,9 +1867,7 @@ mod cli_tests {
 
     #[test]
     fn test_main_help_en_has_english_headings() {
-        let _lock = LOCALE_LOCK.lock().unwrap();
-        rust_i18n::set_locale("en");
-        let mut app = build_localized_command();
+        let mut app = localized_cmd("en");
         let help = render_help(&mut app);
         assert!(help.contains("USAGE:"), "Missing 'USAGE:' heading:\n{help}");
         assert!(
@@ -1880,9 +1882,7 @@ mod cli_tests {
 
     #[test]
     fn test_main_help_zh_cn_command_descriptions() {
-        let _lock = LOCALE_LOCK.lock().unwrap();
-        rust_i18n::set_locale("zh-CN");
-        let mut app = build_localized_command();
+        let mut app = localized_cmd("zh-CN");
         let help = render_help(&mut app);
         assert!(
             help.contains("烧录 FWPKG 固件包"),
@@ -1900,9 +1900,7 @@ mod cli_tests {
 
     #[test]
     fn test_main_help_zh_cn_option_descriptions() {
-        let _lock = LOCALE_LOCK.lock().unwrap();
-        rust_i18n::set_locale("zh-CN");
-        let mut app = build_localized_command();
+        let mut app = localized_cmd("zh-CN");
         let help = render_help(&mut app);
         assert!(
             help.contains("使用的串口"),
@@ -1924,9 +1922,7 @@ mod cli_tests {
 
     #[test]
     fn test_main_help_no_english_leaks_zh_cn() {
-        let _lock = LOCALE_LOCK.lock().unwrap();
-        rust_i18n::set_locale("zh-CN");
-        let mut app = build_localized_command();
+        let mut app = localized_cmd("zh-CN");
         let help = render_help(&mut app);
         // These English strings should NOT appear in zh-CN output
         assert!(
@@ -1953,9 +1949,7 @@ mod cli_tests {
 
     #[test]
     fn test_subcmd_help_flash_zh_cn_has_localized_content() {
-        let _lock = LOCALE_LOCK.lock().unwrap();
-        rust_i18n::set_locale("zh-CN");
-        let mut app = build_localized_command();
+        let mut app = localized_cmd("zh-CN");
         let mut sub = get_subcmd(&mut app, "flash");
         let help = render_help(&mut sub);
         assert!(
@@ -1974,9 +1968,7 @@ mod cli_tests {
 
     #[test]
     fn test_subcmd_help_flash_zh_cn_has_localized_headings() {
-        let _lock = LOCALE_LOCK.lock().unwrap();
-        rust_i18n::set_locale("zh-CN");
-        let mut app = build_localized_command();
+        let mut app = localized_cmd("zh-CN");
         let mut sub = get_subcmd(&mut app, "flash");
         let help = render_help(&mut sub);
         assert!(
@@ -1995,9 +1987,7 @@ mod cli_tests {
 
     #[test]
     fn test_subcmd_help_flash_en_has_english_headings() {
-        let _lock = LOCALE_LOCK.lock().unwrap();
-        rust_i18n::set_locale("en");
-        let mut app = build_localized_command();
+        let mut app = localized_cmd("en");
         let mut sub = get_subcmd(&mut app, "flash");
         let help = render_long_help(&mut sub);
         assert!(
@@ -2016,9 +2006,7 @@ mod cli_tests {
 
     #[test]
     fn test_subcmd_help_flash_global_args_propagated() {
-        let _lock = LOCALE_LOCK.lock().unwrap();
-        rust_i18n::set_locale("zh-CN");
-        let mut app = build_localized_command();
+        let mut app = localized_cmd("zh-CN");
         let mut sub = get_subcmd(&mut app, "flash");
         let help = render_help(&mut sub);
         // Global options should appear in subcommand help
@@ -2046,9 +2034,7 @@ mod cli_tests {
 
     #[test]
     fn test_subcmd_help_flash_no_english_leaks_zh_cn() {
-        let _lock = LOCALE_LOCK.lock().unwrap();
-        rust_i18n::set_locale("zh-CN");
-        let mut app = build_localized_command();
+        let mut app = localized_cmd("zh-CN");
         let mut sub = get_subcmd(&mut app, "flash");
         let help = render_long_help(&mut sub);
         assert!(
@@ -2072,9 +2058,7 @@ mod cli_tests {
     #[test]
     fn test_subcmd_erase_no_arguments_heading() {
         // Erase has no positional args — should not have an "参数:" section
-        let _lock = LOCALE_LOCK.lock().unwrap();
-        rust_i18n::set_locale("zh-CN");
-        let mut app = build_localized_command();
+        let mut app = localized_cmd("zh-CN");
         let mut sub = get_subcmd(&mut app, "erase");
         let help = render_help(&mut sub);
         assert!(
@@ -2085,9 +2069,7 @@ mod cli_tests {
 
     #[test]
     fn test_subcmd_write_zh_cn_localized() {
-        let _lock = LOCALE_LOCK.lock().unwrap();
-        rust_i18n::set_locale("zh-CN");
-        let mut app = build_localized_command();
+        let mut app = localized_cmd("zh-CN");
         let mut sub = get_subcmd(&mut app, "write");
         let help = render_help(&mut sub);
         assert!(
@@ -2098,9 +2080,7 @@ mod cli_tests {
 
     #[test]
     fn test_subcmd_completions_zh_cn_localized() {
-        let _lock = LOCALE_LOCK.lock().unwrap();
-        rust_i18n::set_locale("zh-CN");
-        let mut app = build_localized_command();
+        let mut app = localized_cmd("zh-CN");
         let mut sub = get_subcmd(&mut app, "completions");
         let help = render_help(&mut sub);
         assert!(
@@ -2115,11 +2095,9 @@ mod cli_tests {
 
     #[test]
     fn test_long_help_has_more_detail_than_short() {
-        let _lock = LOCALE_LOCK.lock().unwrap();
-        rust_i18n::set_locale("zh-CN");
-        let mut app = build_localized_command();
+        let mut app = localized_cmd("zh-CN");
         let short = render_help(&mut app);
-        let mut app2 = build_localized_command();
+        let mut app2 = localized_cmd("zh-CN");
         let long = render_long_help(&mut app2);
         assert!(
             long.len() > short.len(),
@@ -2129,12 +2107,10 @@ mod cli_tests {
 
     #[test]
     fn test_subcmd_long_help_has_more_detail_than_short() {
-        let _lock = LOCALE_LOCK.lock().unwrap();
-        rust_i18n::set_locale("zh-CN");
-        let mut app = build_localized_command();
+        let mut app = localized_cmd("zh-CN");
         let mut sub_short = get_subcmd(&mut app, "flash");
         let short = render_help(&mut sub_short);
-        let mut app2 = build_localized_command();
+        let mut app2 = localized_cmd("zh-CN");
         let mut sub_long = get_subcmd(&mut app2, "flash");
         let long = render_long_help(&mut sub_long);
         assert!(
@@ -2145,9 +2121,7 @@ mod cli_tests {
 
     #[test]
     fn test_all_subcommands_have_localized_about_zh_cn() {
-        let _lock = LOCALE_LOCK.lock().unwrap();
-        rust_i18n::set_locale("zh-CN");
-        let mut app = build_localized_command();
+        let mut app = localized_cmd("zh-CN");
         app.build();
         let expected = [
             ("flash", "烧录"),
