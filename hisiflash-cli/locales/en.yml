@@ -115,6 +115,9 @@ help.completions.title: "Completions - shell completion generation"
 help.completions.description: "Generate shell completion scripts for supported shells."
 
 help.unknown: "Unknown command"
+help.usage_heading: "USAGE"
+help.commands_heading: "COMMANDS"
+help.options_heading: "OPTIONS"
 serial.multiple_ports: "Multiple serial ports found. Use -p to specify a port or disable --non-interactive."
 serial.no_ports_available: "No serial ports available."
 

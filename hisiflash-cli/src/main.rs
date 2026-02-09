@@ -19,6 +19,7 @@ use hisiflash::{ChipFamily, Fwpkg, FwpkgVersion, PartitionType};
 use indicatif::{ProgressBar, ProgressStyle};
 use log::{debug, error, warn};
 use rust_i18n::t;
+use std::env;
 use std::io;
 use std::path::PathBuf;
 
@@ -207,12 +208,6 @@ enum Commands {
         #[arg(value_enum)]
         shell: Shell,
     },
-
-    /// Show localized help for a subcommand
-    Help {
-        /// Subcommand name to show help for (e.g., flash, write)
-        command: Option<String>,
-    },
 }
 
 /// Parse binary argument in format "file:address".
@@ -276,12 +271,79 @@ fn detect_locale() -> String {
 }
 
 fn main() -> Result<()> {
-    let cli = Cli::parse();
+    // Inspect raw args early to support localized --help handling and early --lang
+    let raw_args: Vec<String> = env::args().collect();
 
-    // Initialize i18n locale
-    let locale = cli.lang.clone().unwrap_or_else(detect_locale);
+    // Extract --lang if provided early so help text is localized
+    let mut early_lang: Option<String> = None;
+    for arg in &raw_args {
+        if arg == "--lang" {
+            // next value will be picked after loop when possible
+        }
+        if arg.starts_with("--lang=") {
+            early_lang = Some(arg[7..].to_string());
+        }
+    }
+    // If form '--lang value' present, find next token
+    for (i, arg) in raw_args.iter().enumerate() {
+        if arg == "--lang" && i + 1 < raw_args.len() {
+            early_lang = Some(raw_args[i + 1].clone());
+        }
+    }
+
+    let locale = early_lang.clone().unwrap_or_else(detect_locale);
     rust_i18n::set_locale(&locale);
-    debug!("Using locale: {locale}");
+    debug!("Using locale: {}", locale);
+
+    // If user asked for help (-h/--help), print localized help and exit before clap auto-help
+    if raw_args.iter().any(|a| a == "-h" || a == "--help") {
+        // Determine subcommand if provided
+        let subcommands = [
+            "flash",
+            "write",
+            "write-program",
+            "erase",
+            "info",
+            "list-ports",
+            "monitor",
+            "completions",
+            "help",
+        ];
+
+        // find first matching subcommand token
+        let mut found: Option<&str> = None;
+        for token in raw_args.iter().skip(1) {
+            if subcommands.contains(&token.as_str()) {
+                found = Some(token);
+                break;
+            }
+        }
+
+        if let Some(cmd) = found {
+            // For subcommand help, use our localized cmd_help printer
+            cmd_help(Some(cmd));
+        } else {
+            // Localize clap's main help template headings and print
+            let mut app = Cli::command();
+            let tpl = format!(
+                "{bin} {version}\n\n{about}\n\n{usage_heading}:\n{usage}\n\n{subcommands_heading}:\n{subcommands}\n\n{options_heading}:\n{options}\n",
+                bin = "{bin}",
+                version = "{version}",
+                about = "{about}",
+                usage_heading = t!("help.usage_heading"),
+                usage = "{usage}",
+                subcommands_heading = t!("help.commands_heading"),
+                subcommands = "{subcommands}",
+                options_heading = t!("help.options_heading"),
+                options = "{options}"
+            );
+            app = app.help_template(&tpl);
+            let _ = app.print_help();
+        }
+        std::process::exit(0);
+    }
+
+    let cli = Cli::parse();
 
     // Setup logging based on verbosity
     let log_level = if cli.quiet {
@@ -368,9 +430,6 @@ fn main() -> Result<()> {
         },
         Commands::Completions { shell } => {
             cmd_completions(*shell);
-        },
-        Commands::Help { command } => {
-            cmd_help(command.as_deref());
         },
     }
 

@@ -115,6 +115,9 @@ help.completions.title: "Completions - 生成补全脚本"
 help.completions.description: "为支持的 shell 生成补全脚本。"
 
 help.unknown: "未知命令"
+help.usage_heading: "用法"
+help.commands_heading: "命令"
+help.options_heading: "选项"
 serial.multiple_ports: "发现多个串口。请使用 -p 参数指定端口或禁用 --non-interactive 选项。"
 serial.no_ports_available: "没有可用的串口。"
 
