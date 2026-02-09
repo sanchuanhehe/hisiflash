@@ -1025,17 +1025,18 @@ fn cmd_completions(shell: Shell) {
     generate(shell, &mut cmd, name, &mut io::stdout());
 }
 
-/// Build a clap `Command` with localized help_template applied to all levels.
+/// Build a clap `Command` with fully localized help output.
 ///
-/// This uses clap as the single source of truth for options and subcommands,
-/// while localizing section headings (USAGE/COMMANDS/OPTIONS). No need to
-/// maintain a parallel hand-written help printer.
+/// Uses clap as the single source of truth for structure (args, subcommands),
+/// while replacing all user-visible text (section headings, command descriptions,
+/// argument help) with translations from the locale files.
 fn build_localized_command() -> clap::Command {
     let tpl = format!(
         "{bin} {version}\n\n{about}\n\n\
          {usage_h}:\n  {usage}\n\n\
          {cmds_h}:\n{subcommands}\n\n\
-         {opts_h}:\n{options}\n",
+         {opts_h}:\n{options}\n\n\
+         {after_help}\n",
         bin = "{bin}",
         version = "{version}",
         about = "{about}",
@@ -1045,6 +1046,7 @@ fn build_localized_command() -> clap::Command {
         subcommands = "{subcommands}",
         opts_h = t!("help.options_heading"),
         options = "{options}",
+        after_help = "{after-help}",
     );
 
     let sub_tpl = format!(
@@ -1062,7 +1064,35 @@ fn build_localized_command() -> clap::Command {
 
     Cli::command()
         .help_template(&tpl)
-        .mut_subcommands(move |sub| sub.help_template(sub_tpl.clone()))
+        .about(t!("app.about").to_string())
+        .after_help(t!("app.after_help").to_string())
+        .mut_args(localize_arg)
+        .mut_subcommands(move |sub| {
+            let name = sub.get_name().to_string();
+            let about_key = format!("cmd.{}.about", name.replace('-', "_"));
+            let localized = t!(&about_key).to_string();
+            let sub = if localized != about_key {
+                sub.about(localized)
+            } else {
+                sub
+            };
+            sub.help_template(sub_tpl.clone()).mut_args(localize_arg)
+        })
+}
+
+/// Replace an arg's help text with its localized version if available.
+///
+/// Looks up `arg.<id>.help` in the current locale. If found, replaces the
+/// arg's help text; otherwise keeps the original (English from doc comments).
+fn localize_arg(arg: clap::Arg) -> clap::Arg {
+    let id = arg.get_id().as_str().to_string();
+    let key = format!("arg.{id}.help");
+    let localized = t!(&key).to_string();
+    if localized != key {
+        arg.help(localized)
+    } else {
+        arg
+    }
 }
 
 #[cfg(test)]

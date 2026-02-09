@@ -64,6 +64,59 @@ help.usage_heading: "用法"
 help.commands_heading: "命令"
 help.options_heading: "选项"
 
+# 应用级帮助文本
+app.about: "跨平台海思芯片烧录工具 (WS63、BS2X 系列)"
+app.after_help: "环境变量:\n  HISIFLASH_PORT              默认串口\n  HISIFLASH_BAUD              默认波特率 (默认: 921600)\n  HISIFLASH_CHIP              默认芯片类型 (ws63, bs2x, bs25)\n  HISIFLASH_LANG              语言/区域设置 (en, zh-CN)\n  HISIFLASH_NON_INTERACTIVE   非交互模式 (禁用提示)\n\n更多信息请访问: https://github.com/sanchuanhehe/hisiflash"
+
+# 命令描述
+cmd.flash.about: "烧录 FWPKG 固件包"
+cmd.write.about: "将原始二进制文件写入 Flash"
+cmd.write_program.about: "写入单个程序二进制文件"
+cmd.erase.about: "擦除 Flash 存储器"
+cmd.info.about: "显示固件文件信息"
+cmd.list_ports.about: "列出可用串口"
+cmd.monitor.about: "打开串口监视器"
+cmd.completions.about: "生成 Shell 补全脚本"
+
+# 全局选项
+arg.port.help: "使用的串口 (未指定时自动检测)"
+arg.baud.help: "数据传输波特率"
+arg.chip.help: "目标芯片型号"
+arg.lang.help: "消息语言/区域设置 (如 en, zh-CN)"
+arg.verbose.help: "详细输出级别 (-v, -vv, -vvv 逐级增加)"
+arg.quiet.help: "静默模式 (抑制非必要输出)"
+arg.non_interactive.help: "非交互模式 (出错时直接失败而非提示)"
+arg.confirm_port.help: "即使自动检测到端口也要确认选择"
+arg.list_all_ports.help: "列出所有可用端口 (包括未知类型)"
+arg.config_path.help: "配置文件路径"
+
+# flash 命令选项
+arg.firmware.help: "FWPKG 固件文件路径"
+arg.filter.help: "仅烧录指定分区 (逗号分隔)"
+arg.late_baud.help: "延迟切换波特率 (在 LoaderBoot 之后)"
+arg.skip_verify.help: "跳过 CRC 校验"
+arg.monitor.help: "烧录完成后打开串口监视器"
+
+# write 命令选项
+arg.loaderboot.help: "LoaderBoot 二进制文件"
+arg.bins.help: "要烧录的二进制文件 (格式: 文件:地址，可重复)"
+
+# write-program 命令选项
+arg.program.help: "程序二进制文件"
+arg.address.help: "程序烧录地址"
+
+# erase 命令选项
+arg.all.help: "擦除整个 Flash (需要确认)"
+
+# info/list-ports 命令选项
+arg.json.help: "以 JSON 格式输出到标准输出"
+
+# monitor 命令选项
+arg.monitor_baud.help: "监视器波特率 (默认: 115200)"
+
+# completions 命令选项
+arg.shell.help: "Shell 补全脚本类型"
+
 serial.multiple_ports: "发现多个串口。请使用 -p 参数指定端口或禁用 --non-interactive 选项。"
 serial.no_ports_available: "没有可用的串口。"
 

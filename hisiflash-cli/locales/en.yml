@@ -64,6 +64,59 @@ help.usage_heading: "USAGE"
 help.commands_heading: "COMMANDS"
 help.options_heading: "OPTIONS"
 
+# Application-level help text
+app.about: "A cross-platform tool for flashing HiSilicon chips (WS63, BS2X series)"
+app.after_help: "Environment variables:\n  HISIFLASH_PORT              Default serial port\n  HISIFLASH_BAUD              Default baud rate (default: 921600)\n  HISIFLASH_CHIP              Default chip type (ws63, bs2x, bs25)\n  HISIFLASH_LANG              Language/locale (en, zh-CN)\n  HISIFLASH_NON_INTERACTIVE   Non-interactive mode (disable prompts)\n\nFor more information, visit: https://github.com/sanchuanhehe/hisiflash"
+
+# Command descriptions
+cmd.flash.about: "Flash a FWPKG firmware package"
+cmd.write.about: "Write raw binary files to flash"
+cmd.write_program.about: "Write a single binary with program data"
+cmd.erase.about: "Erase flash memory"
+cmd.info.about: "Show information about a firmware file"
+cmd.list_ports.about: "List available serial ports"
+cmd.monitor.about: "Open serial monitor"
+cmd.completions.about: "Generate shell completion scripts"
+
+# Global options
+arg.port.help: "Serial port to use (auto-detected if not specified)"
+arg.baud.help: "Baud rate for data transfer"
+arg.chip.help: "Target chip type"
+arg.lang.help: "Language/locale for messages (e.g., en, zh-CN)"
+arg.verbose.help: "Verbose output level (-v, -vv, -vvv for increasing detail)"
+arg.quiet.help: "Quiet mode (suppress non-essential output)"
+arg.non_interactive.help: "Non-interactive mode (fail instead of prompting)"
+arg.confirm_port.help: "Confirm port selection even for auto-detected ports"
+arg.list_all_ports.help: "List all available ports (including unknown types)"
+arg.config_path.help: "Path to a configuration file"
+
+# Flash command options
+arg.firmware.help: "Path to the FWPKG firmware file"
+arg.filter.help: "Only flash specified partitions (comma-separated)"
+arg.late_baud.help: "Use late baud rate change (after LoaderBoot)"
+arg.skip_verify.help: "Skip CRC verification"
+arg.monitor.help: "Open serial monitor after flashing"
+
+# Write command options
+arg.loaderboot.help: "LoaderBoot binary file"
+arg.bins.help: "Binary file to flash (format: file:address, can be repeated)"
+
+# Write-program command options
+arg.program.help: "Program binary file"
+arg.address.help: "Flash address for program"
+
+# Erase command options
+arg.all.help: "Erase entire flash (required confirmation)"
+
+# Info/List-ports command options
+arg.json.help: "Output as JSON to stdout"
+
+# Monitor command options
+arg.monitor_baud.help: "Baud rate for monitoring (default: 115200)"
+
+# Completions command options
+arg.shell.help: "Shell type for completions"
+
 serial.multiple_ports: "Multiple serial ports found. Use -p to specify a port or disable --non-interactive."
 serial.no_ports_available: "No serial ports available."
 
