@@ -299,11 +299,11 @@ pub fn ask_remember_port(port: &DetectedPort, config: &mut Config) -> Result<()>
     Ok(())
 }
 
-
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use console::style;
+    use console::{measure_text_width, truncate_str};
     use hisiflash::connection::detect::{DetectedPort, UsbDevice};
 
     // ---- SerialOptions ----
@@ -315,6 +315,55 @@ mod tests {
         assert!(!options.list_all_ports);
         assert!(!options.non_interactive);
         assert!(!options.confirm_port);
+    }
+
+    #[test]
+    fn test_truncate_port_label_right_preserves_left() {
+        let port = "/dev/verylongttyusb0";
+        let product = " - Very Long Product Name That Would Wrap";
+        let name = format!("{}{}", port, product);
+        let styled = style(&name).bold().to_string();
+
+        let term_width = 30usize;
+        let max_item_width = term_width.saturating_sub(4);
+        let truncated = truncate_str(&styled, max_item_width, "…").into_owned();
+
+        assert!(!truncated.contains('\n'));
+        assert!(measure_text_width(&truncated) <= max_item_width);
+        // Expect left side (port prefix) to be preserved in right-truncation.
+        fn strip_ansi_codes(s: &str) -> String {
+            let mut out = String::new();
+            let bytes = s.as_bytes();
+            let mut i = 0usize;
+            while i < bytes.len() {
+                if bytes[i] == 0x1B && i + 1 < bytes.len() && bytes[i + 1] == b'[' {
+                    i += 2;
+                    while i < bytes.len() && bytes[i] != b'm' {
+                        i += 1;
+                    }
+                    if i < bytes.len() {
+                        i += 1;
+                    }
+                } else {
+                    out.push(bytes[i] as char);
+                    i += 1;
+                }
+            }
+            out
+        }
+
+        let stripped = strip_ansi_codes(&truncated);
+        assert!(stripped.starts_with("/dev/verylong"));
+    }
+
+    #[test]
+    fn test_truncate_port_label_handles_ansi() {
+        let name = format!("{}{}", style("/dev/ttyUSB0").bold(), " - 产品信息");
+        let term_width = 10usize;
+        let max_item_width = term_width.saturating_sub(4);
+        let t = truncate_str(&name, max_item_width, "…").into_owned();
+        assert!(!t.contains('\n'));
+        assert!(measure_text_width(&t) <= max_item_width);
     }
 
     #[test]

@@ -219,7 +219,12 @@ pub fn resolve_firmware(
         // "? Use firmware '...'? · (y/N)" ≈ prompt text + 10 chars overhead
         let prompt_overhead = 10;
         let prompt_text = t!("flash.confirm_firmware", path = &rel).to_string();
-        let prompt_text = console::truncate_str(&prompt_text, term_width.saturating_sub(prompt_overhead), "…").into_owned();
+        let prompt_text = console::truncate_str(
+            &prompt_text,
+            term_width.saturating_sub(prompt_overhead),
+            "…",
+        )
+        .into_owned();
         let confirm = dialoguer::Confirm::with_theme(&ColorfulTheme::default())
             .with_prompt(prompt_text)
             .default(true)
