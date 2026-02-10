@@ -299,6 +299,8 @@ pub fn ask_remember_port(port: &DetectedPort, config: &mut Config) -> Result<()>
     Ok(())
 }
 
+
+
 #[cfg(test)]
 mod tests {
     use super::*;
