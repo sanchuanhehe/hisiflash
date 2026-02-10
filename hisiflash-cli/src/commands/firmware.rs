@@ -244,8 +244,13 @@ pub fn resolve_firmware(
         );
     }
 
-    // Build selection items.
-    let labels: Vec<String> = candidates.iter().map(|c| c.display_label(&base)).collect();
+    // Build selection items, truncated to terminal width to prevent wrapping.
+    let term_width = console::Term::stderr().size().1 as usize;
+    let max_item_width = term_width.saturating_sub(4); // margin for selector prefix "❯ "
+    let labels: Vec<String> = candidates
+        .iter()
+        .map(|c| truncate_start(&c.display_label(&base), max_item_width))
+        .collect();
 
     let selection = if use_fancy_output() {
         Select::with_theme(&ColorfulTheme::default())
@@ -267,6 +272,32 @@ pub fn resolve_firmware(
         Some(idx) => Ok(candidates[idx].path.clone()),
         None => anyhow::bail!("{}", t!("flash.selection_cancelled")),
     }
+}
+
+/// Truncate a string from the **left** so it fits within `max_width` visible
+/// columns.  The right side (filename + size) is kept because it is the most
+/// informative part for distinguishing firmware candidates.
+fn truncate_start(s: &str, max_width: usize) -> String {
+    let width = console::measure_text_width(s);
+    if width <= max_width {
+        return s.to_string();
+    }
+    if max_width <= 1 {
+        return "\u{2026}".to_string(); // '…'
+    }
+    // Keep as many trailing characters as possible.
+    let target = max_width - 1; // 1 column for '…'
+    // Walk from the end to collect `target` visible columns.
+    let chars: Vec<char> = s.chars().collect();
+    let start = chars.len().saturating_sub(target);
+    let tail: String = chars[start..].iter().collect();
+    // Try to cut at a path separator for a cleaner look.
+    if let Some(pos) = tail.find('/') {
+        if pos > 0 && pos < tail.len() - 1 {
+            return format!("\u{2026}{}", &tail[pos..]);
+        }
+    }
+    format!("\u{2026}{tail}")
 }
 
 #[cfg(test)]
@@ -461,6 +492,51 @@ mod tests {
         let _guard = TempCwdGuard::new(tmp.path());
         let result = resolve_firmware(None, true, true);
         assert!(result.is_err());
+    }
+
+    // ── truncate_start tests ──────────────────────────────────────────
+
+    #[test]
+    fn test_truncate_start_short_string_unchanged() {
+        assert_eq!(truncate_start("hello", 80), "hello");
+    }
+
+    #[test]
+    fn test_truncate_start_exact_fit() {
+        let s = "abcdef";
+        assert_eq!(truncate_start(s, 6), "abcdef");
+    }
+
+    #[test]
+    fn test_truncate_start_cuts_left() {
+        // 10 chars, width 5 → keep 4 chars + '…'
+        let s = "0123456789";
+        let result = truncate_start(s, 5);
+        assert!(result.starts_with('…'));
+        assert_eq!(console::measure_text_width(&result), 5);
+    }
+
+    #[test]
+    fn test_truncate_start_path_cuts_at_separator() {
+        let s = "src/output/ws63/fwpkg/ws63-liteos-app/ws63-liteos-app_all.fwpkg (1.8 MB)";
+        let result = truncate_start(s, 50);
+        assert!(result.starts_with('…'));
+        // Should cut at a '/' boundary
+        assert!(result.starts_with("…/"));
+        assert!(result.ends_with("(1.8 MB)"));
+        assert!(console::measure_text_width(&result) <= 50);
+    }
+
+    #[test]
+    fn test_truncate_start_very_narrow() {
+        assert_eq!(truncate_start("long string", 1), "…");
+    }
+
+    #[test]
+    fn test_truncate_start_preserves_size_suffix() {
+        let s = "very/long/path/to/firmware.fwpkg (2.0 MB)";
+        let result = truncate_start(s, 30);
+        assert!(result.ends_with("(2.0 MB)"));
     }
 
     /// Global lock for tests that change the process-wide working directory.

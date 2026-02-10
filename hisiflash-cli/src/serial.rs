@@ -203,6 +203,14 @@ fn select_port_interactive(mut ports: Vec<DetectedPort>, config: &Config) -> Res
         })
         .collect();
 
+    // Truncate labels to fit terminal width to prevent wrapping in narrow terminals.
+    let term_width = console::Term::stderr().size().1 as usize;
+    let max_item_width = term_width.saturating_sub(4);
+    let port_names: Vec<String> = port_names
+        .into_iter()
+        .map(|n| console::truncate_str(&n, max_item_width, "\u{2026}").into_owned())
+        .collect();
+
     // Setup Ctrl-C handler to restore cursor
     #[allow(clippy::unwrap_used)] // ctrlc handler setup
     ctrlc::set_handler(move || {
