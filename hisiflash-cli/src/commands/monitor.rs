@@ -113,7 +113,8 @@ pub(crate) fn cmd_monitor(
 
                         // Process output with optional timestamps
                         let ts_enabled = show_timestamp_reader.load(Ordering::Relaxed);
-                        let output = format_monitor_output(&decoded, ts_enabled, &mut at_line_start);
+                        let output =
+                            format_monitor_output(&decoded, ts_enabled, &mut at_line_start);
                         print!("{output}");
                         io::stdout().flush().ok();
                     }
