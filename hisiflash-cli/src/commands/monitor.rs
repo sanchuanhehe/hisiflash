@@ -7,6 +7,7 @@ use console::style;
 use hisiflash::MonitorSession;
 use rust_i18n::t;
 use std::io;
+use std::io::IsTerminal;
 use std::io::Write as _;
 use std::path::PathBuf;
 
@@ -49,23 +50,29 @@ pub(crate) fn cmd_monitor(
     // write atomically under the same lock to avoid cursor-column drift.
     //
     // Channel policy note:
-    // - Current implementation intentionally writes status lines to stderr.
-    // - Monitor stream itself is also written to stderr (see below) to keep one
+    // - Status lines are always written to stderr.
+    // - In TTY mode, monitor stream is also written to stderr to keep one
     //   synchronized terminal channel and avoid inter-stream reordering.
-    // - This applies to both TTY and non-TTY execution modes.
-    fn print_status_line(term_lock: &Arc<Mutex<()>>, message: &str) {
+    // - In non-TTY mode, monitor stream is written to stdout (separated), while
+    //   status/hint lines remain on stderr for script-friendly contracts.
+    fn print_status_line(term_lock: &Arc<Mutex<()>>, message: &str, tty_mode: bool) {
         if let Ok(_guard) = term_lock.lock() {
-            eprint!("\r\x1b[2K{message}\r\n");
+            if tty_mode {
+                eprint!("\r\x1b[2K{message}\r\n");
+            } else {
+                eprintln!("{message}");
+            }
             io::stderr().flush().ok();
         }
     }
 
     let port_name = get_port(cli, config)?;
+    let tty_mode = io::stdout().is_terminal() && io::stderr().is_terminal();
     // Design trade-off (explicit):
-    // - CLI convention: primary data on stdout, diagnostics on stderr.
-    // - Monitor reality: high-frequency stream + async status hints can break alignment if split.
-    // - We prioritize terminal readability/alignment by coalescing both to stderr,
-    //   including in non-TTY mode (callers should capture stderr for monitor payload).
+    // - TTY mode: prioritize alignment/readability by coalescing monitor data and
+    //   status lines onto one channel (stderr).
+    // - non-TTY mode: prioritize CLI stream contract by splitting channels:
+    //   monitor data -> stdout, status/hints -> stderr.
     let term_lock = Arc::new(Mutex::new(()));
 
     print_status_line(
@@ -79,10 +86,12 @@ pub(crate) fn cmd_monitor(
                 baud = monitor_baud
             )
         ),
+        tty_mode,
     );
     print_status_line(
         &term_lock,
         &style(t!("monitor.exit_hint")).dim().to_string(),
+        tty_mode,
     );
 
     // Open serial port
@@ -103,6 +112,7 @@ pub(crate) fn cmd_monitor(
     let force_line_start = Arc::new(AtomicBool::new(false));
     let force_line_start_reader = force_line_start.clone();
     let term_lock_reader = term_lock.clone();
+    let tty_mode_reader = tty_mode;
     let clean_output_reader = clean_output;
     let last_rx_millis = Arc::new(AtomicU64::new(0));
     let last_rx_millis_reader = last_rx_millis.clone();
@@ -123,6 +133,7 @@ pub(crate) fn cmd_monitor(
                 style("📝").cyan(),
                 t!("monitor.logging", path = path.display().to_string())
             ),
+            tty_mode,
         );
         Some(std::sync::Mutex::new(file))
     } else {
@@ -162,8 +173,13 @@ pub(crate) fn cmd_monitor(
                         // after status/hint output, regardless of device chunk boundaries.
                         if force_line_start_reader.swap(false, Ordering::Relaxed) {
                             if let Ok(_guard) = term_lock_reader.lock() {
-                                eprint!("\r\n");
-                                io::stderr().flush().ok();
+                                if tty_mode_reader {
+                                    eprint!("\r\n");
+                                    io::stderr().flush().ok();
+                                } else {
+                                    print!("\r\n");
+                                    io::stdout().flush().ok();
+                                }
                             }
                             at_line_start = true;
                         }
@@ -180,8 +196,13 @@ pub(crate) fn cmd_monitor(
                         let output =
                             format_monitor_output(&display_text, ts_enabled, &mut at_line_start);
                         if let Ok(_guard) = term_lock_reader.lock() {
-                            eprint!("{output}");
-                            io::stderr().flush().ok();
+                            if tty_mode_reader {
+                                eprint!("{output}");
+                                io::stderr().flush().ok();
+                            } else {
+                                print!("{output}");
+                                io::stdout().flush().ok();
+                            }
                         }
                     }
                 },
@@ -231,6 +252,7 @@ pub(crate) fn cmd_monitor(
                         print_status_line(
                             &term_lock,
                             &format!("{} {}", style("🔄").cyan(), t!("monitor.resetting")),
+                            tty_mode,
                         );
 
                         let before_rx = last_rx_millis.load(Ordering::Relaxed);
@@ -266,6 +288,7 @@ pub(crate) fn cmd_monitor(
                                             style("✓").green(),
                                             t!("monitor.reset_ok")
                                         ),
+                                        tty_mode,
                                     );
                                 } else {
                                     print_status_line(
@@ -278,10 +301,12 @@ pub(crate) fn cmd_monitor(
                                                 timeout_ms = VERIFY_TIMEOUT_MS
                                             )
                                         ),
+                                        tty_mode,
                                     );
                                     print_status_line(
                                         &term_lock,
                                         t!("monitor.reset_flow_control_hint").as_ref(),
+                                        tty_mode,
                                     );
                                 }
                                 // [Sensitive] Ensure subsequent serial bytes start on clean line.
@@ -295,10 +320,12 @@ pub(crate) fn cmd_monitor(
                                         style("⚠").yellow(),
                                         t!("monitor.reset_failed", error = err.to_string())
                                     ),
+                                    tty_mode,
                                 );
                                 print_status_line(
                                     &term_lock,
                                     t!("monitor.reset_flow_control_hint").as_ref(),
+                                    tty_mode,
                                 );
                                 force_line_start.store(true, Ordering::Relaxed);
                             },
@@ -314,7 +341,11 @@ pub(crate) fn cmd_monitor(
                         } else {
                             t!("monitor.timestamp_on")
                         };
-                        print_status_line(&term_lock, &format!("{} {state}", style("⏱").cyan()));
+                        print_status_line(
+                            &term_lock,
+                            &format!("{} {state}", style("⏱").cyan()),
+                            tty_mode,
+                        );
                     },
                     // Enter: send \r\n (works with both \n and \r\n devices)
                     (KeyCode::Enter, _) => {
@@ -349,6 +380,7 @@ pub(crate) fn cmd_monitor(
     print_status_line(
         &term_lock,
         &format!("{} {}", style("👋").cyan(), t!("monitor.closed")),
+        tty_mode,
     );
 
     if signal_interrupted || was_interrupted() || user_requested_exit {

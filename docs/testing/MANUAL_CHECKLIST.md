@@ -55,6 +55,7 @@
 
 - [ ] 管道/CI 场景触发交互时返回“需要 TTY”的明确错误
 - [ ] 非TTY错误退出码为 usage 类（`2`）
+- [ ] `monitor` 在非TTY下串口数据输出到 stdout、状态提示输出到 stderr（分流契约）
 - [ ] `--non-interactive` 下多串口场景稳定失败并给可操作提示
 - [ ] `--non-interactive` + 单候选串口场景可直接执行
 
