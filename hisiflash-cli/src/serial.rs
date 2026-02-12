@@ -41,6 +41,9 @@ pub struct SelectedPort {
 }
 
 fn usage_err(message: &str) -> anyhow::Error {
+    // Keep serial-selection user-facing failures in Usage class so they map
+    // to CLI exit code 2 (instead of generic runtime code 1).
+    // This is important for CI/script callers that branch on usage errors.
     CliError::Usage(message.to_string()).into()
 }
 
@@ -48,6 +51,9 @@ fn select_non_interactive_port(
     selection_ports: Vec<DetectedPort>,
     config: &Config,
 ) -> Result<SelectedPort> {
+    // Non-interactive mode must be deterministic and never prompt.
+    // 0 or >1 candidates are treated as usage/setup issues (exit 2),
+    // while exactly one candidate is a valid auto-selection.
     match selection_ports.len().cmp(&1) {
         Ordering::Equal => {
             let port = selection_ports
@@ -81,6 +87,7 @@ pub fn select_serial_port(options: &SerialOptions, config: &Config) -> Result<Se
     let ports = discover_ports();
 
     if ports.is_empty() {
+        // No ports is treated as usage/setup error for CLI contract consistency.
         return Err(usage_err(t!("serial.no_ports_found").as_ref()));
     }
 

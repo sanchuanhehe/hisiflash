@@ -181,10 +181,16 @@ impl Chip {
 
 #[derive(Debug, Error)]
 pub(crate) enum CliError {
+    // Usage: command-line syntax/arguments/environment usage problems.
+    // Mapped to exit code 2 to match CLI usage-error conventions.
     #[error("{0}")]
     Usage(String),
+    // Config: invalid or conflicting persisted configuration values.
+    // Mapped to exit code 3 for explicit configuration failures.
     #[error("{0}")]
     Config(String),
+    // Cancelled: user/signal initiated interruption.
+    // Mapped to 130 (128 + SIGINT) for script-friendly interrupt semantics.
     #[error("{0}")]
     Cancelled(String),
 }
@@ -669,10 +675,13 @@ fn apply_config_defaults(cli: &mut Cli, matches: &clap::ArgMatches, config: &Con
 }
 
 fn map_exit_code(err: &anyhow::Error) -> i32 {
+    // Priority 1: explicit CLI domain errors (stable contract for scripts).
     if let Some(cli_err) = err.downcast_ref::<CliError>() {
         return cli_err.exit_code();
     }
 
+    // Priority 2: library errors mapped to coarse CLI classes.
+    // Keep this mapping conservative to avoid breaking automation expectations.
     if let Some(lib_err) = err.downcast_ref::<LibError>() {
         return match lib_err {
             LibError::DeviceNotFound => 4,
@@ -682,6 +691,7 @@ fn map_exit_code(err: &anyhow::Error) -> i32 {
         };
     }
 
+    // Fallback: unexpected/unclassified failure.
     1
 }
 
