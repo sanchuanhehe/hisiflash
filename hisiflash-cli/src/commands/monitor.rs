@@ -16,6 +16,15 @@ use crate::{Cli, clear_interrupted_flag, get_port, was_interrupted};
 
 pub(crate) use hisiflash::{clean_monitor_text, drain_utf8_lossy, format_monitor_output};
 
+fn contains_reset_evidence(text: &str) -> bool {
+    let lower = text.to_ascii_lowercase();
+    lower.contains("boot.")
+        || lower.contains("flash init")
+        || lower.contains("verify_")
+        || lower.contains("reset cause")
+        || lower.contains("bootrom")
+}
+
 /// Run the serial monitor.
 ///
 /// - Reader thread: serial → terminal (with optional timestamps and ANSI passthrough)
@@ -116,6 +125,8 @@ pub(crate) fn cmd_monitor(
     let clean_output_reader = clean_output;
     let last_rx_millis = Arc::new(AtomicU64::new(0));
     let last_rx_millis_reader = last_rx_millis.clone();
+    let reset_evidence_hits = Arc::new(AtomicU64::new(0));
+    let reset_evidence_hits_reader = reset_evidence_hits.clone();
     let mut signal_interrupted = false;
     let mut user_requested_exit = false;
 
@@ -161,6 +172,10 @@ pub(crate) fn cmd_monitor(
                     utf8_buf.extend_from_slice(data);
 
                     let decoded = drain_utf8_lossy(&mut utf8_buf);
+
+                    if contains_reset_evidence(&decoded) {
+                        reset_evidence_hits_reader.fetch_add(1, Ordering::Relaxed);
+                    }
 
                     let display_text = if clean_output_reader {
                         clean_monitor_text(&decoded)
@@ -256,6 +271,7 @@ pub(crate) fn cmd_monitor(
                         );
 
                         let before_rx = last_rx_millis.load(Ordering::Relaxed);
+                        let before_evidence_hits = reset_evidence_hits.load(Ordering::Relaxed);
                         let reset_result = (|| -> Result<()> {
                             serial_writer.set_data_terminal_ready(false)?;
                             serial_writer.set_request_to_send(false)?;
@@ -270,39 +286,87 @@ pub(crate) fn cmd_monitor(
                         match reset_result {
                             Ok(()) => {
                                 const VERIFY_TIMEOUT_MS: u64 = 2000;
+                                const SILENCE_GAP_MS: u64 = 120;
+                                print_status_line(
+                                    &term_lock,
+                                    &format!(
+                                        "{} {}",
+                                        style("✓").green(),
+                                        t!("monitor.reset_signal_sent")
+                                    ),
+                                    tty_mode,
+                                );
+
                                 let start = now_millis();
-                                let mut observed = false;
+                                let mut evidence_observed = false;
+                                let mut weak_observed = false;
+                                let mut saw_silence_gap = false;
+                                let mut last_seen_rx = before_rx;
+
                                 while now_millis().saturating_sub(start) < VERIFY_TIMEOUT_MS {
-                                    if last_rx_millis.load(Ordering::Relaxed) > before_rx {
-                                        observed = true;
+                                    let current_hits = reset_evidence_hits.load(Ordering::Relaxed);
+                                    if current_hits > before_evidence_hits {
+                                        evidence_observed = true;
                                         break;
                                     }
+
+                                    let current_rx = last_rx_millis.load(Ordering::Relaxed);
+                                    if now_millis().saturating_sub(current_rx) >= SILENCE_GAP_MS {
+                                        saw_silence_gap = true;
+                                    }
+
+                                    if current_rx > last_seen_rx {
+                                        if saw_silence_gap {
+                                            weak_observed = true;
+                                            break;
+                                        }
+                                        last_seen_rx = current_rx;
+                                    }
+
                                     std::thread::sleep(Duration::from_millis(50));
                                 }
 
-                                if observed {
+                                let mut show_flow_control_hint = false;
+                                if evidence_observed {
                                     print_status_line(
                                         &term_lock,
                                         &format!(
                                             "{} {}",
                                             style("✓").green(),
-                                            t!("monitor.reset_ok")
+                                            t!("monitor.reset_evidence_observed")
                                         ),
                                         tty_mode,
                                     );
-                                } else {
+                                } else if weak_observed {
+                                    show_flow_control_hint = true;
                                     print_status_line(
                                         &term_lock,
                                         &format!(
                                             "{} {}",
                                             style("⚠").yellow(),
                                             t!(
-                                                "monitor.reset_no_response",
+                                                "monitor.reset_evidence_weak",
                                                 timeout_ms = VERIFY_TIMEOUT_MS
                                             )
                                         ),
                                         tty_mode,
                                     );
+                                } else {
+                                    show_flow_control_hint = true;
+                                    print_status_line(
+                                        &term_lock,
+                                        &format!(
+                                            "{} {}",
+                                            style("⚠").yellow(),
+                                            t!(
+                                                "monitor.reset_evidence_unconfirmed",
+                                                timeout_ms = VERIFY_TIMEOUT_MS
+                                            )
+                                        ),
+                                        tty_mode,
+                                    );
+                                }
+                                if show_flow_control_hint {
                                     print_status_line(
                                         &term_lock,
                                         t!("monitor.reset_flow_control_hint").as_ref(),
@@ -535,5 +599,27 @@ mod tests {
         let mut at_line_start = true;
         let result = format_monitor_output("\n\n", false, &mut at_line_start);
         assert_eq!(result, "\r\n\r\n");
+    }
+
+    #[test]
+    fn test_contains_reset_evidence_boot_pattern() {
+        assert!(contains_reset_evidence("boot.\n"));
+    }
+
+    #[test]
+    fn test_contains_reset_evidence_flash_init_pattern() {
+        assert!(contains_reset_evidence("Flash Init Fail! ret = 0x80001341"));
+    }
+
+    #[test]
+    fn test_contains_reset_evidence_verify_pattern() {
+        assert!(contains_reset_evidence(
+            "verify_public_rootkey secure verify disable!"
+        ));
+    }
+
+    #[test]
+    fn test_contains_reset_evidence_negative_case() {
+        assert!(!contains_reset_evidence("normal runtime log line"));
     }
 }
