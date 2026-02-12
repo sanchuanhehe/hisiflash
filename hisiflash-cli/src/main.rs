@@ -21,14 +21,41 @@ use log::debug;
 use rust_i18n::t;
 use std::env;
 use std::path::PathBuf;
+use std::sync::OnceLock;
 use thiserror::Error;
 
 /// Whether stderr is a terminal (set once at startup).
 static STDERR_IS_TTY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+/// Whether process received SIGINT/Ctrl-C.
+static INTERRUPTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+/// Ensures Ctrl-C handler is installed only once.
+static SIGNAL_HANDLER_INSTALLED: OnceLock<()> = OnceLock::new();
 
 /// Check if emoji/animations should be used (TTY and colors enabled).
 pub(crate) fn use_fancy_output() -> bool {
     STDERR_IS_TTY.load(std::sync::atomic::Ordering::Relaxed) && console::colors_enabled_stderr()
+}
+
+pub(crate) fn was_interrupted() -> bool {
+    INTERRUPTED.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+fn clear_interrupted_flag() {
+    INTERRUPTED.store(false, std::sync::atomic::Ordering::Relaxed);
+}
+
+fn install_signal_handler() -> Result<()> {
+    if SIGNAL_HANDLER_INSTALLED.get().is_some() {
+        return Ok(());
+    }
+
+    ctrlc::set_handler(|| {
+        INTERRUPTED.store(true, std::sync::atomic::Ordering::Relaxed);
+    })
+    .map_err(|e| anyhow::anyhow!("failed to install Ctrl-C handler: {e}"))?;
+
+    let _ = SIGNAL_HANDLER_INSTALLED.set(());
+    Ok(())
 }
 
 mod commands;
@@ -325,8 +352,20 @@ fn main() {
 }
 
 fn run() -> Result<()> {
+    install_signal_handler()?;
+    clear_interrupted_flag();
+
     let raw_args: Vec<String> = env::args().collect();
-    run_with_args(&raw_args)
+    let result = run_with_args(&raw_args);
+
+    if was_interrupted() {
+        match result {
+            Err(err) if err.downcast_ref::<CliError>().is_some() => Err(err),
+            _ => Err(CliError::Cancelled(t!("error.interrupted").to_string()).into()),
+        }
+    } else {
+        result
+    }
 }
 
 fn run_with_args(raw_args: &[String]) -> Result<()> {
@@ -1037,6 +1076,12 @@ mod cli_tests {
 
         let result = apply_config_defaults(&mut cli, &matches, &config);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_map_exit_code_cancelled_is_130() {
+        let err = anyhow::Error::new(CliError::Cancelled("cancelled".to_string()));
+        assert_eq!(map_exit_code(&err), 130);
     }
 
     #[test]

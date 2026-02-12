@@ -137,6 +137,8 @@ arg.version_flag.help: "Print version"
 
 serial.multiple_ports: "Multiple serial ports found. Use -p to specify a port or disable --non-interactive."
 serial.no_ports_available: "No serial ports available."
+serial.interactive_requires_tty: "Interactive port selection requires a TTY. Use -p/--port or --non-interactive."
+serial.prompt_failed: "Failed to prompt for serial port selection."
 
 # Retry messages
 retry.connection_attempt: "Connection attempt %{attempt}/%{max}"
@@ -155,6 +157,7 @@ error.serial_error: "Serial port error"
 error.connection_exhausted: "Connection failed after %{max} attempts"
 error.download_exhausted: "Download failed after %{max} retries"
 error.invalid_config_chip: "Invalid chip in config: %{chip}. Supported values: %{supported}"
+error.interrupted: "Operation interrupted"
 
 # Firmware auto-discovery
 flash.no_firmware_found: "No .fwpkg firmware files found in the current directory tree. Please specify a firmware file."

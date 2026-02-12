@@ -11,7 +11,7 @@ use std::io::Write as _;
 use std::path::PathBuf;
 
 use crate::config::Config;
-use crate::{Cli, get_port};
+use crate::{Cli, CliError, get_port, was_interrupted};
 
 pub(crate) use hisiflash::{format_monitor_output, split_utf8};
 
@@ -64,6 +64,7 @@ pub(crate) fn cmd_monitor(
     let running_reader = running.clone();
     let show_timestamp = Arc::new(AtomicBool::new(timestamp));
     let show_timestamp_reader = show_timestamp.clone();
+    let mut interrupted = false;
 
     // Open log file if specified
     let log_writer: Option<std::sync::Mutex<std::fs::File>> = if let Some(path) = log_file {
@@ -142,6 +143,12 @@ pub(crate) fn cmd_monitor(
 
     // Main thread: keyboard → serial
     while running.load(Ordering::Relaxed) {
+        if was_interrupted() {
+            interrupted = true;
+            running.store(false, Ordering::Relaxed);
+            break;
+        }
+
         // Poll for keyboard events with timeout
         if event::poll(Duration::from_millis(50))? {
             if let Event::Key(KeyEvent {
@@ -151,6 +158,7 @@ pub(crate) fn cmd_monitor(
                 match (code, modifiers) {
                     // Ctrl+C: exit
                     (KeyCode::Char('c'), KeyModifiers::CONTROL) => {
+                        interrupted = true;
                         running.store(false, Ordering::Relaxed);
                         break;
                     },
@@ -208,7 +216,11 @@ pub(crate) fn cmd_monitor(
     let _ = reader_handle.join();
     eprintln!("\r\n{} {}", style("👋").cyan(), t!("monitor.closed"));
 
-    Ok(())
+    if interrupted || was_interrupted() {
+        Err(CliError::Cancelled(t!("error.interrupted").to_string()).into())
+    } else {
+        Ok(())
+    }
 }
 
 /// RAII guard to restore terminal mode on drop.

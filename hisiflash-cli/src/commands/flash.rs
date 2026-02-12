@@ -8,7 +8,15 @@ use rust_i18n::t;
 use std::path::PathBuf;
 
 use crate::config::Config;
-use crate::{Cli, CliError, get_port, use_fancy_output};
+use crate::{Cli, CliError, get_port, use_fancy_output, was_interrupted};
+
+fn ensure_not_interrupted() -> Result<()> {
+    if was_interrupted() {
+        Err(CliError::Cancelled(t!("error.interrupted").to_string()).into())
+    } else {
+        Ok(())
+    }
+}
 
 /// Flash command implementation.
 pub(crate) fn cmd_flash(
@@ -78,12 +86,23 @@ pub(crate) fn cmd_flash(
     // Create flasher using chip abstraction
     let chip: ChipFamily = cli.chip.into();
     let mut flasher = chip.create_flasher(&port, cli.baud, late_baud, cli.verbose)?;
+    if let Err(err) = ensure_not_interrupted() {
+        flasher.close();
+        return Err(err);
+    }
 
     // Connect
     if !cli.quiet {
         eprintln!("{} {}", style("⏳").yellow(), t!("common.waiting_device"));
     }
-    flasher.connect()?;
+    if let Err(err) = flasher.connect() {
+        flasher.close();
+        return Err(err.into());
+    }
+    if let Err(err) = ensure_not_interrupted() {
+        flasher.close();
+        return Err(err);
+    }
     if !cli.quiet {
         eprintln!("{} {}", style("✓").green(), t!("common.connected"));
     }
@@ -110,7 +129,7 @@ pub(crate) fn cmd_flash(
 
     let mut current_partition = String::new();
 
-    flasher.flash_fwpkg(
+    let flash_result = flasher.flash_fwpkg(
         &fwpkg,
         filter_slice,
         &mut |name: &str, current: usize, total: usize| {
@@ -122,7 +141,17 @@ pub(crate) fn cmd_flash(
                 pb.set_position((current * 100 / total) as u64);
             }
         },
-    )?;
+    );
+
+    if let Err(err) = flash_result {
+        flasher.close();
+        return Err(err.into());
+    }
+
+    if let Err(err) = ensure_not_interrupted() {
+        flasher.close();
+        return Err(err);
+    }
 
     pb.finish_with_message(t!("common.complete").to_string());
 
@@ -130,7 +159,10 @@ pub(crate) fn cmd_flash(
     if !cli.quiet {
         eprintln!("{} {}", style("🔄").cyan(), t!("common.resetting"));
     }
-    flasher.reset()?;
+    if let Err(err) = flasher.reset() {
+        flasher.close();
+        return Err(err.into());
+    }
 
     // Close the flasher to release the serial port
     flasher.close();
@@ -194,19 +226,41 @@ pub(crate) fn cmd_write(
 
     let chip: ChipFamily = cli.chip.into();
     let mut flasher = chip.create_flasher(&port, cli.baud, late_baud, cli.verbose)?;
+    if let Err(err) = ensure_not_interrupted() {
+        flasher.close();
+        return Err(err);
+    }
 
     if !cli.quiet {
         eprintln!("{} {}", style("⏳").yellow(), t!("common.waiting_device"));
     }
-    flasher.connect()?;
+    if let Err(err) = flasher.connect() {
+        flasher.close();
+        return Err(err.into());
+    }
+    if let Err(err) = ensure_not_interrupted() {
+        flasher.close();
+        return Err(err);
+    }
     if !cli.quiet {
         eprintln!("{} {}", style("✓").green(), t!("common.connected"));
     }
 
     let bins_ref: Vec<(&[u8], u32)> = bin_data.iter().map(|(d, a)| (d.as_slice(), *a)).collect();
-    flasher.write_bins(&lb_data, &bins_ref)?;
+    if let Err(err) = flasher.write_bins(&lb_data, &bins_ref) {
+        flasher.close();
+        return Err(err.into());
+    }
 
-    flasher.reset()?;
+    if let Err(err) = ensure_not_interrupted() {
+        flasher.close();
+        return Err(err);
+    }
+
+    if let Err(err) = flasher.reset() {
+        flasher.close();
+        return Err(err.into());
+    }
     flasher.close();
 
     if !cli.quiet {
@@ -248,11 +302,22 @@ pub(crate) fn cmd_erase(cli: &Cli, config: &mut Config, all: bool) -> Result<()>
 
     let chip: ChipFamily = cli.chip.into();
     let mut flasher = chip.create_flasher(&port, cli.baud, false, cli.verbose)?;
+    if let Err(err) = ensure_not_interrupted() {
+        flasher.close();
+        return Err(err);
+    }
 
     if !cli.quiet {
         eprintln!("{} {}", style("⏳").yellow(), t!("common.waiting_device"));
     }
-    flasher.connect()?;
+    if let Err(err) = flasher.connect() {
+        flasher.close();
+        return Err(err.into());
+    }
+    if let Err(err) = ensure_not_interrupted() {
+        flasher.close();
+        return Err(err);
+    }
     if !cli.quiet {
         eprintln!("{} {}", style("✓").green(), t!("common.connected"));
     }
@@ -260,7 +325,15 @@ pub(crate) fn cmd_erase(cli: &Cli, config: &mut Config, all: bool) -> Result<()>
     if !cli.quiet {
         eprintln!("{} {}", style("🗑").red(), t!("erase.erasing"));
     }
-    flasher.erase_all()?;
+    if let Err(err) = flasher.erase_all() {
+        flasher.close();
+        return Err(err.into());
+    }
+
+    if let Err(err) = ensure_not_interrupted() {
+        flasher.close();
+        return Err(err);
+    }
     flasher.close();
 
     if !cli.quiet {

@@ -8,12 +8,13 @@
 //! - Non-interactive mode for CI/CD
 
 use std::cmp::Ordering;
+use std::io::IsTerminal;
 
 use crate::CliError;
 use crate::config::Config;
-use anyhow::{Context, Result};
+use anyhow::Result;
 use console::style;
-use dialoguer::{Confirm, Select, theme::ColorfulTheme};
+use dialoguer::{Confirm, Error as DialoguerError, Select, theme::ColorfulTheme};
 use hisiflash::{DetectedPort, UsbDevice, discover_ports};
 use log::{debug, error, info};
 use rust_i18n::t;
@@ -59,53 +60,79 @@ pub fn select_serial_port(options: &SerialOptions, config: &Config) -> Result<Se
         anyhow::bail!("{}", t!("serial.no_ports_found"));
     }
 
-    // Filter to known devices
-    let known_ports: Vec<_> = ports
+    // Filter to known devices (built-in + config)
+    let known_ports: Vec<DetectedPort> = ports
         .iter()
         .filter(|p| is_known_device(p, config))
+        .cloned()
         .collect();
 
-    // If exactly one known port and not forcing confirmation, use it
-    if known_ports.len() == 1 && !options.confirm_port {
-        let port = known_ports[0].clone();
-        info!("Auto-selected port: {} [{}]", port.name, port.device.name());
-        return Ok(SelectedPort {
-            port,
-            is_known: true,
-        });
-    }
-
-    // In non-interactive mode, fail if multiple ports
-    if options.non_interactive && ports.len() > 1 {
-        anyhow::bail!("{}", t!("serial.multiple_ports"));
-    }
-
-    // Interactive selection
-    // Use all ports if list_all_ports is set, otherwise prefer known ports
-    let selection_ports = if options.list_all_ports || known_ports.is_empty() {
+    // Select candidate set: known first unless user asks for all
+    let selection_ports: Vec<DetectedPort> = if options.list_all_ports || known_ports.is_empty() {
         ports
     } else {
-        known_ports.into_iter().cloned().collect()
+        known_ports
     };
 
+    // Non-interactive mode must never prompt
+    if options.non_interactive {
+        return match selection_ports.len().cmp(&1) {
+            Ordering::Equal => {
+                let port = selection_ports
+                    .into_iter()
+                    .next()
+                    .expect("selection_ports has exactly 1 element here");
+                Ok(SelectedPort {
+                    is_known: is_known_device(&port, config),
+                    port,
+                })
+            },
+            Ordering::Greater => anyhow::bail!("{}", t!("serial.multiple_ports")),
+            Ordering::Less => anyhow::bail!("{}", t!("serial.no_ports_available")),
+        };
+    }
+
     match selection_ports.len().cmp(&1) {
-        Ordering::Greater => select_port_interactive(selection_ports, config),
+        Ordering::Greater => {
+            ensure_interactive_terminal()?;
+            select_port_interactive(selection_ports, config)
+        },
         Ordering::Equal => {
-            // Single port - ask for confirmation if unknown
             let port = selection_ports
                 .into_iter()
                 .next()
                 .expect("selection_ports has exactly 1 element here");
-            if options.non_interactive || port.device.is_known() {
-                Ok(SelectedPort {
-                    is_known: port.device.is_known(),
-                    port,
-                })
+            let is_known = is_known_device(&port, config);
+
+            if is_known && !options.confirm_port {
+                info!("Auto-selected port: {} [{}]", port.name, port.device.name());
+                Ok(SelectedPort { port, is_known })
             } else {
+                ensure_interactive_terminal()?;
                 confirm_single_port(port, config)
             }
         },
         Ordering::Less => anyhow::bail!("{}", t!("serial.no_ports_available")),
+    }
+}
+
+fn ensure_interactive_terminal() -> Result<()> {
+    if std::io::stdin().is_terminal() && std::io::stderr().is_terminal() {
+        Ok(())
+    } else {
+        Err(CliError::Usage(t!("serial.interactive_requires_tty").to_string()).into())
+    }
+}
+
+fn map_prompt_error(err: DialoguerError) -> anyhow::Error {
+    match err {
+        DialoguerError::IO(io_err) => {
+            if io_err.kind() == std::io::ErrorKind::Interrupted {
+                CliError::Cancelled(t!("serial.selection_cancelled").to_string()).into()
+            } else {
+                CliError::Usage(t!("serial.prompt_failed").to_string()).into()
+            }
+        },
     }
 }
 
@@ -217,7 +244,7 @@ fn select_port_interactive(mut ports: Vec<DetectedPort>, config: &Config) -> Res
         .items(&port_names)
         .default(0)
         .interact_opt()
-        .context("Failed to show port selection")?;
+        .map_err(map_prompt_error)?;
 
     match selection {
         Some(index) => {
@@ -251,7 +278,7 @@ fn confirm_single_port(port: DetectedPort, _config: &Config) -> Result<SelectedP
         )
         .default(true)
         .interact_opt()
-        .context("Failed to show confirmation")?
+        .map_err(map_prompt_error)?
         .unwrap_or(false);
 
     if confirmed {
@@ -278,7 +305,7 @@ pub fn ask_remember_port(port: &DetectedPort, config: &mut Config) -> Result<()>
             .with_prompt(t!("serial.remember_prompt").to_string())
             .default(false)
             .interact_opt()
-            .context("Failed to show confirmation")?
+            .map_err(map_prompt_error)?
             .unwrap_or(false);
 
         if confirmed {

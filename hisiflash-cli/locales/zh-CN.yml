@@ -137,6 +137,8 @@ arg.version_flag.help: "打印版本信息"
 
 serial.multiple_ports: "发现多个串口。请使用 -p 参数指定端口或禁用 --non-interactive 选项。"
 serial.no_ports_available: "没有可用的串口。"
+serial.interactive_requires_tty: "交互式串口选择需要 TTY。请使用 -p/--port 或 --non-interactive。"
+serial.prompt_failed: "显示串口选择提示失败。"
 
 # 重试消息
 retry.connection_attempt: "连接尝试 %{attempt}/%{max}"
@@ -155,6 +157,7 @@ error.serial_error: "串口错误"
 error.connection_exhausted: "经过 %{max} 次尝试后连接失败"
 error.download_exhausted: "经过 %{max} 次重试后下载失败"
 error.invalid_config_chip: "配置文件中的芯片类型无效: %{chip}。支持值: %{supported}"
+error.interrupted: "操作已中断"
 
 # 固件自动发现
 flash.no_firmware_found: "在当前目录树中未找到 .fwpkg 固件文件。请指定固件文件路径。"
