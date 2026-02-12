@@ -43,13 +43,25 @@ pub(crate) fn cmd_monitor(
             .map_or(0, |d| u64::try_from(d.as_millis()).unwrap_or(u64::MAX))
     }
 
+    // [Sensitive] Terminal alignment helper:
+    // Serial devices may emit partial lines without trailing '\n'.
+    // Before printing status/hint lines, always clear current terminal line and
+    // write atomically under the same lock to avoid cursor-column drift.
+    fn print_status_line(term_lock: &Arc<Mutex<()>>, message: &str) {
+        if let Ok(_guard) = term_lock.lock() {
+            eprint!("\r\x1b[2K{message}\r\n");
+            io::stderr().flush().ok();
+        }
+    }
+
     let port_name = get_port(cli, config)?;
     // For monitor UX stability, keep serial stream and status hints on one terminal channel.
     // This avoids cursor/line-state races that can break alignment when output is highly concurrent.
     let term_lock = Arc::new(Mutex::new(()));
 
-    if let Ok(_guard) = term_lock.lock() {
-        eprintln!(
+    print_status_line(
+        &term_lock,
+        &format!(
             "{} {}",
             style("📡").cyan(),
             t!(
@@ -57,9 +69,12 @@ pub(crate) fn cmd_monitor(
                 port = style(&port_name).green().to_string(),
                 baud = monitor_baud
             )
-        );
-        eprintln!("{}", style(t!("monitor.exit_hint")).dim());
-    }
+        ),
+    );
+    print_status_line(
+        &term_lock,
+        &style(t!("monitor.exit_hint")).dim().to_string(),
+    );
 
     // Open serial port
     let serial = MonitorSession::open(&port_name, monitor_baud)
@@ -92,13 +107,14 @@ pub(crate) fn cmd_monitor(
             .append(true)
             .open(path)
             .with_context(|| format!("Failed to open log file: {}", path.display()))?;
-        if let Ok(_guard) = term_lock.lock() {
-            eprintln!(
+        print_status_line(
+            &term_lock,
+            &format!(
                 "{} {}",
                 style("📝").cyan(),
                 t!("monitor.logging", path = path.display().to_string())
-            );
-        }
+            ),
+        );
         Some(std::sync::Mutex::new(file))
     } else {
         None
@@ -107,7 +123,9 @@ pub(crate) fn cmd_monitor(
     // Reader thread: serial → terminal
     let reader_handle = std::thread::spawn(move || {
         let mut buf = [0u8; 1024];
-        // Track whether we're at the beginning of a new line (for timestamp insertion)
+        // [Sensitive] Must match actual terminal cursor state.
+        // If this drifts from reality, Ctrl+R/Ctrl+T alignment will break.
+        // Kept in sync by format_monitor_output() and force_line_start handling.
         let mut at_line_start = true;
         // Buffer for partial UTF-8 sequences that span read boundaries
         let mut utf8_buf: Vec<u8> = Vec::new();
@@ -131,6 +149,8 @@ pub(crate) fn cmd_monitor(
                     };
 
                     if !display_text.is_empty() {
+                        // [Sensitive] Explicitly force next serial chunk to start at new line
+                        // after status/hint output, regardless of device chunk boundaries.
                         if force_line_start_reader.swap(false, Ordering::Relaxed) {
                             if let Ok(_guard) = term_lock_reader.lock() {
                                 eprint!("\r\n");
@@ -197,10 +217,12 @@ pub(crate) fn cmd_monitor(
                     },
                     // Ctrl+R: reset device via DTR/RTS toggle
                     (KeyCode::Char('r'), KeyModifiers::CONTROL) => {
+                        // [Sensitive] Request reader-side line realignment before next chunk.
                         force_line_start.store(true, Ordering::Relaxed);
-                        if let Ok(_guard) = term_lock.lock() {
-                            eprintln!("\r\n{} {}", style("🔄").cyan(), t!("monitor.resetting"));
-                        }
+                        print_status_line(
+                            &term_lock,
+                            &format!("{} {}", style("🔄").cyan(), t!("monitor.resetting")),
+                        );
 
                         let before_rx = last_rx_millis.load(Ordering::Relaxed);
                         let reset_result = (|| -> Result<()> {
@@ -228,35 +250,47 @@ pub(crate) fn cmd_monitor(
                                 }
 
                                 if observed {
-                                    if let Ok(_guard) = term_lock.lock() {
-                                        eprintln!(
-                                            "\r\n{} {}",
+                                    print_status_line(
+                                        &term_lock,
+                                        &format!(
+                                            "{} {}",
                                             style("✓").green(),
                                             t!("monitor.reset_ok")
-                                        );
-                                    }
-                                } else if let Ok(_guard) = term_lock.lock() {
-                                    eprintln!(
-                                        "\r\n{} {}",
-                                        style("⚠").yellow(),
-                                        t!(
-                                            "monitor.reset_no_response",
-                                            timeout_ms = VERIFY_TIMEOUT_MS
-                                        )
+                                        ),
                                     );
-                                    eprintln!("{}", t!("monitor.reset_flow_control_hint"));
+                                } else {
+                                    print_status_line(
+                                        &term_lock,
+                                        &format!(
+                                            "{} {}",
+                                            style("⚠").yellow(),
+                                            t!(
+                                                "monitor.reset_no_response",
+                                                timeout_ms = VERIFY_TIMEOUT_MS
+                                            )
+                                        ),
+                                    );
+                                    print_status_line(
+                                        &term_lock,
+                                        t!("monitor.reset_flow_control_hint").as_ref(),
+                                    );
                                 }
+                                // [Sensitive] Ensure subsequent serial bytes start on clean line.
                                 force_line_start.store(true, Ordering::Relaxed);
                             },
                             Err(err) => {
-                                if let Ok(_guard) = term_lock.lock() {
-                                    eprintln!(
-                                        "\r\n{} {}",
+                                print_status_line(
+                                    &term_lock,
+                                    &format!(
+                                        "{} {}",
                                         style("⚠").yellow(),
                                         t!("monitor.reset_failed", error = err.to_string())
-                                    );
-                                    eprintln!("{}", t!("monitor.reset_flow_control_hint"));
-                                }
+                                    ),
+                                );
+                                print_status_line(
+                                    &term_lock,
+                                    t!("monitor.reset_flow_control_hint").as_ref(),
+                                );
                                 force_line_start.store(true, Ordering::Relaxed);
                             },
                         }
@@ -271,9 +305,7 @@ pub(crate) fn cmd_monitor(
                         } else {
                             t!("monitor.timestamp_on")
                         };
-                        if let Ok(_guard) = term_lock.lock() {
-                            eprintln!("\r\n{} {state}", style("⏱").cyan());
-                        }
+                        print_status_line(&term_lock, &format!("{} {state}", style("⏱").cyan()));
                     },
                     // Enter: send \r\n (works with both \n and \r\n devices)
                     (KeyCode::Enter, _) => {
@@ -305,9 +337,10 @@ pub(crate) fn cmd_monitor(
 
     // Wait for reader thread to finish
     let _ = reader_handle.join();
-    if let Ok(_guard) = term_lock.lock() {
-        eprintln!("\r\n{} {}", style("👋").cyan(), t!("monitor.closed"));
-    }
+    print_status_line(
+        &term_lock,
+        &format!("{} {}", style("👋").cyan(), t!("monitor.closed")),
+    );
 
     if signal_interrupted || was_interrupted() || user_requested_exit {
         clear_interrupted_flag();
