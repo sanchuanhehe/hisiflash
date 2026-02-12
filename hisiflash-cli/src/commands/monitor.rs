@@ -47,6 +47,12 @@ pub(crate) fn cmd_monitor(
     // Serial devices may emit partial lines without trailing '\n'.
     // Before printing status/hint lines, always clear current terminal line and
     // write atomically under the same lock to avoid cursor-column drift.
+    //
+    // Channel policy note:
+    // - Current implementation intentionally writes status lines to stderr.
+    // - Monitor stream itself is also written to stderr (see below) to keep one
+    //   synchronized terminal channel and avoid inter-stream reordering.
+    // - This applies to both TTY and non-TTY execution modes.
     fn print_status_line(term_lock: &Arc<Mutex<()>>, message: &str) {
         if let Ok(_guard) = term_lock.lock() {
             eprint!("\r\x1b[2K{message}\r\n");
@@ -55,8 +61,11 @@ pub(crate) fn cmd_monitor(
     }
 
     let port_name = get_port(cli, config)?;
-    // For monitor UX stability, keep serial stream and status hints on one terminal channel.
-    // This avoids cursor/line-state races that can break alignment when output is highly concurrent.
+    // Design trade-off (explicit):
+    // - CLI convention: primary data on stdout, diagnostics on stderr.
+    // - Monitor reality: high-frequency stream + async status hints can break alignment if split.
+    // - We prioritize terminal readability/alignment by coalescing both to stderr,
+    //   including in non-TTY mode (callers should capture stderr for monitor payload).
     let term_lock = Arc::new(Mutex::new(()));
 
     print_status_line(
