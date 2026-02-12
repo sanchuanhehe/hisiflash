@@ -9,7 +9,7 @@ use rust_i18n::t;
 use std::path::PathBuf;
 
 use crate::config::Config;
-use crate::{Cli, get_port, use_fancy_output};
+use crate::{Cli, CliError, get_port, use_fancy_output};
 
 /// Flash command implementation.
 pub(crate) fn cmd_flash(
@@ -236,7 +236,7 @@ pub(crate) fn cmd_erase(cli: &Cli, config: &mut Config, all: bool) -> Result<()>
         if !cli.quiet {
             eprintln!("{} {}", style("⚠").yellow(), t!("erase.use_all_flag"));
         }
-        std::process::exit(2);
+        return Err(CliError::Usage(t!("erase.need_all_flag").to_string()).into());
     }
 
     let port = get_port(cli, config)?;

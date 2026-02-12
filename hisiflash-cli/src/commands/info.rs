@@ -2,13 +2,13 @@
 
 use anyhow::{Context, Result};
 use console::style;
-use hisiflash::{Fwpkg, FwpkgVersion, PartitionType};
+use hisiflash::{Fwpkg, FwpkgVersion, PartitionType, auto_detect_port, discover_ports};
 use rust_i18n::t;
 use std::path::PathBuf;
 
 /// List ports command implementation.
 pub(crate) fn cmd_list_ports(json: bool) {
-    let detected = hisiflash::connection::detect::detect_ports();
+    let detected = discover_ports();
 
     if json {
         let ports: Vec<serde_json::Value> = detected
@@ -67,7 +67,7 @@ pub(crate) fn cmd_list_ports(json: bool) {
         }
 
         // Show auto-detection result
-        if let Ok(auto_port) = hisiflash::connection::detect::auto_detect_port() {
+        if let Ok(auto_port) = auto_detect_port() {
             eprintln!(
                 "\n{} {}",
                 style("→").green().bold(),

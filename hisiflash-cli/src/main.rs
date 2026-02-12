@@ -11,14 +11,16 @@
 //! - Internationalization (i18n) support
 
 use anyhow::Result;
-use clap::{Parser, Subcommand, ValueEnum};
+use clap::parser::ValueSource;
+use clap::{CommandFactory, FromArgMatches, Parser, Subcommand, ValueEnum};
 use clap_complete::Shell;
 use console::style;
 use env_logger::Env;
-use hisiflash::ChipFamily;
+use hisiflash::{ChipFamily, Error as LibError};
 use log::debug;
 use std::env;
 use std::path::PathBuf;
+use thiserror::Error;
 
 /// Whether stderr is a terminal (set once at startup).
 static STDERR_IS_TTY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
@@ -133,6 +135,34 @@ impl From<Chip> for ChipFamily {
             Chip::Ws63 => ChipFamily::Ws63,
             Chip::Bs2x => ChipFamily::Bs2x,
             Chip::Bs25 => ChipFamily::Bs25,
+        }
+    }
+}
+
+impl Chip {
+    fn from_config_name(name: &str) -> Option<Self> {
+        match ChipFamily::from_name(name)? {
+            ChipFamily::Ws63 => Some(Self::Ws63),
+            ChipFamily::Bs2x => Some(Self::Bs2x),
+            ChipFamily::Bs25 => Some(Self::Bs25),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Error)]
+pub(crate) enum CliError {
+    #[error("{0}")]
+    Usage(String),
+    #[error("{0}")]
+    Cancelled(String),
+}
+
+impl CliError {
+    fn exit_code(&self) -> i32 {
+        match self {
+            Self::Usage(_) => 2,
+            Self::Cancelled(_) => 130,
         }
     }
 }
@@ -252,15 +282,20 @@ enum Commands {
 
 /// Parse binary argument in format "file:address".
 fn parse_bin_arg(s: &str) -> Result<(PathBuf, u32), String> {
-    let parts: Vec<&str> = s.split(':').collect();
-    if parts.len() != 2 {
+    let Some((path_str, addr_str)) = s.rsplit_once(':') else {
+        return Err(format!(
+            "Invalid format: '{s}'. Expected 'file:address' (e.g., 'firmware.bin:0x00800000')"
+        ));
+    };
+
+    if path_str.is_empty() || addr_str.is_empty() {
         return Err(format!(
             "Invalid format: '{s}'. Expected 'file:address' (e.g., 'firmware.bin:0x00800000')"
         ));
     }
 
-    let path = PathBuf::from(parts[0]);
-    let addr = parse_hex_u32(parts[1])?;
+    let path = PathBuf::from(path_str);
+    let addr = parse_hex_u32(addr_str)?;
 
     Ok((path, addr))
 }
@@ -274,7 +309,18 @@ fn parse_hex_u32(s: &str) -> Result<u32, String> {
     u32::from_str_radix(&s, 16).map_err(|e| format!("Invalid hex address: {e}"))
 }
 
-fn main() -> Result<()> {
+fn main() {
+    match run() {
+        Ok(()) => {},
+        Err(err) => {
+            let code = map_exit_code(&err);
+            eprintln!("{} {err}", style("Error:").red().bold());
+            std::process::exit(code);
+        },
+    }
+}
+
+fn run() -> Result<()> {
     // Inspect raw args early to support localized --help handling and early --lang
     let raw_args: Vec<String> = env::args().collect();
 
@@ -346,18 +392,23 @@ fn main() -> Result<()> {
         } else {
             let _ = app.print_help();
         }
-        std::process::exit(0);
+        return Ok(());
     }
 
-    let cli = Cli::parse();
+    let app = Cli::command();
+    let matches = app
+        .try_get_matches_from(raw_args.clone())
+        .map_err(|e| CliError::Usage(e.to_string()))?;
+    let mut cli = Cli::from_arg_matches(&matches).map_err(|e| CliError::Usage(e.to_string()))?;
 
     // Setup logging based on verbosity
     let log_level = if cli.quiet {
-        "warn"
+        "error"
     } else {
         match cli.verbose {
-            0 => "info",
-            1 => "debug",
+            0 => "warn",
+            1 => "info",
+            2 => "debug",
             _ => "trace",
         }
     };
@@ -382,6 +433,8 @@ fn main() -> Result<()> {
     } else {
         Config::load()
     };
+
+    apply_config_defaults(&mut cli, &matches, &config);
 
     match &cli.command {
         Commands::Flash {
@@ -448,23 +501,88 @@ fn main() -> Result<()> {
             if *install {
                 cmd_completions_install(*shell)?;
             } else {
-                let shell = shell.unwrap_or_else(|| {
-                    eprintln!(
-                        "{} specify a shell type, e.g.: hisiflash completions bash",
-                        style("Error:").red().bold()
-                    );
-                    eprintln!(
-                        "  Or use {} to auto-install completions.",
-                        style("hisiflash completions --install").cyan()
-                    );
-                    std::process::exit(1);
-                });
+                let shell = (*shell).ok_or_else(|| {
+                    CliError::Usage(
+                        "specify a shell type, e.g.: hisiflash completions bash\n  Or use hisiflash completions --install to auto-install completions.".to_string(),
+                    )
+                })?;
                 cmd_completions(shell);
             }
         },
     }
 
     Ok(())
+}
+
+fn apply_config_defaults(cli: &mut Cli, matches: &clap::ArgMatches, config: &Config) {
+    if matches.value_source("baud") == Some(ValueSource::DefaultValue)
+        && let Some(config_baud) = config.port.connection.baud
+    {
+        cli.baud = config_baud;
+    }
+
+    if matches.value_source("chip") == Some(ValueSource::DefaultValue)
+        && let Some(config_chip) = config
+            .flash
+            .chip
+            .as_deref()
+            .and_then(Chip::from_config_name)
+    {
+        cli.chip = config_chip;
+    }
+
+    match &mut cli.command {
+        Commands::Flash {
+            late_baud,
+            skip_verify,
+            ..
+        } => {
+            if !matches!(
+                matches
+                    .subcommand()
+                    .and_then(|(_, m)| m.value_source("late_baud")),
+                Some(ValueSource::CommandLine)
+            ) {
+                *late_baud = config.flash.late_baud;
+            }
+            if !matches!(
+                matches
+                    .subcommand()
+                    .and_then(|(_, m)| m.value_source("skip_verify")),
+                Some(ValueSource::CommandLine)
+            ) {
+                *skip_verify = config.flash.skip_verify;
+            }
+        },
+        Commands::Write { late_baud, .. } | Commands::WriteProgram { late_baud, .. } => {
+            if !matches!(
+                matches
+                    .subcommand()
+                    .and_then(|(_, m)| m.value_source("late_baud")),
+                Some(ValueSource::CommandLine)
+            ) {
+                *late_baud = config.flash.late_baud;
+            }
+        },
+        _ => {},
+    }
+}
+
+fn map_exit_code(err: &anyhow::Error) -> i32 {
+    if let Some(cli_err) = err.downcast_ref::<CliError>() {
+        return cli_err.exit_code();
+    }
+
+    if let Some(lib_err) = err.downcast_ref::<LibError>() {
+        return match lib_err {
+            LibError::DeviceNotFound => 4,
+            LibError::Config(_) => 3,
+            LibError::Unsupported(_) => 5,
+            _ => 1,
+        };
+    }
+
+    1
 }
 
 /// Get serial port from CLI args or interactive selection.
@@ -812,6 +930,79 @@ mod cli_tests {
     }
 
     #[test]
+    fn test_apply_config_defaults_for_flash() {
+        let mut config = Config::default();
+        config.port.connection.baud = Some(460800);
+        config.flash.chip = Some("bs2x".to_string());
+        config.flash.late_baud = true;
+        config.flash.skip_verify = true;
+
+        let cmd = Cli::command();
+        let matches = cmd
+            .try_get_matches_from(["hisiflash", "flash", "firmware.fwpkg"])
+            .unwrap();
+        let mut cli = Cli::from_arg_matches(&matches).unwrap();
+
+        apply_config_defaults(&mut cli, &matches, &config);
+
+        assert_eq!(cli.baud, 460800);
+        assert!(matches!(cli.chip, Chip::Bs2x));
+
+        if let Commands::Flash {
+            late_baud,
+            skip_verify,
+            ..
+        } = cli.command
+        {
+            assert!(late_baud);
+            assert!(skip_verify);
+        } else {
+            panic!("Expected Flash command");
+        }
+    }
+
+    #[test]
+    fn test_apply_config_does_not_override_explicit_cli_values() {
+        let mut config = Config::default();
+        config.port.connection.baud = Some(460800);
+        config.flash.chip = Some("bs2x".to_string());
+        config.flash.late_baud = false;
+        config.flash.skip_verify = true;
+
+        let cmd = Cli::command();
+        let matches = cmd
+            .try_get_matches_from([
+                "hisiflash",
+                "--baud",
+                "115200",
+                "--chip",
+                "ws63",
+                "flash",
+                "firmware.fwpkg",
+                "--late-baud",
+            ])
+            .unwrap();
+        let mut cli = Cli::from_arg_matches(&matches).unwrap();
+
+        apply_config_defaults(&mut cli, &matches, &config);
+
+        assert_eq!(cli.baud, 115200);
+        assert!(matches!(cli.chip, Chip::Ws63));
+
+        if let Commands::Flash {
+            late_baud,
+            skip_verify,
+            ..
+        } = cli.command
+        {
+            assert!(late_baud);
+            assert!(skip_verify);
+        } else {
+            panic!("Expected Flash command");
+        }
+    }
+
+    #[test]
     fn test_cli_missing_subcommand() {
         let result = Cli::try_parse_from(["hisiflash"]);
         assert!(result.is_err());
@@ -845,8 +1036,15 @@ mod cli_tests {
     }
 
     #[test]
-    fn test_parse_bin_arg_invalid_too_many_colons() {
-        assert!(parse_bin_arg("a:b:c").is_err());
+    fn test_parse_bin_arg_windows_path() {
+        let (path, addr) = parse_bin_arg("C:\\fw\\app.bin:0x00800000").unwrap();
+        assert_eq!(path.to_string_lossy(), "C:\\fw\\app.bin");
+        assert_eq!(addr, 0x00800000);
+    }
+
+    #[test]
+    fn test_parse_bin_arg_invalid_missing_address() {
+        assert!(parse_bin_arg("C:\\fw\\app.bin:").is_err());
     }
 
     #[test]

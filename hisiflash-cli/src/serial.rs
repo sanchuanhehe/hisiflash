@@ -9,11 +9,12 @@
 
 use std::cmp::Ordering;
 
+use crate::CliError;
 use crate::config::Config;
 use anyhow::{Context, Result};
 use console::style;
 use dialoguer::{Confirm, Select, theme::ColorfulTheme};
-use hisiflash::connection::detect::{self, DetectedPort, UsbDevice};
+use hisiflash::{DetectedPort, UsbDevice, discover_ports};
 use log::{debug, error, info};
 use rust_i18n::t;
 
@@ -52,7 +53,7 @@ pub fn select_serial_port(options: &SerialOptions, config: &Config) -> Result<Se
     }
 
     // Detect available ports
-    let ports = detect::detect_ports();
+    let ports = discover_ports();
 
     if ports.is_empty() {
         anyhow::bail!("{}", t!("serial.no_ports_found"));
@@ -110,7 +111,7 @@ pub fn select_serial_port(options: &SerialOptions, config: &Config) -> Result<Se
 
 /// Find a port by name.
 fn find_port_by_name(name: &str) -> SelectedPort {
-    let ports = detect::detect_ports();
+    let ports = discover_ports();
 
     // Try exact match first
     if let Some(port) = ports.iter().find(|p| p.name == name) {
@@ -211,15 +212,6 @@ fn select_port_interactive(mut ports: Vec<DetectedPort>, config: &Config) -> Res
         .map(|n| console::truncate_str(&n, max_item_width, "\u{2026}").into_owned())
         .collect();
 
-    // Setup Ctrl-C handler to restore cursor
-    #[allow(clippy::unwrap_used)] // ctrlc handler setup
-    ctrlc::set_handler(move || {
-        let term = dialoguer::console::Term::stdout();
-        let _ = term.show_cursor();
-        std::process::exit(130);
-    })
-    .ok(); // Ignore error if handler already set
-
     let selection = Select::with_theme(&ColorfulTheme::default())
         .with_prompt(t!("serial.select_prompt").to_string())
         .items(&port_names)
@@ -236,7 +228,7 @@ fn select_port_interactive(mut ports: Vec<DetectedPort>, config: &Config) -> Res
             let is_known = is_known_device(&port, config);
             Ok(SelectedPort { port, is_known })
         },
-        None => anyhow::bail!("{}", t!("serial.selection_cancelled")),
+        None => Err(CliError::Cancelled(t!("serial.selection_cancelled").to_string()).into()),
     }
 }
 
@@ -268,7 +260,7 @@ fn confirm_single_port(port: DetectedPort, _config: &Config) -> Result<SelectedP
             is_known: false,
         })
     } else {
-        anyhow::bail!("{}", t!("serial.selection_cancelled"))
+        Err(CliError::Cancelled(t!("serial.selection_cancelled").to_string()).into())
     }
 }
 

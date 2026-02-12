@@ -4,6 +4,7 @@
 
 use anyhow::{Context, Result};
 use console::style;
+use hisiflash::MonitorSession;
 use rust_i18n::t;
 use std::io;
 use std::io::Write as _;
@@ -11,6 +12,8 @@ use std::path::PathBuf;
 
 use crate::config::Config;
 use crate::{Cli, get_port};
+
+pub(crate) use hisiflash::{format_monitor_output, split_utf8};
 
 /// Run the serial monitor.
 ///
@@ -47,14 +50,12 @@ pub(crate) fn cmd_monitor(
     eprintln!("{}", style(t!("monitor.exit_hint")).dim());
 
     // Open serial port
-    let serial = serialport::new(&port_name, monitor_baud)
-        .timeout(Duration::from_millis(50))
-        .open()
+    let serial = MonitorSession::open(&port_name, monitor_baud)
         .with_context(|| t!("error.open_port", port = port_name.clone()))?;
 
     // Clone for the reader thread
     let mut serial_reader = serial
-        .try_clone()
+        .try_clone_reader()
         .context(t!("error.serial_error").to_string())?;
     let mut serial_writer = serial;
 
@@ -65,20 +66,21 @@ pub(crate) fn cmd_monitor(
     let show_timestamp_reader = show_timestamp.clone();
 
     // Open log file if specified
-    let log_writer: Option<std::sync::Mutex<std::fs::File>> = log_file.map(|path| {
+    let log_writer: Option<std::sync::Mutex<std::fs::File>> = if let Some(path) = log_file {
         let file = std::fs::OpenOptions::new()
             .create(true)
             .append(true)
             .open(path)
-            .with_context(|| format!("Failed to open log file: {}", path.display()))
-            .unwrap();
+            .with_context(|| format!("Failed to open log file: {}", path.display()))?;
         eprintln!(
             "{} {}",
             style("📝").cyan(),
             t!("monitor.logging", path = path.display().to_string())
         );
-        std::sync::Mutex::new(file)
-    });
+        Some(std::sync::Mutex::new(file))
+    } else {
+        None
+    };
 
     // Reader thread: serial → stdout
     let reader_handle = std::thread::spawn(move || {
@@ -155,13 +157,13 @@ pub(crate) fn cmd_monitor(
                     // Ctrl+R: reset device via DTR/RTS toggle
                     (KeyCode::Char('r'), KeyModifiers::CONTROL) => {
                         eprintln!("\r\n{} {}", style("🔄").cyan(), t!("monitor.resetting"));
-                        let _ = serial_writer.write_data_terminal_ready(false);
-                        let _ = serial_writer.write_request_to_send(false);
+                        let _ = serial_writer.set_data_terminal_ready(false);
+                        let _ = serial_writer.set_request_to_send(false);
                         std::thread::sleep(Duration::from_millis(100));
-                        let _ = serial_writer.write_data_terminal_ready(true);
-                        let _ = serial_writer.write_request_to_send(true);
+                        let _ = serial_writer.set_data_terminal_ready(true);
+                        let _ = serial_writer.set_request_to_send(true);
                         std::thread::sleep(Duration::from_millis(100));
-                        let _ = serial_writer.write_data_terminal_ready(false);
+                        let _ = serial_writer.set_data_terminal_ready(false);
                     },
                     // Ctrl+T: toggle timestamp
                     (KeyCode::Char('t'), KeyModifiers::CONTROL) => {
@@ -176,25 +178,25 @@ pub(crate) fn cmd_monitor(
                     },
                     // Enter: send \r\n (works with both \n and \r\n devices)
                     (KeyCode::Enter, _) => {
-                        let _ = serial_writer.write_all(b"\r\n");
+                        let _ = serial_writer.write_bytes(b"\r\n");
                     },
                     // Regular character
                     (KeyCode::Char(c), KeyModifiers::NONE | KeyModifiers::SHIFT) => {
                         let mut buf = [0u8; 4];
                         let bytes = c.encode_utf8(&mut buf);
-                        let _ = serial_writer.write_all(bytes.as_bytes());
+                        let _ = serial_writer.write_bytes(bytes.as_bytes());
                     },
                     // Backspace
                     (KeyCode::Backspace, _) => {
-                        let _ = serial_writer.write_all(&[0x08]); // BS
+                        let _ = serial_writer.write_bytes(&[0x08]);
                     },
                     // Tab
                     (KeyCode::Tab, _) => {
-                        let _ = serial_writer.write_all(&[0x09]); // HT
+                        let _ = serial_writer.write_bytes(&[0x09]);
                     },
                     // Escape
                     (KeyCode::Esc, _) => {
-                        let _ = serial_writer.write_all(&[0x1B]);
+                        let _ = serial_writer.write_bytes(&[0x1B]);
                     },
                     _ => {},
                 }
@@ -216,79 +218,6 @@ impl Drop for RawModeGuard {
     fn drop(&mut self) {
         let _ = crossterm::terminal::disable_raw_mode();
     }
-}
-
-/// Split a byte slice into a valid UTF-8 prefix string and the remaining bytes.
-///
-/// This handles the case where a multi-byte UTF-8 sequence is split across
-/// two serial reads. The valid prefix is returned as a `&str`, and the
-/// remaining incomplete bytes are returned for the next read.
-pub(crate) fn split_utf8(bytes: &[u8]) -> (&str, &[u8]) {
-    match std::str::from_utf8(bytes) {
-        Ok(s) => (s, &[]),
-        Err(e) => {
-            let valid_up_to = e.valid_up_to();
-            let valid = std::str::from_utf8(&bytes[..valid_up_to]).unwrap_or_default();
-            (valid, &bytes[valid_up_to..])
-        },
-    }
-}
-
-/// Format monitor output with optional timestamps.
-///
-/// Handles `\r\n`, `\n`, and `\r` line endings uniformly.
-/// Inserts `[HH:MM:SS.mmm]` at the beginning of each new line when enabled.
-pub(crate) fn format_monitor_output(
-    text: &str,
-    timestamp: bool,
-    at_line_start: &mut bool,
-) -> String {
-    if !timestamp {
-        // Even without timestamps, normalize \r\n handling:
-        // Raw mode requires \r\n for proper line feed + carriage return
-        let mut out = String::with_capacity(text.len() * 2);
-        for c in text.chars() {
-            match c {
-                '\n' => out.push_str("\r\n"),
-                '\r' => {}, // Skip \r, we handle it via \n → \r\n
-                _ => out.push(c),
-            }
-        }
-        return out;
-    }
-
-    let mut out = String::with_capacity(text.len() + 128);
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default();
-    let total_secs = now.as_secs();
-    let millis = now.subsec_millis();
-    // Convert to HH:MM:SS (UTC-based, good enough for relative timing)
-    let hours = (total_secs / 3600) % 24;
-    let minutes = (total_secs / 60) % 60;
-    let seconds = total_secs % 60;
-
-    for c in text.chars() {
-        match c {
-            '\r' => {}, // Skip \r, we handle it via \n → \r\n
-            '\n' => {
-                out.push_str("\r\n");
-                *at_line_start = true;
-            },
-            _ => {
-                if *at_line_start {
-                    use std::fmt::Write;
-                    let _ = write!(
-                        out,
-                        "\x1b[90m[{hours:02}:{minutes:02}:{seconds:02}.{millis:03}]\x1b[0m "
-                    );
-                    *at_line_start = false;
-                }
-                out.push(c);
-            },
-        }
-    }
-    out
 }
 
 #[cfg(test)]

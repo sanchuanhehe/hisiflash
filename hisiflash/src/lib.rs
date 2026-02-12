@@ -60,7 +60,9 @@
 
 pub mod connection;
 pub mod error;
+pub mod host;
 pub mod image;
+pub mod monitor;
 pub mod port;
 pub mod protocol;
 pub mod target;
@@ -84,3 +86,5 @@ pub use connection::ConnectionPort;
 pub use connection::detect::{DetectedPort, UsbDevice};
 #[cfg(feature = "native")]
 pub use connection::serial::SerialPort;
+pub use host::{auto_detect_port, discover_hisilicon_ports, discover_ports};
+pub use monitor::{MonitorSession, format_monitor_output, split_utf8};
