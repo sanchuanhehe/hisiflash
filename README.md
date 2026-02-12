@@ -34,6 +34,7 @@
 
 ## 测试与验证文档
 
+- 手工联测操作手册：`docs/testing/MANUAL_RUNBOOK.md`
 - 手动测试清单：`docs/testing/MANUAL_CHECKLIST.md`
 - 自动化测试说明：`docs/testing/AUTOMATED_TESTS.md`
 - 发布前验证清单：`docs/testing/RELEASE_VALIDATION.md`
@@ -445,6 +446,7 @@ cargo clippy
 
 ## 测试与验证文档
 
+- 手工联测操作手册：`docs/testing/MANUAL_RUNBOOK.md`
 - 手动测试清单：`docs/testing/MANUAL_CHECKLIST.md`
 - 自动化测试说明：`docs/testing/AUTOMATED_TESTS.md`
 - 发布前验证清单：`docs/testing/RELEASE_VALIDATION.md`
