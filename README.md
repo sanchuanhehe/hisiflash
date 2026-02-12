@@ -13,6 +13,11 @@
 - 🔧 **跨平台**：支持 Linux、macOS、Windows
 - 📦 **FWPKG 支持**：完整支持 HiSilicon FWPKG 固件包格式
 - 🔄 **SEBOOT 协议**：兼容官方 fbb_burntool 协议
+## 测试与验证文档
+
+- 手动测试清单：`docs/testing/MANUAL_CHECKLIST.md`
+- 自动化测试说明：`docs/testing/AUTOMATED_TESTS.md`
+- 发布前验证清单：`docs/testing/RELEASE_VALIDATION.md`
 - 🛠️ **库 + CLI**：既可作为库使用，也可作为命令行工具
 
 ### 智能检测
@@ -20,6 +25,10 @@
 - 🎯 **交互式串口选择**：多串口时自动提示选择，已知设备高亮显示
 - 💾 **串口记忆功能**：可保存常用串口到配置文件
 
+│   ├── testing/            # 测试与发布验证
+│   │   ├── MANUAL_CHECKLIST.md
+│   │   ├── AUTOMATED_TESTS.md
+│   │   └── RELEASE_VALIDATION.md
 ### 用户体验
 - 📊 **彩色进度条**：友好的烧录进度显示
 - 🔇 **静默模式**：`-q/--quiet` 抑制非必要输出
@@ -342,6 +351,10 @@ hisiflash/
 │   ├── REQUIREMENTS.md     # 需求文档
 │   ├── ARCHITECTURE.md     # 架构设计
 │   ├── COMPARISON.md       # 功能对比分析
+│   ├── testing/            # 测试与发布验证
+│   │   ├── MANUAL_CHECKLIST.md
+│   │   ├── AUTOMATED_TESTS.md
+│   │   └── RELEASE_VALIDATION.md
 │   └── protocols/          # 协议文档
 │       └── PROTOCOL.md     # SEBOOT 协议规范
 ├── hisiflash/              # 核心库
@@ -410,6 +423,12 @@ cargo fmt
 ```bash
 cargo clippy
 ```
+
+## 测试与验证文档
+
+- 手动测试清单：`docs/testing/MANUAL_CHECKLIST.md`
+- 自动化测试说明：`docs/testing/AUTOMATED_TESTS.md`
+- 发布前验证清单：`docs/testing/RELEASE_VALIDATION.md`
 
 ## 协议参考
 
