@@ -112,21 +112,40 @@ pub fn drain_utf8_lossy(buffer: &mut Vec<u8>) -> String {
     output
 }
 
+/// Filter non-printable control characters for cleaner monitor output.
+///
+/// Keeps:\n, \t and printable Unicode chars.
+/// Converts carriage returns (\r) to newlines (\n).
+/// Drops other control characters.
+pub fn clean_monitor_text(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    for ch in text.chars() {
+        match ch {
+            '\n' | '\t' => out.push(ch),
+            '\r' => out.push('\n'),
+            _ if ch.is_control() => {},
+            _ => out.push(ch),
+        }
+    }
+    out
+}
+
 /// Format monitor output with optional timestamps.
 pub fn format_monitor_output(text: &str, timestamp: bool, at_line_start: &mut bool) -> String {
+    let normalized = text.replace("\r\n", "\n").replace('\r', "\n");
+
     if !timestamp {
-        let mut out = String::with_capacity(text.len() * 2);
-        for c in text.chars() {
+        let mut out = String::with_capacity(normalized.len() * 2);
+        for c in normalized.chars() {
             match c {
                 '\n' => out.push_str("\r\n"),
-                '\r' => {},
                 _ => out.push(c),
             }
         }
         return out;
     }
 
-    let mut out = String::with_capacity(text.len() + 128);
+    let mut out = String::with_capacity(normalized.len() + 128);
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default();
@@ -136,9 +155,8 @@ pub fn format_monitor_output(text: &str, timestamp: bool, at_line_start: &mut bo
     let minutes = (total_secs / 60) % 60;
     let seconds = total_secs % 60;
 
-    for c in text.chars() {
+    for c in normalized.chars() {
         match c {
-            '\r' => {},
             '\n' => {
                 out.push_str("\r\n");
                 *at_line_start = true;
@@ -162,7 +180,7 @@ pub fn format_monitor_output(text: &str, timestamp: bool, at_line_start: &mut bo
 
 #[cfg(test)]
 mod tests {
-    use super::drain_utf8_lossy;
+    use super::{clean_monitor_text, drain_utf8_lossy, format_monitor_output};
 
     #[test]
     fn test_drain_utf8_lossy_replaces_invalid_bytes_and_continues() {
@@ -183,5 +201,19 @@ mod tests {
         let out2 = drain_utf8_lossy(&mut buf);
         assert_eq!(out2, "你");
         assert!(buf.is_empty());
+    }
+
+    #[test]
+    fn test_clean_monitor_text_filters_control_chars() {
+        let text = "A\x07B\x1BC\tD\nE\rF";
+        let cleaned = clean_monitor_text(text);
+        assert_eq!(cleaned, "ABC\tD\nE\nF");
+    }
+
+    #[test]
+    fn test_format_output_normalizes_standalone_cr_to_newline() {
+        let mut at_line_start = true;
+        let result = format_monitor_output("abc\rdef", false, &mut at_line_start);
+        assert_eq!(result, "abc\r\ndef");
     }
 }

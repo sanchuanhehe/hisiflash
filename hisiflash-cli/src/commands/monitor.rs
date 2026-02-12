@@ -13,7 +13,7 @@ use std::path::PathBuf;
 use crate::config::Config;
 use crate::{Cli, clear_interrupted_flag, get_port, was_interrupted};
 
-pub(crate) use hisiflash::{drain_utf8_lossy, format_monitor_output};
+pub(crate) use hisiflash::{clean_monitor_text, drain_utf8_lossy, format_monitor_output};
 
 /// Run the serial monitor.
 ///
@@ -27,14 +27,21 @@ pub(crate) fn cmd_monitor(
     config: &mut Config,
     monitor_baud: u32,
     timestamp: bool,
+    clean_output: bool,
     log_file: Option<&PathBuf>,
 ) -> Result<()> {
     use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyModifiers};
     use crossterm::terminal;
     use std::io::Read as _;
     use std::sync::Arc;
-    use std::sync::atomic::{AtomicBool, Ordering};
-    use std::time::Duration;
+    use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+    use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+    fn now_millis() -> u64 {
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_or(0, |d| u64::try_from(d.as_millis()).unwrap_or(u64::MAX))
+    }
 
     let port_name = get_port(cli, config)?;
 
@@ -64,6 +71,9 @@ pub(crate) fn cmd_monitor(
     let running_reader = running.clone();
     let show_timestamp = Arc::new(AtomicBool::new(timestamp));
     let show_timestamp_reader = show_timestamp.clone();
+    let clean_output_reader = clean_output;
+    let last_rx_millis = Arc::new(AtomicU64::new(0));
+    let last_rx_millis_reader = last_rx_millis.clone();
     let mut signal_interrupted = false;
     let mut user_requested_exit = false;
 
@@ -97,24 +107,31 @@ pub(crate) fn cmd_monitor(
                 Ok(0) => {},
                 Ok(n) => {
                     let data = &buf[..n];
+                    last_rx_millis_reader.store(now_millis(), Ordering::Relaxed);
 
                     // Append to UTF-8 buffer for handling partial sequences
                     utf8_buf.extend_from_slice(data);
 
                     let decoded = drain_utf8_lossy(&mut utf8_buf);
 
-                    if !decoded.is_empty() {
+                    let display_text = if clean_output_reader {
+                        clean_monitor_text(&decoded)
+                    } else {
+                        decoded
+                    };
+
+                    if !display_text.is_empty() {
                         // Write to log file (raw, no timestamps)
                         if let Some(ref log) = log_writer {
                             if let Ok(mut f) = log.lock() {
-                                let _ = f.write_all(decoded.as_bytes());
+                                let _ = f.write_all(display_text.as_bytes());
                             }
                         }
 
                         // Process output with optional timestamps
                         let ts_enabled = show_timestamp_reader.load(Ordering::Relaxed);
                         let output =
-                            format_monitor_output(&decoded, ts_enabled, &mut at_line_start);
+                            format_monitor_output(&display_text, ts_enabled, &mut at_line_start);
                         print!("{output}");
                         io::stdout().flush().ok();
                     }
@@ -161,13 +178,58 @@ pub(crate) fn cmd_monitor(
                     // Ctrl+R: reset device via DTR/RTS toggle
                     (KeyCode::Char('r'), KeyModifiers::CONTROL) => {
                         eprintln!("\r\n{} {}", style("🔄").cyan(), t!("monitor.resetting"));
-                        let _ = serial_writer.set_data_terminal_ready(false);
-                        let _ = serial_writer.set_request_to_send(false);
-                        std::thread::sleep(Duration::from_millis(100));
-                        let _ = serial_writer.set_data_terminal_ready(true);
-                        let _ = serial_writer.set_request_to_send(true);
-                        std::thread::sleep(Duration::from_millis(100));
-                        let _ = serial_writer.set_data_terminal_ready(false);
+
+                        let before_rx = last_rx_millis.load(Ordering::Relaxed);
+                        let reset_result = (|| -> Result<()> {
+                            serial_writer.set_data_terminal_ready(false)?;
+                            serial_writer.set_request_to_send(false)?;
+                            std::thread::sleep(Duration::from_millis(100));
+                            serial_writer.set_data_terminal_ready(true)?;
+                            serial_writer.set_request_to_send(true)?;
+                            std::thread::sleep(Duration::from_millis(100));
+                            serial_writer.set_data_terminal_ready(false)?;
+                            Ok(())
+                        })();
+
+                        match reset_result {
+                            Ok(()) => {
+                                const VERIFY_TIMEOUT_MS: u64 = 2000;
+                                let start = now_millis();
+                                let mut observed = false;
+                                while now_millis().saturating_sub(start) < VERIFY_TIMEOUT_MS {
+                                    if last_rx_millis.load(Ordering::Relaxed) > before_rx {
+                                        observed = true;
+                                        break;
+                                    }
+                                    std::thread::sleep(Duration::from_millis(50));
+                                }
+
+                                if observed {
+                                    eprintln!("{} {}", style("✓").green(), t!("monitor.reset_ok"));
+                                } else {
+                                    eprintln!(
+                                        "{} {}",
+                                        style("⚠").yellow(),
+                                        t!(
+                                            "monitor.reset_no_response",
+                                            timeout_ms = VERIFY_TIMEOUT_MS
+                                        )
+                                    );
+                                    eprintln!(
+                                        "{}",
+                                        style(t!("monitor.reset_flow_control_hint")).dim()
+                                    );
+                                }
+                            },
+                            Err(err) => {
+                                eprintln!(
+                                    "{} {}",
+                                    style("⚠").yellow(),
+                                    t!("monitor.reset_failed", error = err.to_string())
+                                );
+                                eprintln!("{}", style(t!("monitor.reset_flow_control_hint")).dim());
+                            },
+                        }
                     },
                     // Ctrl+T: toggle timestamp
                     (KeyCode::Char('t'), KeyModifiers::CONTROL) => {
@@ -315,9 +377,9 @@ mod tests {
     #[test]
     fn test_format_output_no_timestamp_standalone_cr() {
         let mut at_line_start = true;
-        // Standalone \r should be stripped
+        // Standalone \r should become newline
         let result = format_monitor_output("abc\rdef", false, &mut at_line_start);
-        assert_eq!(result, "abcdef");
+        assert_eq!(result, "abc\r\ndef");
     }
 
     #[test]

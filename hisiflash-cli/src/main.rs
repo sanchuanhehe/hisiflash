@@ -225,6 +225,14 @@ enum Commands {
         /// Baud rate for serial monitor (used with --monitor).
         #[arg(long, default_value = "115200")]
         monitor_baud: u32,
+
+        /// Clean monitor output by filtering non-printable control characters.
+        #[arg(long = "monitor-clean-output", action = clap::ArgAction::Set, default_value_t = true)]
+        monitor_clean_output: bool,
+
+        /// Show raw monitor output without control-character filtering.
+        #[arg(long = "monitor-raw", conflicts_with = "monitor_clean_output")]
+        monitor_raw: bool,
     },
 
     /// Write raw binary files to flash.
@@ -297,6 +305,14 @@ enum Commands {
         /// Save output to a log file.
         #[arg(long, value_name = "FILE")]
         log: Option<PathBuf>,
+
+        /// Clean output by filtering non-printable control characters.
+        #[arg(long = "clean-output", action = clap::ArgAction::Set, default_value_t = true)]
+        clean_output: bool,
+
+        /// Show raw serial output without control-character filtering.
+        #[arg(long, conflicts_with = "clean_output")]
+        raw: bool,
     },
 
     /// Generate shell completion scripts.
@@ -490,6 +506,8 @@ fn run_with_args(raw_args: &[String]) -> Result<()> {
             skip_verify,
             monitor,
             monitor_baud,
+            monitor_clean_output,
+            monitor_raw,
         } => {
             let firmware = resolve_firmware(firmware.as_ref(), cli.non_interactive, cli.quiet)?;
             cmd_flash(
@@ -502,7 +520,14 @@ fn run_with_args(raw_args: &[String]) -> Result<()> {
             )?;
             if *monitor {
                 eprintln!();
-                cmd_monitor(&cli, &mut config, *monitor_baud, false, None)?;
+                cmd_monitor(
+                    &cli,
+                    &mut config,
+                    *monitor_baud,
+                    false,
+                    *monitor_clean_output && !*monitor_raw,
+                    None,
+                )?;
             }
         },
         Commands::Write {
@@ -540,8 +565,17 @@ fn run_with_args(raw_args: &[String]) -> Result<()> {
             monitor_baud,
             timestamp,
             log,
+            clean_output,
+            raw,
         } => {
-            cmd_monitor(&cli, &mut config, *monitor_baud, *timestamp, log.as_ref())?;
+            cmd_monitor(
+                &cli,
+                &mut config,
+                *monitor_baud,
+                *timestamp,
+                *clean_output && !*raw,
+                log.as_ref(),
+            )?;
         },
         Commands::Completions { shell, install } => {
             if *install {
@@ -812,6 +846,8 @@ mod cli_tests {
             skip_verify,
             monitor,
             monitor_baud,
+            monitor_clean_output,
+            monitor_raw,
         } = cli.command
         {
             assert_eq!(firmware.unwrap().to_str().unwrap(), "fw.fwpkg");
@@ -820,6 +856,8 @@ mod cli_tests {
             assert!(skip_verify);
             assert!(monitor);
             assert_eq!(monitor_baud, 115200);
+            assert!(monitor_clean_output);
+            assert!(!monitor_raw);
         } else {
             panic!("Expected Flash command");
         }
@@ -922,8 +960,30 @@ mod cli_tests {
     #[test]
     fn test_cli_parse_monitor_default_baud() {
         let cli = Cli::try_parse_from(["hisiflash", "monitor"]).unwrap();
-        if let Commands::Monitor { monitor_baud, .. } = cli.command {
+        if let Commands::Monitor {
+            monitor_baud,
+            clean_output,
+            raw,
+            ..
+        } = cli.command
+        {
             assert_eq!(monitor_baud, 115200);
+            assert!(clean_output);
+            assert!(!raw);
+        } else {
+            panic!("Expected Monitor command");
+        }
+    }
+
+    #[test]
+    fn test_cli_parse_monitor_raw() {
+        let cli = Cli::try_parse_from(["hisiflash", "monitor", "--raw"]).unwrap();
+        if let Commands::Monitor {
+            clean_output, raw, ..
+        } = cli.command
+        {
+            assert!(raw);
+            assert!(clean_output);
         } else {
             panic!("Expected Monitor command");
         }
