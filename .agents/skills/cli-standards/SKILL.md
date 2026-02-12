@@ -11,7 +11,7 @@ metadata:
 
 ## Purpose
 
-Use this skill to ensure a CLI is predictable, script-friendly, and human-friendly.
+Use this skill to keep a CLI predictable, script-friendly, and human-friendly.
 
 Primary references:
 - POSIX Utility Conventions (argument syntax and ordering baseline)
@@ -32,8 +32,8 @@ Activate when the task includes any of the following:
 ## Non-negotiable defaults
 
 1. **Options before operands** by default.
-2. Support `-h` and `--help`; both must show help and exit success.
-3. Support `--version`; print version info to stdout and exit success.
+2. Support `-h` and `--help`; both must show help and exit successfully.
+3. Support `--version`; print version information to stdout and exit successfully.
 4. Primary output to stdout; diagnostics/errors/progress to stderr.
 5. Exit code `0` for success, non-zero for failure.
 6. Support `--` to end option parsing when operands may start with `-`.
@@ -46,7 +46,7 @@ Activate when the task includes any of the following:
 - Keep naming consistent across subcommands.
 - Avoid ambiguous command names (`update` vs `upgrade`) unless clearly distinct.
 
-### Step 2: Args and flags
+### Step 2: Args and Flags
 - Prefer flags over too many positional args.
 - Provide both short and long forms for high-frequency options.
 - Use standard names where possible:
@@ -57,23 +57,23 @@ Activate when the task includes any of the following:
   - `-n`, `--dry-run`
   - `-f`, `--force`
   - `-o`, `--output`
-- For scripts, require full long option names in docs/examples.
+- In script examples, use fully spelled long option names.
 
-### Step 3: Output contract
+### Step 3: Output Contract
 - Human-readable default output.
-- If machine integration is needed, provide `--json` (or equivalent stable format).
+- If machine integration is needed, provide `--json` (or an equivalent stable format).
 - Do not mix parseable data with log lines on stdout.
-- If output is long, consider pager only for interactive TTY.
+- If output is long, use a pager only for interactive TTY.
 
 ### Step 4: Errors and UX
 - Error messages should be actionable: what failed + why + next fix.
-- If likely typo, suggest closest command/flag.
-- For destructive actions, confirm in interactive mode; require explicit force/confirm flag for non-interactive mode.
-- Never require prompts in CI/script mode.
+- If a typo is likely, suggest the closest command/flag.
+- For destructive actions, confirm in interactive mode; require an explicit force/confirm flag in non-interactive mode.
+- Never require prompts in CI or script mode.
 
-### Step 5: Compatibility and evolution
+### Step 5: Compatibility and Evolution
 - Keep existing behavior stable unless a major version migration is explicit.
-- If deprecating, warn clearly and offer replacement.
+- If deprecating, warn clearly and provide a replacement path.
 - Preserve automation paths (`--no-input`, `--json`, stable exit semantics).
 
 ## Priority when standards conflict
@@ -90,7 +90,7 @@ For each CLI change, produce:
 2. Updated help output/examples.
 3. Explicit stdout/stderr and exit code behavior.
 4. Backward-compatibility note.
-5. Validation checklist result using [references/checklist.md](references/checklist.md).
+5. Validation checklist results using [references/checklist.md](references/checklist.md).
 
 ## Quick references
 
