@@ -361,7 +361,11 @@ fn main() {
         Ok(()) => {},
         Err(err) => {
             let code = map_exit_code(&err);
-            eprintln!("{} {err}", style("Error:").red().bold());
+            if code == 130 {
+                eprintln!("{} {err}", style("Cancelled:").yellow().bold());
+            } else {
+                eprintln!("{} {err}", style("Error:").red().bold());
+            }
             std::process::exit(code);
         },
     }

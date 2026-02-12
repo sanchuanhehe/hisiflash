@@ -17,7 +17,7 @@ pub(crate) use hisiflash::{clean_monitor_text, drain_utf8_lossy, format_monitor_
 
 /// Run the serial monitor.
 ///
-/// - Reader thread: serial → stdout (with optional timestamps and ANSI passthrough)
+/// - Reader thread: serial → terminal (with optional timestamps and ANSI passthrough)
 /// - Main thread: keyboard (crossterm raw mode) → serial
 /// - Ctrl+C: graceful exit
 /// - Ctrl+R: reset device (DTR/RTS toggle)
@@ -33,8 +33,8 @@ pub(crate) fn cmd_monitor(
     use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyModifiers};
     use crossterm::terminal;
     use std::io::Read as _;
-    use std::sync::Arc;
     use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+    use std::sync::{Arc, Mutex};
     use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
     fn now_millis() -> u64 {
@@ -44,17 +44,27 @@ pub(crate) fn cmd_monitor(
     }
 
     let port_name = get_port(cli, config)?;
+    // CLI design trade-off:
+    // - Default contract: machine-readable stream should go to stdout, diagnostics to stderr.
+    // - Interactive monitor UX: if stdout is a TTY, split channels can race for cursor/line state
+    //   and cause visible misalignment. In this case we intentionally coalesce monitor stream +
+    //   status hints to one terminal channel (stderr) for stable rendering.
+    // - Non-interactive/pipe mode: keep strict separation (serial stream -> stdout, hints -> stderr).
+    let data_to_stderr = console::Term::stdout().is_term();
+    let term_lock = Arc::new(Mutex::new(()));
 
-    eprintln!(
-        "{} {}",
-        style("📡").cyan(),
-        t!(
-            "monitor.opening",
-            port = style(&port_name).green().to_string(),
-            baud = monitor_baud
-        )
-    );
-    eprintln!("{}", style(t!("monitor.exit_hint")).dim());
+    if let Ok(_guard) = term_lock.lock() {
+        eprintln!(
+            "{} {}",
+            style("📡").cyan(),
+            t!(
+                "monitor.opening",
+                port = style(&port_name).green().to_string(),
+                baud = monitor_baud
+            )
+        );
+        eprintln!("{}", style(t!("monitor.exit_hint")).dim());
+    }
 
     // Open serial port
     let serial = MonitorSession::open(&port_name, monitor_baud)
@@ -71,6 +81,10 @@ pub(crate) fn cmd_monitor(
     let running_reader = running.clone();
     let show_timestamp = Arc::new(AtomicBool::new(timestamp));
     let show_timestamp_reader = show_timestamp.clone();
+    let force_line_start = Arc::new(AtomicBool::new(false));
+    let force_line_start_reader = force_line_start.clone();
+    let term_lock_reader = term_lock.clone();
+    let data_to_stderr_reader = data_to_stderr;
     let clean_output_reader = clean_output;
     let last_rx_millis = Arc::new(AtomicU64::new(0));
     let last_rx_millis_reader = last_rx_millis.clone();
@@ -84,17 +98,19 @@ pub(crate) fn cmd_monitor(
             .append(true)
             .open(path)
             .with_context(|| format!("Failed to open log file: {}", path.display()))?;
-        eprintln!(
-            "{} {}",
-            style("📝").cyan(),
-            t!("monitor.logging", path = path.display().to_string())
-        );
+        if let Ok(_guard) = term_lock.lock() {
+            eprintln!(
+                "{} {}",
+                style("📝").cyan(),
+                t!("monitor.logging", path = path.display().to_string())
+            );
+        }
         Some(std::sync::Mutex::new(file))
     } else {
         None
     };
 
-    // Reader thread: serial → stdout
+    // Reader thread: serial → terminal
     let reader_handle = std::thread::spawn(move || {
         let mut buf = [0u8; 1024];
         // Track whether we're at the beginning of a new line (for timestamp insertion)
@@ -121,6 +137,21 @@ pub(crate) fn cmd_monitor(
                     };
 
                     if !display_text.is_empty() {
+                        if force_line_start_reader.swap(false, Ordering::Relaxed) {
+                            if !at_line_start {
+                                if data_to_stderr_reader {
+                                    if let Ok(_guard) = term_lock_reader.lock() {
+                                        eprint!("\r\n");
+                                        io::stderr().flush().ok();
+                                    }
+                                } else {
+                                    print!("\r\n");
+                                    io::stdout().flush().ok();
+                                }
+                            }
+                            at_line_start = true;
+                        }
+
                         // Write to log file (raw, no timestamps)
                         if let Some(ref log) = log_writer {
                             if let Ok(mut f) = log.lock() {
@@ -132,8 +163,15 @@ pub(crate) fn cmd_monitor(
                         let ts_enabled = show_timestamp_reader.load(Ordering::Relaxed);
                         let output =
                             format_monitor_output(&display_text, ts_enabled, &mut at_line_start);
-                        print!("{output}");
-                        io::stdout().flush().ok();
+                        if data_to_stderr_reader {
+                            if let Ok(_guard) = term_lock_reader.lock() {
+                                eprint!("{output}");
+                                io::stderr().flush().ok();
+                            }
+                        } else {
+                            print!("{output}");
+                            io::stdout().flush().ok();
+                        }
                     }
                 },
                 Err(ref e) if e.kind() == std::io::ErrorKind::TimedOut => {},
@@ -177,7 +215,10 @@ pub(crate) fn cmd_monitor(
                     },
                     // Ctrl+R: reset device via DTR/RTS toggle
                     (KeyCode::Char('r'), KeyModifiers::CONTROL) => {
-                        eprintln!("\r\n{} {}", style("🔄").cyan(), t!("monitor.resetting"));
+                        force_line_start.store(true, Ordering::Relaxed);
+                        if let Ok(_guard) = term_lock.lock() {
+                            eprintln!("\r\n{} {}", style("🔄").cyan(), t!("monitor.resetting"));
+                        }
 
                         let before_rx = last_rx_millis.load(Ordering::Relaxed);
                         let reset_result = (|| -> Result<()> {
@@ -205,8 +246,14 @@ pub(crate) fn cmd_monitor(
                                 }
 
                                 if observed {
-                                    eprintln!("{} {}", style("✓").green(), t!("monitor.reset_ok"));
-                                } else {
+                                    if let Ok(_guard) = term_lock.lock() {
+                                        eprintln!(
+                                            "{} {}",
+                                            style("✓").green(),
+                                            t!("monitor.reset_ok")
+                                        );
+                                    }
+                                } else if let Ok(_guard) = term_lock.lock() {
                                     eprintln!(
                                         "{} {}",
                                         style("⚠").yellow(),
@@ -222,12 +269,17 @@ pub(crate) fn cmd_monitor(
                                 }
                             },
                             Err(err) => {
-                                eprintln!(
-                                    "{} {}",
-                                    style("⚠").yellow(),
-                                    t!("monitor.reset_failed", error = err.to_string())
-                                );
-                                eprintln!("{}", style(t!("monitor.reset_flow_control_hint")).dim());
+                                if let Ok(_guard) = term_lock.lock() {
+                                    eprintln!(
+                                        "{} {}",
+                                        style("⚠").yellow(),
+                                        t!("monitor.reset_failed", error = err.to_string())
+                                    );
+                                    eprintln!(
+                                        "{}",
+                                        style(t!("monitor.reset_flow_control_hint")).dim()
+                                    );
+                                }
                             },
                         }
                     },
@@ -235,12 +287,15 @@ pub(crate) fn cmd_monitor(
                     (KeyCode::Char('t'), KeyModifiers::CONTROL) => {
                         let current = show_timestamp.load(Ordering::Relaxed);
                         show_timestamp.store(!current, Ordering::Relaxed);
+                        force_line_start.store(true, Ordering::Relaxed);
                         let state = if current {
                             t!("monitor.timestamp_off")
                         } else {
                             t!("monitor.timestamp_on")
                         };
-                        eprintln!("\r\n{} {state}", style("⏱").cyan());
+                        if let Ok(_guard) = term_lock.lock() {
+                            eprintln!("\r\n{} {state}", style("⏱").cyan());
+                        }
                     },
                     // Enter: send \r\n (works with both \n and \r\n devices)
                     (KeyCode::Enter, _) => {
@@ -272,7 +327,9 @@ pub(crate) fn cmd_monitor(
 
     // Wait for reader thread to finish
     let _ = reader_handle.join();
-    eprintln!("\r\n{} {}", style("👋").cyan(), t!("monitor.closed"));
+    if let Ok(_guard) = term_lock.lock() {
+        eprintln!("\r\n{} {}", style("👋").cyan(), t!("monitor.closed"));
+    }
 
     if signal_interrupted || was_interrupted() || user_requested_exit {
         clear_interrupted_flag();
