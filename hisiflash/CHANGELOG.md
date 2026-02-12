@@ -15,10 +15,17 @@ and this crate follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 - Native monitor primitives:
   - `MonitorSession`
   - `split_utf8`
+  - `drain_utf8_lossy`
+  - `clean_monitor_text`
   - `format_monitor_output`
 
+### Changed
+- `format_monitor_output` now normalizes standalone `\r`/`\n` line endings more consistently.
+- Non-timestamp formatting path now keeps `at_line_start` state aligned with emitted output.
+- Monitor text-processing flow was hardened for mixed UTF-8/invalid-byte streams in long-running sessions.
+
 ### Compatibility
-- Changes are additive; no intentional breaking public API changes in this batch.
+- Changes are additive with behavior refinements in monitor text formatting/output helpers.
 
 ## Historical Notes
 

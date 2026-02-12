@@ -13,11 +13,6 @@
 - 🔧 **跨平台**：支持 Linux、macOS、Windows
 - 📦 **FWPKG 支持**：完整支持 HiSilicon FWPKG 固件包格式
 - 🔄 **SEBOOT 协议**：兼容官方 fbb_burntool 协议
-## 测试与验证文档
-
-- 手动测试清单：`docs/testing/MANUAL_CHECKLIST.md`
-- 自动化测试说明：`docs/testing/AUTOMATED_TESTS.md`
-- 发布前验证清单：`docs/testing/RELEASE_VALIDATION.md`
 - 🛠️ **库 + CLI**：既可作为库使用，也可作为命令行工具
 
 ### 智能检测
@@ -25,10 +20,6 @@
 - 🎯 **交互式串口选择**：多串口时自动提示选择，已知设备高亮显示
 - 💾 **串口记忆功能**：可保存常用串口到配置文件
 
-│   ├── testing/            # 测试与发布验证
-│   │   ├── MANUAL_CHECKLIST.md
-│   │   ├── AUTOMATED_TESTS.md
-│   │   └── RELEASE_VALIDATION.md
 ### 用户体验
 - 📊 **彩色进度条**：友好的烧录进度显示
 - 🔇 **静默模式**：`-q/--quiet` 抑制非必要输出
@@ -41,12 +32,18 @@
 - 🐚 **Shell 补全**：支持 Bash/Zsh/Fish/PowerShell 自动补全
 - 📡 **串口监控**：内置 `monitor` 命令查看设备输出
 
+## 测试与验证文档
+
+- 手动测试清单：`docs/testing/MANUAL_CHECKLIST.md`
+- 自动化测试说明：`docs/testing/AUTOMATED_TESTS.md`
+- 发布前验证清单：`docs/testing/RELEASE_VALIDATION.md`
+
 ## 支持的芯片
 
 | 芯片 | 状态 | 说明 |
 |------|------|------|
 | WS63 | ✅ 完整支持 | WiFi + BLE +SLE 芯片 |
-| BS2X | � 计划中 | BS21 等 BLE + SLE 芯片（使用相同 SEBOOT 协议） |
+| BS2X | 📋 计划中 | BS21 等 BLE + SLE 芯片（使用相同 SEBOOT 协议） |
 | BS25 | 📋 计划中 | BLE + SLE 增强版 |
 
 WS63 和 BS2X 系列使用相同的 SEBOOT 烧录协议，BS2X/BS25 支持将在后续版本中添加。
@@ -184,6 +181,28 @@ hisiflash write -p /dev/ttyUSB0 \
 ```bash
 hisiflash erase -p /dev/ttyUSB0 --all
 ```
+
+### 串口监控（monitor）
+
+```bash
+# 默认监控（默认 115200，默认 clean-output）
+hisiflash monitor -p /dev/ttyUSB0
+
+# 开启时间戳
+hisiflash monitor -p /dev/ttyUSB0 --timestamp
+
+# 原样输出（不过滤控制字符）
+hisiflash monitor -p /dev/ttyUSB0 --raw
+```
+
+快捷键：
+- `Ctrl+C`：退出 monitor
+- `Ctrl+R`：触发 DTR/RTS 复位并自动检查是否有新串口输出
+- `Ctrl+T`：切换时间戳显示
+
+输出流约定：
+- TTY 模式：串口数据与状态提示都输出到 `stderr`，优先保证交互对齐
+- 非 TTY 模式：串口数据输出到 `stdout`，状态/提示输出到 `stderr`
 
 ## 命令行参数
 
