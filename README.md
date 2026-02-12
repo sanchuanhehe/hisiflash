@@ -215,7 +215,7 @@ Options:
 | `HISIFLASH_CHIP` | 默认芯片类型 | ws63 |
 | `HISIFLASH_LANG` | 语言/地区 (如 en, zh-CN) | 自动检测 |
 | `HISIFLASH_NON_INTERACTIVE` | 非交互模式 | false |
-| `RUST_LOG` | 日志级别 | info |
+| `RUST_LOG` | 日志级别 | warn（`-v` 时为 info） |
 
 ## 可靠性与重试机制
 

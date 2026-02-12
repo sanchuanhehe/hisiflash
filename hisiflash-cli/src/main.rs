@@ -18,6 +18,7 @@ use console::style;
 use env_logger::Env;
 use hisiflash::{ChipFamily, Error as LibError};
 use log::debug;
+use rust_i18n::t;
 use std::env;
 use std::path::PathBuf;
 use thiserror::Error;
@@ -155,6 +156,8 @@ pub(crate) enum CliError {
     #[error("{0}")]
     Usage(String),
     #[error("{0}")]
+    Config(String),
+    #[error("{0}")]
     Cancelled(String),
 }
 
@@ -162,6 +165,7 @@ impl CliError {
     fn exit_code(&self) -> i32 {
         match self {
             Self::Usage(_) => 2,
+            Self::Config(_) => 3,
             Self::Cancelled(_) => 130,
         }
     }
@@ -321,9 +325,12 @@ fn main() {
 }
 
 fn run() -> Result<()> {
-    // Inspect raw args early to support localized --help handling and early --lang
     let raw_args: Vec<String> = env::args().collect();
+    run_with_args(&raw_args)
+}
 
+fn run_with_args(raw_args: &[String]) -> Result<()> {
+    // Inspect raw args early to support localized --help handling and early --lang
     // Extract --lang if provided early so help text is localized
     let mut early_lang: Option<String> = None;
     for (i, arg) in raw_args.iter().enumerate() {
@@ -397,7 +404,7 @@ fn run() -> Result<()> {
 
     let app = Cli::command();
     let matches = app
-        .try_get_matches_from(raw_args.clone())
+        .try_get_matches_from(raw_args.to_owned())
         .map_err(|e| CliError::Usage(e.to_string()))?;
     let mut cli = Cli::from_arg_matches(&matches).map_err(|e| CliError::Usage(e.to_string()))?;
 
@@ -434,7 +441,7 @@ fn run() -> Result<()> {
         Config::load()
     };
 
-    apply_config_defaults(&mut cli, &matches, &config);
+    apply_config_defaults(&mut cli, &matches, &config)?;
 
     match &cli.command {
         Commands::Flash {
@@ -514,7 +521,7 @@ fn run() -> Result<()> {
     Ok(())
 }
 
-fn apply_config_defaults(cli: &mut Cli, matches: &clap::ArgMatches, config: &Config) {
+fn apply_config_defaults(cli: &mut Cli, matches: &clap::ArgMatches, config: &Config) -> Result<()> {
     if matches.value_source("baud") == Some(ValueSource::DefaultValue)
         && let Some(config_baud) = config.port.connection.baud
     {
@@ -522,12 +529,18 @@ fn apply_config_defaults(cli: &mut Cli, matches: &clap::ArgMatches, config: &Con
     }
 
     if matches.value_source("chip") == Some(ValueSource::DefaultValue)
-        && let Some(config_chip) = config
-            .flash
-            .chip
-            .as_deref()
-            .and_then(Chip::from_config_name)
+        && let Some(config_chip_name) = config.flash.chip.as_deref()
     {
+        let config_chip = Chip::from_config_name(config_chip_name).ok_or_else(|| {
+            CliError::Config(
+                t!(
+                    "error.invalid_config_chip",
+                    chip = config_chip_name,
+                    supported = "ws63, bs2x, bs25"
+                )
+                .to_string(),
+            )
+        })?;
         cli.chip = config_chip;
     }
 
@@ -566,6 +579,8 @@ fn apply_config_defaults(cli: &mut Cli, matches: &clap::ArgMatches, config: &Con
         },
         _ => {},
     }
+
+    Ok(())
 }
 
 fn map_exit_code(err: &anyhow::Error) -> i32 {
@@ -943,7 +958,7 @@ mod cli_tests {
             .unwrap();
         let mut cli = Cli::from_arg_matches(&matches).unwrap();
 
-        apply_config_defaults(&mut cli, &matches, &config);
+        apply_config_defaults(&mut cli, &matches, &config).unwrap();
 
         assert_eq!(cli.baud, 460800);
         assert!(matches!(cli.chip, Chip::Bs2x));
@@ -984,7 +999,7 @@ mod cli_tests {
             .unwrap();
         let mut cli = Cli::from_arg_matches(&matches).unwrap();
 
-        apply_config_defaults(&mut cli, &matches, &config);
+        apply_config_defaults(&mut cli, &matches, &config).unwrap();
 
         assert_eq!(cli.baud, 115200);
         assert!(matches!(cli.chip, Chip::Ws63));
@@ -1003,8 +1018,24 @@ mod cli_tests {
     }
 
     #[test]
-    fn test_cli_missing_subcommand() {
-        let result = Cli::try_parse_from(["hisiflash"]);
+    fn test_run_no_args_returns_ok() {
+        let args = vec!["hisiflash".to_string()];
+        let result = run_with_args(&args);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_apply_config_defaults_invalid_chip() {
+        let mut config = Config::default();
+        config.flash.chip = Some("unknown-chip".to_string());
+
+        let cmd = Cli::command();
+        let matches = cmd
+            .try_get_matches_from(["hisiflash", "list-ports"])
+            .unwrap();
+        let mut cli = Cli::from_arg_matches(&matches).unwrap();
+
+        let result = apply_config_defaults(&mut cli, &matches, &config);
         assert!(result.is_err());
     }
 

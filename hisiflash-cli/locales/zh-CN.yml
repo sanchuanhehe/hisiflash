@@ -154,6 +154,7 @@ error.open_port: "打开串口失败: %{port}"
 error.serial_error: "串口错误"
 error.connection_exhausted: "经过 %{max} 次尝试后连接失败"
 error.download_exhausted: "经过 %{max} 次重试后下载失败"
+error.invalid_config_chip: "配置文件中的芯片类型无效: %{chip}。支持值: %{supported}"
 
 # 固件自动发现
 flash.no_firmware_found: "在当前目录树中未找到 .fwpkg 固件文件。请指定固件文件路径。"

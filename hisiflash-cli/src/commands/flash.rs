@@ -4,7 +4,6 @@ use anyhow::{Context, Result};
 use console::style;
 use hisiflash::{ChipFamily, Fwpkg};
 use indicatif::{ProgressBar, ProgressStyle};
-use log::error;
 use rust_i18n::t;
 use std::path::PathBuf;
 
@@ -232,7 +231,6 @@ pub(crate) fn cmd_write_program(
 /// Erase command implementation.
 pub(crate) fn cmd_erase(cli: &Cli, config: &mut Config, all: bool) -> Result<()> {
     if !all {
-        error!("{}", t!("erase.need_all_flag"));
         if !cli.quiet {
             eprintln!("{} {}", style("⚠").yellow(), t!("erase.use_all_flag"));
         }

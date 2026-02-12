@@ -166,12 +166,12 @@ fn is_known_device(port: &DetectedPort, config: &Config) -> bool {
 
 /// Interactive port selection.
 fn select_port_interactive(mut ports: Vec<DetectedPort>, config: &Config) -> Result<SelectedPort> {
-    println!(
+    eprintln!(
         "{} {}",
         style("ℹ").blue(),
         t!("serial.detected_ports", count = ports.len())
     );
-    println!("{}", style(t!("serial.known_devices_hint")).dim());
+    eprintln!("{}", style(t!("serial.known_devices_hint")).dim());
 
     // Sort: known devices first
     ports.sort_by_key(|p| !is_known_device(p, config));

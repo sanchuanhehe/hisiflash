@@ -154,6 +154,7 @@ error.open_port: "Failed to open serial port: %{port}"
 error.serial_error: "Serial port error"
 error.connection_exhausted: "Connection failed after %{max} attempts"
 error.download_exhausted: "Download failed after %{max} retries"
+error.invalid_config_chip: "Invalid chip in config: %{chip}. Supported values: %{supported}"
 
 # Firmware auto-discovery
 flash.no_firmware_found: "No .fwpkg firmware files found in the current directory tree. Please specify a firmware file."
