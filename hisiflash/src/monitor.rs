@@ -138,8 +138,14 @@ pub fn format_monitor_output(text: &str, timestamp: bool, at_line_start: &mut bo
         let mut out = String::with_capacity(normalized.len() * 2);
         for c in normalized.chars() {
             match c {
-                '\n' => out.push_str("\r\n"),
-                _ => out.push(c),
+                '\n' => {
+                    out.push_str("\r\n");
+                    *at_line_start = true;
+                },
+                _ => {
+                    out.push(c);
+                    *at_line_start = false;
+                },
             }
         }
         return out;
@@ -215,5 +221,17 @@ mod tests {
         let mut at_line_start = true;
         let result = format_monitor_output("abc\rdef", false, &mut at_line_start);
         assert_eq!(result, "abc\r\ndef");
+    }
+
+    #[test]
+    fn test_format_output_no_timestamp_updates_line_state() {
+        let mut at_line_start = true;
+        let result = format_monitor_output("abc", false, &mut at_line_start);
+        assert_eq!(result, "abc");
+        assert!(!at_line_start);
+
+        let result2 = format_monitor_output("\n", false, &mut at_line_start);
+        assert_eq!(result2, "\r\n");
+        assert!(at_line_start);
     }
 }

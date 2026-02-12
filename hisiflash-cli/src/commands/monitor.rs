@@ -44,13 +44,8 @@ pub(crate) fn cmd_monitor(
     }
 
     let port_name = get_port(cli, config)?;
-    // CLI design trade-off:
-    // - Default contract: machine-readable stream should go to stdout, diagnostics to stderr.
-    // - Interactive monitor UX: if stdout is a TTY, split channels can race for cursor/line state
-    //   and cause visible misalignment. In this case we intentionally coalesce monitor stream +
-    //   status hints to one terminal channel (stderr) for stable rendering.
-    // - Non-interactive/pipe mode: keep strict separation (serial stream -> stdout, hints -> stderr).
-    let data_to_stderr = console::Term::stdout().is_term();
+    // For monitor UX stability, keep serial stream and status hints on one terminal channel.
+    // This avoids cursor/line-state races that can break alignment when output is highly concurrent.
     let term_lock = Arc::new(Mutex::new(()));
 
     if let Ok(_guard) = term_lock.lock() {
@@ -84,7 +79,6 @@ pub(crate) fn cmd_monitor(
     let force_line_start = Arc::new(AtomicBool::new(false));
     let force_line_start_reader = force_line_start.clone();
     let term_lock_reader = term_lock.clone();
-    let data_to_stderr_reader = data_to_stderr;
     let clean_output_reader = clean_output;
     let last_rx_millis = Arc::new(AtomicU64::new(0));
     let last_rx_millis_reader = last_rx_millis.clone();
@@ -138,16 +132,9 @@ pub(crate) fn cmd_monitor(
 
                     if !display_text.is_empty() {
                         if force_line_start_reader.swap(false, Ordering::Relaxed) {
-                            if !at_line_start {
-                                if data_to_stderr_reader {
-                                    if let Ok(_guard) = term_lock_reader.lock() {
-                                        eprint!("\r\n");
-                                        io::stderr().flush().ok();
-                                    }
-                                } else {
-                                    print!("\r\n");
-                                    io::stdout().flush().ok();
-                                }
+                            if let Ok(_guard) = term_lock_reader.lock() {
+                                eprint!("\r\n");
+                                io::stderr().flush().ok();
                             }
                             at_line_start = true;
                         }
@@ -163,14 +150,9 @@ pub(crate) fn cmd_monitor(
                         let ts_enabled = show_timestamp_reader.load(Ordering::Relaxed);
                         let output =
                             format_monitor_output(&display_text, ts_enabled, &mut at_line_start);
-                        if data_to_stderr_reader {
-                            if let Ok(_guard) = term_lock_reader.lock() {
-                                eprint!("{output}");
-                                io::stderr().flush().ok();
-                            }
-                        } else {
-                            print!("{output}");
-                            io::stdout().flush().ok();
+                        if let Ok(_guard) = term_lock_reader.lock() {
+                            eprint!("{output}");
+                            io::stderr().flush().ok();
                         }
                     }
                 },
@@ -248,38 +230,34 @@ pub(crate) fn cmd_monitor(
                                 if observed {
                                     if let Ok(_guard) = term_lock.lock() {
                                         eprintln!(
-                                            "{} {}",
+                                            "\r\n{} {}",
                                             style("✓").green(),
                                             t!("monitor.reset_ok")
                                         );
                                     }
                                 } else if let Ok(_guard) = term_lock.lock() {
                                     eprintln!(
-                                        "{} {}",
+                                        "\r\n{} {}",
                                         style("⚠").yellow(),
                                         t!(
                                             "monitor.reset_no_response",
                                             timeout_ms = VERIFY_TIMEOUT_MS
                                         )
                                     );
-                                    eprintln!(
-                                        "{}",
-                                        style(t!("monitor.reset_flow_control_hint")).dim()
-                                    );
+                                    eprintln!("{}", t!("monitor.reset_flow_control_hint"));
                                 }
+                                force_line_start.store(true, Ordering::Relaxed);
                             },
                             Err(err) => {
                                 if let Ok(_guard) = term_lock.lock() {
                                     eprintln!(
-                                        "{} {}",
+                                        "\r\n{} {}",
                                         style("⚠").yellow(),
                                         t!("monitor.reset_failed", error = err.to_string())
                                     );
-                                    eprintln!(
-                                        "{}",
-                                        style(t!("monitor.reset_flow_control_hint")).dim()
-                                    );
+                                    eprintln!("{}", t!("monitor.reset_flow_control_hint"));
                                 }
+                                force_line_start.store(true, Ordering::Relaxed);
                             },
                         }
                     },
