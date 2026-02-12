@@ -23,12 +23,13 @@ with pre-release tags.
 - Default runtime logging is quieter (`warn` by default, `info` with `-v`).
 - `monitor` now supports clean/raw output modes (`--clean-output` default, `--raw` optional).
 - `monitor` output handling was hardened with lossy UTF-8 draining and cleaner line-state management.
-- `monitor` Ctrl+R now includes automatic post-reset output verification and flow-control hinting.
+- `monitor` Ctrl+R reset validation now uses a two-layer model: reset-signal sent + reset-evidence classification (observed/weak/unconfirmed), instead of relying on generic post-output presence.
 - `monitor` status rendering now uses synchronized status-line output to improve alignment under streaming output.
 - `monitor` stream contract is now split in non-TTY mode (`stdout` for serial data, `stderr` for status), while TTY mode remains merged for alignment.
 
 ### Fixed
 - Cancellation now uses a dedicated `Cancelled:` style output instead of generic error wording.
+- Flow-control wiring hint is no longer printed after confirmed reset evidence; it now appears only for weak/unconfirmed reset evidence or reset-signal failure.
 
 ### Compatibility
 - User-visible CLI behavior changed (default log verbosity and some error outputs).
