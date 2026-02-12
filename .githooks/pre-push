@@ -31,6 +31,22 @@ if [ "${HISIFLASH_SKIP_HOOKS:-0}" = "1" ]; then
     exit 0
 fi
 
+# Ensure checks run against exactly what will be pushed.
+# If there are local changes (staged or unstaged), cargo fmt/clippy would run on
+# the working tree and may incorrectly pass even though the commit being pushed
+# still fails. Require a clean tree so the checks match HEAD.
+if ! git diff --quiet; then
+    error "Working tree has unstaged changes. Commit or stash them before pushing."
+    error "Hint: git status --porcelain"
+    exit 1
+fi
+
+if ! git diff --cached --quiet; then
+    error "Index has staged but uncommitted changes. Commit them before pushing."
+    error "Hint: git status --porcelain"
+    exit 1
+fi
+
 ERRORS=0
 
 # ──────────────────────────────────────────────
