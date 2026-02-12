@@ -40,6 +40,30 @@ pub struct SelectedPort {
     pub is_known: bool,
 }
 
+fn usage_err(message: &str) -> anyhow::Error {
+    CliError::Usage(message.to_string()).into()
+}
+
+fn select_non_interactive_port(
+    selection_ports: Vec<DetectedPort>,
+    config: &Config,
+) -> Result<SelectedPort> {
+    match selection_ports.len().cmp(&1) {
+        Ordering::Equal => {
+            let port = selection_ports
+                .into_iter()
+                .next()
+                .expect("selection_ports has exactly 1 element here");
+            Ok(SelectedPort {
+                is_known: is_known_device(&port, config),
+                port,
+            })
+        },
+        Ordering::Greater => Err(usage_err(t!("serial.multiple_ports").as_ref())),
+        Ordering::Less => Err(usage_err(t!("serial.no_ports_available").as_ref())),
+    }
+}
+
 /// Select a serial port interactively or automatically.
 pub fn select_serial_port(options: &SerialOptions, config: &Config) -> Result<SelectedPort> {
     // If port explicitly specified, use it
@@ -57,7 +81,7 @@ pub fn select_serial_port(options: &SerialOptions, config: &Config) -> Result<Se
     let ports = discover_ports();
 
     if ports.is_empty() {
-        anyhow::bail!("{}", t!("serial.no_ports_found"));
+        return Err(usage_err(t!("serial.no_ports_found").as_ref()));
     }
 
     // Filter to known devices (built-in + config)
@@ -76,20 +100,7 @@ pub fn select_serial_port(options: &SerialOptions, config: &Config) -> Result<Se
 
     // Non-interactive mode must never prompt
     if options.non_interactive {
-        return match selection_ports.len().cmp(&1) {
-            Ordering::Equal => {
-                let port = selection_ports
-                    .into_iter()
-                    .next()
-                    .expect("selection_ports has exactly 1 element here");
-                Ok(SelectedPort {
-                    is_known: is_known_device(&port, config),
-                    port,
-                })
-            },
-            Ordering::Greater => anyhow::bail!("{}", t!("serial.multiple_ports")),
-            Ordering::Less => anyhow::bail!("{}", t!("serial.no_ports_available")),
-        };
+        return select_non_interactive_port(selection_ports, config);
     }
 
     match selection_ports.len().cmp(&1) {
@@ -112,7 +123,7 @@ pub fn select_serial_port(options: &SerialOptions, config: &Config) -> Result<Se
                 confirm_single_port(port, config)
             }
         },
-        Ordering::Less => anyhow::bail!("{}", t!("serial.no_ports_available")),
+        Ordering::Less => Err(usage_err(t!("serial.no_ports_available").as_ref())),
     }
 }
 
@@ -495,5 +506,66 @@ mod tests {
         assert_eq!(sp.port.name, "COM1");
         assert!(sp.is_known);
         assert!(sp.port.device.is_known());
+    }
+
+    // ---- non-interactive error mapping regression ----
+
+    #[test]
+    fn test_select_non_interactive_multiple_ports_returns_usage_error() {
+        let ports = vec![
+            DetectedPort {
+                name: "/dev/ttyUSB0".to_string(),
+                device: UsbDevice::Unknown,
+                vid: None,
+                pid: None,
+                manufacturer: None,
+                product: None,
+                serial: None,
+            },
+            DetectedPort {
+                name: "/dev/ttyUSB1".to_string(),
+                device: UsbDevice::Unknown,
+                vid: None,
+                pid: None,
+                manufacturer: None,
+                product: None,
+                serial: None,
+            },
+        ];
+
+        let result = select_non_interactive_port(ports, &Config::default());
+        assert!(result.is_err());
+        let err = result.err().expect("expected error");
+        assert!(err.downcast_ref::<CliError>().is_some());
+        if let Some(cli_err) = err.downcast_ref::<CliError>() {
+            assert!(matches!(cli_err, CliError::Usage(_)));
+        }
+    }
+
+    #[test]
+    fn test_select_non_interactive_no_ports_returns_usage_error() {
+        let result = select_non_interactive_port(vec![], &Config::default());
+        assert!(result.is_err());
+        let err = result.err().expect("expected error");
+        assert!(err.downcast_ref::<CliError>().is_some());
+        if let Some(cli_err) = err.downcast_ref::<CliError>() {
+            assert!(matches!(cli_err, CliError::Usage(_)));
+        }
+    }
+
+    #[test]
+    fn test_select_non_interactive_single_port_returns_selected_port() {
+        let ports = vec![DetectedPort {
+            name: "/dev/ttyUSB0".to_string(),
+            device: UsbDevice::Unknown,
+            vid: None,
+            pid: None,
+            manufacturer: None,
+            product: None,
+            serial: None,
+        }];
+
+        let selected = select_non_interactive_port(ports, &Config::default()).unwrap();
+        assert_eq!(selected.port.name, "/dev/ttyUSB0");
     }
 }
