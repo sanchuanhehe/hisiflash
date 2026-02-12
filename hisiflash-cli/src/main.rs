@@ -11,6 +11,7 @@
 //! - Internationalization (i18n) support
 
 use anyhow::Result;
+use clap::error::ErrorKind;
 use clap::parser::ValueSource;
 use clap::{CommandFactory, FromArgMatches, Parser, Subcommand, ValueEnum};
 use clap_complete::Shell;
@@ -462,9 +463,16 @@ fn run_with_args(raw_args: &[String]) -> Result<()> {
     }
 
     let app = Cli::command();
-    let matches = app
-        .try_get_matches_from(raw_args.to_owned())
-        .map_err(|e| CliError::Usage(e.to_string()))?;
+    let matches = match app.try_get_matches_from(raw_args.to_owned()) {
+        Ok(matches) => matches,
+        Err(err) => match err.kind() {
+            ErrorKind::DisplayHelp | ErrorKind::DisplayVersion => {
+                err.print()?;
+                return Ok(());
+            },
+            _ => return Err(CliError::Usage(err.to_string()).into()),
+        },
+    };
     let mut cli = Cli::from_arg_matches(&matches).map_err(|e| CliError::Usage(e.to_string()))?;
 
     // Setup logging based on verbosity
@@ -1123,6 +1131,20 @@ mod cli_tests {
     #[test]
     fn test_run_no_args_returns_ok() {
         let args = vec!["hisiflash".to_string()];
+        let result = run_with_args(&args);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_run_version_returns_ok() {
+        let args = vec!["hisiflash".to_string(), "--version".to_string()];
+        let result = run_with_args(&args);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_run_short_version_returns_ok() {
+        let args = vec!["hisiflash".to_string(), "-V".to_string()];
         let result = run_with_args(&args);
         assert!(result.is_ok());
     }
