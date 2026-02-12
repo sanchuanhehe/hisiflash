@@ -57,7 +57,7 @@ Activate when the task includes any of the following:
   - `-n`, `--dry-run`
   - `-f`, `--force`
   - `-o`, `--output`
-- In script examples, use fully spelled long option names.
+- In script examples, use fully spelled-out long option names.
 
 ### Step 3: Output Contract
 - Human-readable default output.
@@ -67,7 +67,7 @@ Activate when the task includes any of the following:
 
 ### Step 4: Errors and UX
 - Error messages should be actionable: what failed + why + next fix.
-- If a typo is likely, suggest the closest command/flag.
+- If a typo is likely, suggest the closest command or flag.
 - For destructive actions, confirm in interactive mode; require an explicit force/confirm flag in non-interactive mode.
 - Never require prompts in CI or script mode.
 
@@ -90,7 +90,7 @@ For each CLI change, produce:
 2. Updated help output/examples.
 3. Explicit stdout/stderr and exit code behavior.
 4. Backward-compatibility note.
-5. Validation checklist results using [references/checklist.md](references/checklist.md).
+5. Validation results using [references/checklist.md](references/checklist.md).
 
 ## Quick references
 

@@ -11,7 +11,7 @@ Use this rubric to review CLI changes quickly and consistently in PRs.
 
 ---
 
-## Scoring rubric (0–3 per dimension)
+## Scoring Rubric (0–3 per Dimension)
 
 ### 1) Argument syntax and predictability
 - **3**: Syntax is clear, consistently options-first, supports `--`, no ambiguity.
@@ -63,7 +63,7 @@ Use this rubric to review CLI changes quickly and consistently in PRs.
 
 ---
 
-## Blockers (any one triggers `Request Changes`)
+## Blockers (Any One Triggers `Request Changes`)
 
 - [ ] Missing `-h/--help` or `--version`
 - [ ] Severe stdout/stderr mixing breaks machine readability
@@ -74,12 +74,12 @@ Use this rubric to review CLI changes quickly and consistently in PRs.
 
 ---
 
-## Suggested decision thresholds
+## Suggested Decision Thresholds
 
 - **Approve**
   - Total score `>= 20` and no blockers
 - **Needs Discussion**
-  - Total score `16~19` with no blockers, or design trade-offs need team alignment
+  - Total score `16–19` with no blockers, or design trade-offs need team alignment
 - **Request Changes**
   - Total score `<= 15` or any blocker exists
 
@@ -87,7 +87,7 @@ Use this rubric to review CLI changes quickly and consistently in PRs.
 
 ---
 
-## PR review summary template (copy/paste)
+## PR Review Summary Template (Copy/Paste)
 
 ```markdown
 ### CLI Review Summary
@@ -118,7 +118,7 @@ Use this rubric to review CLI changes quickly and consistently in PRs.
 
 ---
 
-## Related references
+## Related References
 
 - Start with checklist: [checklist.md](checklist.md)
 - Resolve naming disputes via: [option-map.md](option-map.md)

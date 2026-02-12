@@ -2,7 +2,7 @@
 
 This file defines **recommended semantics**, **suggested short options**, and **ambiguities to avoid** for common CLI flags.
 
-## 1) Global common options (preferred)
+## 1) Global Common Options (Preferred)
 
 | Meaning | Long option (recommended) | Short option (suggested) | Notes |
 |---|---|---|---|
@@ -18,7 +18,7 @@ This file defines **recommended semantics**, **suggested short options**, and **
 | JSON output | `--json` | none | Stable machine-readable output on stdout |
 | Disable color | `--no-color` | none | Also honor `NO_COLOR` |
 
-## 2) Domain-common options (use as needed)
+## 2) Domain-Common Options (Use as Needed)
 
 | Meaning | Long option (recommended) | Short option (suggested) | Typical usage |
 |---|---|---|---|
@@ -30,7 +30,7 @@ This file defines **recommended semantics**, **suggested short options**, and **
 | Config file | `--config <FILE>` | `-c <FILE>` | select config source |
 | Staged/index only | `--staged` / `--cached` | none | Git-like workflows |
 
-## 3) Recommended vs avoid
+## 3) Recommended and Avoided Patterns
 
 ### Recommended
 
@@ -48,24 +48,24 @@ This file defines **recommended semantics**, **suggested short options**, and **
 - Do not mix log prefixes (`INFO`/`DEBUG`) into stdout machine output.
 - Do not allow arbitrary subcommand abbreviations (blocks future expansion).
 
-## 4) Parameter order and formatting
+## 4) Parameter Order and Formatting
 
-- Preferred form: `command [options] [--] [operands...]`
+- Preferred form: `command [options] [--] [operands...]`.
 - Put options first, operands after options.
 - For required option values:
   - Prefer documenting long options as `--option=value`
   - Also accept `--option value` unless parser/project constraints forbid it
 - For short options, prioritize readability in scripts over heavy aggregation.
 
-## 5) Compatibility strategy
+## 5) Compatibility Strategy
 
 - Do not silently change semantics of released options; prefer additive options.
 - If a change is unavoidable:
-  1. emit a deprecation warning first
-  2. provide migration examples
-  3. define and publish a removal window in release notes
+  1. Emit a deprecation warning first.
+  2. Provide migration examples.
+  3. Define and publish a removal window in release notes.
 
-## 6) Standards alignment
+## 6) Standards Alignment
 
 - POSIX: argument syntax, `--` termination, option ordering conventions.
 - GNU: `--help`/`--version`, long-option consistency.

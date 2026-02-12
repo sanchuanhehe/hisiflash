@@ -2,7 +2,7 @@
 
 Use this as a baseline for top-level and subcommand help.
 
-## Top-level help template
+## Top-Level Help Template
 
 ```text
 mycmd - <one-line description>
@@ -32,7 +32,7 @@ For more details:
   mycmd help <command>
 ```
 
-## Subcommand help template
+## Subcommand Help Template
 
 ```text
 mycmd flash - Flash firmware to a target device
@@ -58,8 +58,8 @@ EXIT CODES:
   4  Flash operation failed
 ```
 
-## Style notes
+## Style Notes
 
-- Keep first screen concise; put advanced details in dedicated docs.
-- Show examples near top for discoverability.
-- If a command can be destructive, explicitly mention confirmation/force behavior.
+- Keep the first screen concise; place advanced details in dedicated docs.
+- Place examples near the top for discoverability.
+- If a command can be destructive, explicitly describe confirmation and force behavior.

@@ -1,45 +1,45 @@
 # CLI Quality Checklist
 
-## A. Invocation & Syntax
+## A. Invocation and Syntax
 
-- [ ] Usage synopsis clearly separates options and operands.
-- [ ] Options can appear before operands (documented and supported).
-- [ ] `--` is supported for end-of-options/disambiguation where needed.
-- [ ] Positional args count is minimal and justified.
-- [ ] Subcommand naming is unambiguous and consistent.
+- [ ] Ensure the usage synopsis clearly separates options and operands.
+- [ ] Ensure options can appear before operands (documented and supported).
+- [ ] Ensure `--` is supported for end-of-options disambiguation where needed.
+- [ ] Ensure positional argument count is minimal and justified.
+- [ ] Ensure subcommand naming is unambiguous and consistent.
 
 ## B. Standard Options
 
-- [ ] `-h` and `--help` are supported.
-- [ ] `--help` ignores unrelated args and exits with code 0.
-- [ ] `--version` is supported and exits with code 0.
-- [ ] Common flags use conventional names (`--verbose`, `--quiet`, `--dry-run`, `--force`, `--output`).
+- [ ] Ensure `-h` and `--help` are supported.
+- [ ] Ensure `--help` ignores unrelated args and exits with code 0.
+- [ ] Ensure `--version` is supported and exits with code 0.
+- [ ] Ensure common flags use conventional names (`--verbose`, `--quiet`, `--dry-run`, `--force`, `--output`).
 
 ## C. Output Discipline
 
-- [ ] Primary/business output is written to stdout.
-- [ ] Errors/warnings/progress are written to stderr.
-- [ ] Machine mode exists when needed (e.g. `--json`).
-- [ ] No unstable decoration in machine mode.
-- [ ] Colors/animations are disabled automatically when not in TTY.
+- [ ] Ensure primary output is written to stdout.
+- [ ] Ensure errors, warnings, and progress are written to stderr.
+- [ ] Ensure machine mode exists when needed (e.g. `--json`).
+- [ ] Ensure machine mode does not include unstable decoration.
+- [ ] Ensure colors and animations are disabled automatically on non-TTY.
 
-## D. Errors & Exit Codes
+## D. Errors and Exit Codes
 
-- [ ] Exit code `0` means success.
-- [ ] Non-zero exit codes are documented for key failure classes.
-- [ ] Error text is actionable (cause + fix suggestion).
-- [ ] Unknown command/flag provides suggestions when possible.
+- [ ] Ensure exit code `0` means success.
+- [ ] Ensure non-zero exit codes are documented for key failure classes.
+- [ ] Ensure error text is actionable (cause + fix suggestion).
+- [ ] Ensure unknown commands and flags provide suggestions when possible.
 
-## E. Interactivity & Safety
+## E. Interactivity and Safety
 
-- [ ] No prompt is required in non-interactive/script mode.
-- [ ] `--no-input` (or equivalent) disables prompts.
-- [ ] Destructive operations require confirmation or explicit force flag.
-- [ ] `--dry-run` is provided for high-risk operations.
+- [ ] Ensure no prompt is required in non-interactive script mode.
+- [ ] Ensure `--no-input` (or equivalent) disables prompts.
+- [ ] Ensure destructive operations require confirmation or an explicit force flag.
+- [ ] Ensure `--dry-run` is available for high-risk operations.
 
-## F. Compatibility & Docs
+## F. Compatibility and Docs
 
-- [ ] Existing scripts are not broken by default behavior changes.
-- [ ] Deprecations include warnings and migration path.
-- [ ] Help includes concise examples.
-- [ ] Docs explain config/env precedence and non-interactive usage.
+- [ ] Ensure existing scripts are not broken by default behavior changes.
+- [ ] Ensure deprecations include warnings and a migration path.
+- [ ] Ensure help includes concise examples.
+- [ ] Ensure docs explain config/env precedence and non-interactive usage.
