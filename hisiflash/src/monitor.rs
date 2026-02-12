@@ -69,6 +69,49 @@ pub fn split_utf8(bytes: &[u8]) -> (&str, &[u8]) {
     }
 }
 
+/// Drain buffered bytes into displayable UTF-8 text without stalling on invalid bytes.
+///
+/// - Valid UTF-8 is emitted as-is.
+/// - Invalid byte sequences emit the replacement char `�` and continue.
+/// - Incomplete UTF-8 suffix is kept in `buffer` for the next read.
+pub fn drain_utf8_lossy(buffer: &mut Vec<u8>) -> String {
+    let mut output = String::new();
+
+    loop {
+        match std::str::from_utf8(buffer) {
+            Ok(valid) => {
+                output.push_str(valid);
+                buffer.clear();
+                break;
+            },
+            Err(err) => {
+                let valid_up_to = err.valid_up_to();
+                if valid_up_to > 0 {
+                    if let Ok(valid) = std::str::from_utf8(&buffer[..valid_up_to]) {
+                        output.push_str(valid);
+                    }
+                }
+
+                match err.error_len() {
+                    Some(invalid_len) => {
+                        output.push('�');
+                        let drain_to = valid_up_to.saturating_add(invalid_len).min(buffer.len());
+                        buffer.drain(..drain_to);
+                    },
+                    None => {
+                        if valid_up_to > 0 {
+                            buffer.drain(..valid_up_to);
+                        }
+                        break;
+                    },
+                }
+            },
+        }
+    }
+
+    output
+}
+
 /// Format monitor output with optional timestamps.
 pub fn format_monitor_output(text: &str, timestamp: bool, at_line_start: &mut bool) -> String {
     if !timestamp {
@@ -115,4 +158,30 @@ pub fn format_monitor_output(text: &str, timestamp: bool, at_line_start: &mut bo
     }
 
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::drain_utf8_lossy;
+
+    #[test]
+    fn test_drain_utf8_lossy_replaces_invalid_bytes_and_continues() {
+        let mut buf = vec![0xFF, b'A', 0xFE, b'B'];
+        let out = drain_utf8_lossy(&mut buf);
+        assert_eq!(out, "�A�B");
+        assert!(buf.is_empty());
+    }
+
+    #[test]
+    fn test_drain_utf8_lossy_keeps_incomplete_suffix() {
+        let mut buf = vec![0xE4, 0xBD]; // incomplete UTF-8 for '你'
+        let out = drain_utf8_lossy(&mut buf);
+        assert_eq!(out, "");
+        assert_eq!(buf, vec![0xE4, 0xBD]);
+
+        buf.push(0xA0);
+        let out2 = drain_utf8_lossy(&mut buf);
+        assert_eq!(out2, "你");
+        assert!(buf.is_empty());
+    }
 }

@@ -40,7 +40,7 @@ pub(crate) fn was_interrupted() -> bool {
     INTERRUPTED.load(std::sync::atomic::Ordering::Relaxed)
 }
 
-fn clear_interrupted_flag() {
+pub(crate) fn clear_interrupted_flag() {
     INTERRUPTED.store(false, std::sync::atomic::Ordering::Relaxed);
 }
 

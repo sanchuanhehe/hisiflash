@@ -87,4 +87,4 @@ pub use connection::detect::{DetectedPort, UsbDevice};
 #[cfg(feature = "native")]
 pub use connection::serial::SerialPort;
 pub use host::{auto_detect_port, discover_hisilicon_ports, discover_ports};
-pub use monitor::{MonitorSession, format_monitor_output, split_utf8};
+pub use monitor::{MonitorSession, drain_utf8_lossy, format_monitor_output, split_utf8};

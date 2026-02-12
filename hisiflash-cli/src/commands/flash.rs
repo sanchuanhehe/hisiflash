@@ -153,7 +153,12 @@ pub(crate) fn cmd_flash(
         return Err(err);
     }
 
-    pb.finish_with_message(t!("common.complete").to_string());
+    if cli.quiet || !use_fancy_output() {
+        pb.finish_with_message(t!("common.complete").to_string());
+    } else {
+        pb.finish_and_clear();
+        eprintln!("{} {}", style("✓").green(), t!("common.complete"));
+    }
 
     // Reset device
     if !cli.quiet {

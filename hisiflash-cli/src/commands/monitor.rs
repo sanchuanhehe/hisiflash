@@ -11,9 +11,9 @@ use std::io::Write as _;
 use std::path::PathBuf;
 
 use crate::config::Config;
-use crate::{Cli, CliError, get_port, was_interrupted};
+use crate::{Cli, clear_interrupted_flag, get_port, was_interrupted};
 
-pub(crate) use hisiflash::{format_monitor_output, split_utf8};
+pub(crate) use hisiflash::{drain_utf8_lossy, format_monitor_output};
 
 /// Run the serial monitor.
 ///
@@ -64,7 +64,8 @@ pub(crate) fn cmd_monitor(
     let running_reader = running.clone();
     let show_timestamp = Arc::new(AtomicBool::new(timestamp));
     let show_timestamp_reader = show_timestamp.clone();
-    let mut interrupted = false;
+    let mut signal_interrupted = false;
+    let mut user_requested_exit = false;
 
     // Open log file if specified
     let log_writer: Option<std::sync::Mutex<std::fs::File>> = if let Some(path) = log_file {
@@ -100,28 +101,22 @@ pub(crate) fn cmd_monitor(
                     // Append to UTF-8 buffer for handling partial sequences
                     utf8_buf.extend_from_slice(data);
 
-                    // Find the longest valid UTF-8 prefix
-                    let (valid, remainder) = split_utf8(&utf8_buf);
+                    let decoded = drain_utf8_lossy(&mut utf8_buf);
 
-                    if !valid.is_empty() {
+                    if !decoded.is_empty() {
                         // Write to log file (raw, no timestamps)
                         if let Some(ref log) = log_writer {
                             if let Ok(mut f) = log.lock() {
-                                let _ = f.write_all(valid.as_bytes());
+                                let _ = f.write_all(decoded.as_bytes());
                             }
                         }
 
                         // Process output with optional timestamps
                         let ts_enabled = show_timestamp_reader.load(Ordering::Relaxed);
-                        let output = format_monitor_output(valid, ts_enabled, &mut at_line_start);
+                        let output = format_monitor_output(&decoded, ts_enabled, &mut at_line_start);
                         print!("{output}");
                         io::stdout().flush().ok();
                     }
-
-                    // Keep remainder for next iteration
-                    let remainder_bytes = remainder.to_vec();
-                    utf8_buf.clear();
-                    utf8_buf.extend_from_slice(&remainder_bytes);
                 },
                 Err(ref e) if e.kind() == std::io::ErrorKind::TimedOut => {},
                 Err(ref e) if e.kind() == std::io::ErrorKind::BrokenPipe => break,
@@ -144,7 +139,7 @@ pub(crate) fn cmd_monitor(
     // Main thread: keyboard → serial
     while running.load(Ordering::Relaxed) {
         if was_interrupted() {
-            interrupted = true;
+            signal_interrupted = true;
             running.store(false, Ordering::Relaxed);
             break;
         }
@@ -158,7 +153,7 @@ pub(crate) fn cmd_monitor(
                 match (code, modifiers) {
                     // Ctrl+C: exit
                     (KeyCode::Char('c'), KeyModifiers::CONTROL) => {
-                        interrupted = true;
+                        user_requested_exit = true;
                         running.store(false, Ordering::Relaxed);
                         break;
                     },
@@ -216,8 +211,9 @@ pub(crate) fn cmd_monitor(
     let _ = reader_handle.join();
     eprintln!("\r\n{} {}", style("👋").cyan(), t!("monitor.closed"));
 
-    if interrupted || was_interrupted() {
-        Err(CliError::Cancelled(t!("error.interrupted").to_string()).into())
+    if signal_interrupted || was_interrupted() || user_requested_exit {
+        clear_interrupted_flag();
+        Ok(())
     } else {
         Ok(())
     }
@@ -235,6 +231,7 @@ impl Drop for RawModeGuard {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use hisiflash::split_utf8;
 
     // ---- split_utf8 ----
 
