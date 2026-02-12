@@ -25,6 +25,9 @@ info()  { echo -e "${GREEN}[pre-push]${NC} $*"; }
 warn()  { echo -e "${YELLOW}[pre-push]${NC} $*"; }
 error() { echo -e "${RED}[pre-push]${NC} $*"; }
 
+info "Starting pre-push checks..."
+warn "Emergency bypass: HISIFLASH_SKIP_HOOKS=1 git push ...  (or: git push --no-verify)"
+
 # Allow skipping with HISIFLASH_SKIP_HOOKS=1
 if [ "${HISIFLASH_SKIP_HOOKS:-0}" = "1" ]; then
     warn "Skipping pre-push hooks (HISIFLASH_SKIP_HOOKS=1)"
