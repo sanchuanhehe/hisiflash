@@ -53,7 +53,11 @@ impl FirmwareCandidate {
 
     /// Format the display label for interactive selection.
     pub fn display_label(&self, base: &Path) -> String {
-        let rel = self.path.strip_prefix(base).unwrap_or(&self.path).display();
+        let rel = self
+            .path
+            .strip_prefix(base)
+            .unwrap_or(&self.path)
+            .display();
         format!("{rel} ({})", self.human_size())
     }
 }
@@ -81,7 +85,11 @@ pub fn find_firmware_files(base_dir: &Path) -> Vec<FirmwareCandidate> {
                 a.path
                     .components()
                     .count()
-                    .cmp(&b.path.components().count())
+                    .cmp(
+                        &b.path
+                            .components()
+                            .count(),
+                    )
             })
     });
 
@@ -115,9 +123,16 @@ fn walk_dir(base: &Path, dir: &Path, depth: usize, out: &mut Vec<FirmwareCandida
             .extension()
             .is_some_and(|ext| ext.eq_ignore_ascii_case("fwpkg"))
         {
-            let meta = entry.metadata().ok();
-            let size = meta.as_ref().map_or(0, std::fs::Metadata::len);
-            let modified = meta.and_then(|m| m.modified().ok());
+            let meta = entry
+                .metadata()
+                .ok();
+            let size = meta
+                .as_ref()
+                .map_or(0, std::fs::Metadata::len);
+            let modified = meta.and_then(|m| {
+                m.modified()
+                    .ok()
+            });
             let priority = compute_priority(&path, base);
             out.push(FirmwareCandidate {
                 path,
@@ -133,14 +148,22 @@ fn walk_dir(base: &Path, dir: &Path, depth: usize, out: &mut Vec<FirmwareCandida
 /// Lower score = higher priority.
 #[allow(clippy::cast_possible_truncation)] // PRIORITY_DIRS and path depth will never exceed u32
 fn compute_priority(path: &Path, base: &Path) -> u32 {
-    let rel = path.strip_prefix(base).unwrap_or(path);
+    let rel = path
+        .strip_prefix(base)
+        .unwrap_or(path);
     let components: Vec<_> = rel
         .components()
-        .filter_map(|c| c.as_os_str().to_str())
+        .filter_map(|c| {
+            c.as_os_str()
+                .to_str()
+        })
         .collect();
 
     // Check if any path component matches a priority directory.
-    for (i, dir_name) in PRIORITY_DIRS.iter().enumerate() {
+    for (i, dir_name) in PRIORITY_DIRS
+        .iter()
+        .enumerate()
+    {
         for comp in &components {
             if comp.eq_ignore_ascii_case(dir_name) {
                 return i as u32;
@@ -210,12 +233,16 @@ pub fn resolve_firmware(
 
         // In non-interactive mode, use directly without confirmation.
         if non_interactive {
-            return Ok(chosen.path.clone());
+            return Ok(chosen
+                .path
+                .clone());
         }
 
         // Ask for confirmation.
         // Truncate the path in the prompt so it doesn't wrap in narrow terminals.
-        let term_width = console::Term::stderr().size().1 as usize;
+        let term_width = console::Term::stderr()
+            .size()
+            .1 as usize;
         // "? Use firmware '...'? · (y/N)" ≈ prompt text + 10 chars overhead
         let prompt_overhead = 10;
         let prompt_text = t!("flash.confirm_firmware", path = &rel).to_string();
@@ -232,7 +259,9 @@ pub fn resolve_firmware(
             .context("firmware confirmation failed")?;
 
         if confirm {
-            return Ok(chosen.path.clone());
+            return Ok(chosen
+                .path
+                .clone());
         }
         anyhow::bail!("{}", t!("flash.selection_cancelled"));
     }
@@ -241,7 +270,11 @@ pub fn resolve_firmware(
     if non_interactive {
         // Print what we found and bail.
         for c in &candidates {
-            let rel = c.path.strip_prefix(&base).unwrap_or(&c.path).display();
+            let rel = c
+                .path
+                .strip_prefix(&base)
+                .unwrap_or(&c.path)
+                .display();
             eprintln!("  {rel} ({})", c.human_size());
         }
         anyhow::bail!("{}", t!("flash.multiple_firmware_non_interactive"));
@@ -256,7 +289,9 @@ pub fn resolve_firmware(
     }
 
     // Build selection items, truncated to terminal width to prevent wrapping.
-    let term_width = console::Term::stderr().size().1 as usize;
+    let term_width = console::Term::stderr()
+        .size()
+        .1 as usize;
     let max_item_width = term_width.saturating_sub(4); // margin for selector prefix "❯ "
     let labels: Vec<String> = candidates
         .iter()
@@ -280,7 +315,9 @@ pub fn resolve_firmware(
     };
 
     match selection {
-        Some(idx) => Ok(candidates[idx].path.clone()),
+        Some(idx) => Ok(candidates[idx]
+            .path
+            .clone()),
         None => anyhow::bail!("{}", t!("flash.selection_cancelled")),
     }
 }
@@ -299,9 +336,15 @@ fn truncate_start(s: &str, max_width: usize) -> String {
     // Keep as many trailing characters as possible.
     let target = max_width - 1; // 1 column for '…'
     // Walk from the end to collect `target` visible columns.
-    let chars: Vec<char> = s.chars().collect();
-    let start = chars.len().saturating_sub(target);
-    let tail: String = chars[start..].iter().collect();
+    let chars: Vec<char> = s
+        .chars()
+        .collect();
+    let start = chars
+        .len()
+        .saturating_sub(target);
+    let tail: String = chars[start..]
+        .iter()
+        .collect();
     // Try to cut at a path separator for a cleaner look.
     if let Some(pos) = tail.find('/') {
         if pos > 0 && pos < tail.len() - 1 {
@@ -340,7 +383,11 @@ mod tests {
         create_test_tree(tmp.path(), &["app.fwpkg"]);
         let result = find_firmware_files(tmp.path());
         assert_eq!(result.len(), 1);
-        assert!(result[0].path.ends_with("app.fwpkg"));
+        assert!(
+            result[0]
+                .path
+                .ends_with("app.fwpkg")
+        );
     }
 
     #[test]
@@ -364,7 +411,12 @@ mod tests {
         let result = find_firmware_files(tmp.path());
         assert_eq!(result.len(), 2);
         // "output" dir should have higher priority (lower score).
-        assert!(result[0].path.to_string_lossy().contains("output"));
+        assert!(
+            result[0]
+                .path
+                .to_string_lossy()
+                .contains("output")
+        );
     }
 
     #[test]
@@ -380,7 +432,11 @@ mod tests {
         );
         let result = find_firmware_files(tmp.path());
         assert_eq!(result.len(), 1);
-        assert!(result[0].path.ends_with("app.fwpkg"));
+        assert!(
+            result[0]
+                .path
+                .ends_with("app.fwpkg")
+        );
     }
 
     #[test]
@@ -562,7 +618,9 @@ mod tests {
 
     impl TempCwdGuard {
         fn new(path: &Path) -> Self {
-            let lock = CWD_LOCK.lock().unwrap();
+            let lock = CWD_LOCK
+                .lock()
+                .unwrap();
             let original = std::env::current_dir().unwrap();
             std::env::set_current_dir(path).unwrap();
             Self {

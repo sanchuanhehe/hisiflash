@@ -46,7 +46,10 @@ pub(crate) fn clear_interrupted_flag() {
 }
 
 fn install_signal_handler() -> Result<()> {
-    if SIGNAL_HANDLER_INSTALLED.get().is_some() {
+    if SIGNAL_HANDLER_INSTALLED
+        .get()
+        .is_some()
+    {
         return Ok(());
     }
 
@@ -365,9 +368,14 @@ fn parse_bin_arg(s: &str) -> Result<(PathBuf, u32), String> {
 /// Parse hexadecimal address (supports 0x prefix and underscores).
 fn parse_hex_u32(s: &str) -> Result<u32, String> {
     let s = s.trim();
-    let s = s.trim_start_matches("0x").trim_start_matches("0X");
+    let s = s
+        .trim_start_matches("0x")
+        .trim_start_matches("0X");
     // Support underscore separators like 0x00_80_00_00
-    let s: String = s.chars().filter(|c| *c != '_').collect();
+    let s: String = s
+        .chars()
+        .filter(|c| *c != '_')
+        .collect();
     u32::from_str_radix(&s, 16).map_err(|e| format!("Invalid hex address: {e}"))
 }
 
@@ -377,9 +385,19 @@ fn main() {
         Err(err) => {
             let code = map_exit_code(&err);
             if code == 130 {
-                eprintln!("{} {err}", style("Cancelled:").yellow().bold());
+                eprintln!(
+                    "{} {err}",
+                    style("Cancelled:")
+                        .yellow()
+                        .bold()
+                );
             } else {
-                eprintln!("{} {err}", style("Error:").red().bold());
+                eprintln!(
+                    "{} {err}",
+                    style("Error:")
+                        .red()
+                        .bold()
+                );
             }
             std::process::exit(code);
         },
@@ -395,7 +413,13 @@ fn run() -> Result<()> {
 
     if was_interrupted() {
         match result {
-            Err(err) if err.downcast_ref::<CliError>().is_some() => Err(err),
+            Err(err)
+                if err
+                    .downcast_ref::<CliError>()
+                    .is_some() =>
+            {
+                Err(err)
+            },
             _ => Err(CliError::Cancelled(t!("error.interrupted").to_string()).into()),
         }
     } else {
@@ -407,7 +431,10 @@ fn run_with_args(raw_args: &[String]) -> Result<()> {
     // Inspect raw args early to support localized --help handling and early --lang
     // Extract --lang if provided early so help text is localized
     let mut early_lang: Option<String> = None;
-    for (i, arg) in raw_args.iter().enumerate() {
+    for (i, arg) in raw_args
+        .iter()
+        .enumerate()
+    {
         if let Some(val) = arg.strip_prefix("--lang=") {
             early_lang = Some(val.to_string());
         } else if arg == "--lang" && i + 1 < raw_args.len() {
@@ -415,7 +442,9 @@ fn run_with_args(raw_args: &[String]) -> Result<()> {
         }
     }
 
-    let locale = early_lang.clone().unwrap_or_else(detect_locale);
+    let locale = early_lang
+        .clone()
+        .unwrap_or_else(detect_locale);
     rust_i18n::set_locale(&locale);
 
     // --- NO_COLOR and TTY detection (clig.dev best practice) ---
@@ -434,10 +463,17 @@ fn run_with_args(raw_args: &[String]) -> Result<()> {
     // print localized help via clap with translated section headings.
     // This intercepts before clap's auto-help so we can apply help_template
     // with i18n strings.
-    let wants_short_help = raw_args.iter().any(|a| a == "-h");
-    let wants_long_help = raw_args.iter().any(|a| a == "--help");
+    let wants_short_help = raw_args
+        .iter()
+        .any(|a| a == "-h");
+    let wants_long_help = raw_args
+        .iter()
+        .any(|a| a == "--help");
     let wants_help = wants_short_help || wants_long_help;
-    let has_help_subcmd = raw_args.iter().skip(1).any(|a| a == "help");
+    let has_help_subcmd = raw_args
+        .iter()
+        .skip(1)
+        .any(|a| a == "help");
     let no_args = raw_args.len() <= 1;
 
     if wants_help || no_args || has_help_subcmd {
@@ -448,12 +484,19 @@ fn run_with_args(raw_args: &[String]) -> Result<()> {
         let subcmd_names: Vec<String> = app
             .get_subcommands()
             .filter(|s| s.get_name() != "help")
-            .map(|s| s.get_name().to_string())
+            .map(|s| {
+                s.get_name()
+                    .to_string()
+            })
             .collect();
         let found = raw_args
             .iter()
             .skip(1)
-            .find(|token| subcmd_names.iter().any(|n| n == token.as_str()));
+            .find(|token| {
+                subcmd_names
+                    .iter()
+                    .any(|n| n == token.as_str())
+            });
 
         if let Some(cmd_name) = found {
             // Build the parent command to propagate global args to subcommands
@@ -626,13 +669,19 @@ fn run_with_args(raw_args: &[String]) -> Result<()> {
 
 fn apply_config_defaults(cli: &mut Cli, matches: &clap::ArgMatches, config: &Config) -> Result<()> {
     if matches.value_source("baud") == Some(ValueSource::DefaultValue)
-        && let Some(config_baud) = config.port.connection.baud
+        && let Some(config_baud) = config
+            .port
+            .connection
+            .baud
     {
         cli.baud = config_baud;
     }
 
     if matches.value_source("chip") == Some(ValueSource::DefaultValue)
-        && let Some(config_chip_name) = config.flash.chip.as_deref()
+        && let Some(config_chip_name) = config
+            .flash
+            .chip
+            .as_deref()
     {
         let config_chip = Chip::from_config_name(config_chip_name).ok_or_else(|| {
             CliError::Config(
@@ -659,7 +708,9 @@ fn apply_config_defaults(cli: &mut Cli, matches: &clap::ArgMatches, config: &Con
                     .and_then(|(_, m)| m.value_source("late_baud")),
                 Some(ValueSource::CommandLine)
             ) {
-                *late_baud = config.flash.late_baud;
+                *late_baud = config
+                    .flash
+                    .late_baud;
             }
             if !matches!(
                 matches
@@ -667,7 +718,9 @@ fn apply_config_defaults(cli: &mut Cli, matches: &clap::ArgMatches, config: &Con
                     .and_then(|(_, m)| m.value_source("skip_verify")),
                 Some(ValueSource::CommandLine)
             ) {
-                *skip_verify = config.flash.skip_verify;
+                *skip_verify = config
+                    .flash
+                    .skip_verify;
             }
         },
         Commands::Write { late_baud, .. } | Commands::WriteProgram { late_baud, .. } => {
@@ -677,7 +730,9 @@ fn apply_config_defaults(cli: &mut Cli, matches: &clap::ArgMatches, config: &Con
                     .and_then(|(_, m)| m.value_source("late_baud")),
                 Some(ValueSource::CommandLine)
             ) {
-                *late_baud = config.flash.late_baud;
+                *late_baud = config
+                    .flash
+                    .late_baud;
             }
         },
         _ => {},
@@ -710,7 +765,9 @@ fn map_exit_code(err: &anyhow::Error) -> i32 {
 /// Get serial port from CLI args or interactive selection.
 pub(crate) fn get_port(cli: &Cli, config: &mut Config) -> Result<String> {
     let options = SerialOptions {
-        port: cli.port.clone(),
+        port: cli
+            .port
+            .clone(),
         list_all_ports: cli.list_all_ports,
         non_interactive: cli.non_interactive,
         confirm_port: cli.confirm_port,
@@ -723,7 +780,9 @@ pub(crate) fn get_port(cli: &Cli, config: &mut Config) -> Result<String> {
         ask_remember_port(&selected.port, config)?;
     }
 
-    Ok(selected.port.name)
+    Ok(selected
+        .port
+        .name)
 }
 
 #[cfg(test)]
@@ -733,15 +792,24 @@ mod locale_tests {
     /// Helper to test locale matching logic without sys_locale
     fn match_locale(locale: &str) -> String {
         // Normalize the locale string
-        let locale = locale.split('.').next().unwrap_or(locale);
+        let locale = locale
+            .split('.')
+            .next()
+            .unwrap_or(locale);
         let locale = locale.replace('_', "-");
 
         if SUPPORTED_LOCALES.contains(&locale.as_str()) {
             return locale;
         }
 
-        let lang_code = locale.split('-').next().unwrap_or(&locale);
-        match lang_code.to_lowercase().as_str() {
+        let lang_code = locale
+            .split('-')
+            .next()
+            .unwrap_or(&locale);
+        match lang_code
+            .to_lowercase()
+            .as_str()
+        {
             "zh" => "zh-CN".to_string(),
             _ => "en".to_string(),
         }
@@ -805,7 +873,10 @@ mod cli_tests {
         // firmware is now optional: `flash` alone should parse successfully
         let cli = Cli::try_parse_from(["hisiflash", "flash"]);
         assert!(cli.is_ok());
-        if let Commands::Flash { firmware, .. } = &cli.unwrap().command {
+        if let Commands::Flash { firmware, .. } = &cli
+            .unwrap()
+            .command
+        {
             assert!(firmware.is_none());
         } else {
             panic!("Expected Flash command");
@@ -822,14 +893,18 @@ mod cli_tests {
     /// the returned `Command` has all i18n strings baked in and is safe
     /// to inspect without the lock.
     fn localized_cmd(locale: &str) -> clap::Command {
-        let _lock = LOCALE_LOCK.lock().unwrap();
+        let _lock = LOCALE_LOCK
+            .lock()
+            .unwrap();
         rust_i18n::set_locale(locale);
         build_localized_command()
     }
 
     /// Call `localize_arg` under the locale lock.
     fn localized_arg(locale: &str, arg: clap::Arg) -> clap::Arg {
-        let _lock = LOCALE_LOCK.lock().unwrap();
+        let _lock = LOCALE_LOCK
+            .lock()
+            .unwrap();
         rust_i18n::set_locale(locale);
         localize_arg(arg)
     }
@@ -855,7 +930,11 @@ mod cli_tests {
         ]);
         assert!(cli.is_ok());
         let cli = cli.unwrap();
-        assert_eq!(cli.port.as_deref(), Some("/dev/ttyUSB0"));
+        assert_eq!(
+            cli.port
+                .as_deref(),
+            Some("/dev/ttyUSB0")
+        );
         assert_eq!(cli.baud, 460800);
         assert!(matches!(cli.command, Commands::Flash { .. }));
     }
@@ -885,7 +964,13 @@ mod cli_tests {
             monitor_raw,
         } = cli.command
         {
-            assert_eq!(firmware.unwrap().to_str().unwrap(), "fw.fwpkg");
+            assert_eq!(
+                firmware
+                    .unwrap()
+                    .to_str()
+                    .unwrap(),
+                "fw.fwpkg"
+            );
             assert_eq!(filter.as_deref(), Some("app,flashboot"));
             assert!(late_baud);
             assert!(skip_verify);
@@ -916,9 +1001,20 @@ mod cli_tests {
             late_baud,
         } = cli.command
         {
-            assert_eq!(loaderboot.to_str().unwrap(), "lb.bin");
+            assert_eq!(
+                loaderboot
+                    .to_str()
+                    .unwrap(),
+                "lb.bin"
+            );
             assert_eq!(bins.len(), 1);
-            assert_eq!(bins[0].0.to_str().unwrap(), "app.bin");
+            assert_eq!(
+                bins[0]
+                    .0
+                    .to_str()
+                    .unwrap(),
+                "app.bin"
+            );
             assert_eq!(bins[0].1, 0x00800000);
             assert!(!late_baud);
         } else {
@@ -1071,9 +1167,18 @@ mod cli_tests {
         assert!(!cli.non_interactive);
         assert!(!cli.confirm_port);
         assert!(!cli.list_all_ports);
-        assert!(cli.port.is_none());
-        assert!(cli.lang.is_none());
-        assert!(cli.config_path.is_none());
+        assert!(
+            cli.port
+                .is_none()
+        );
+        assert!(
+            cli.lang
+                .is_none()
+        );
+        assert!(
+            cli.config_path
+                .is_none()
+        );
         assert_eq!(cli.verbose, 0);
     }
 
@@ -1099,10 +1204,18 @@ mod cli_tests {
             "list-ports",
         ])
         .unwrap();
-        assert_eq!(cli.port.as_deref(), Some("COM3"));
+        assert_eq!(
+            cli.port
+                .as_deref(),
+            Some("COM3")
+        );
         assert_eq!(cli.baud, 115200);
         assert!(matches!(cli.chip, Chip::Bs2x));
-        assert_eq!(cli.lang.as_deref(), Some("zh-CN"));
+        assert_eq!(
+            cli.lang
+                .as_deref(),
+            Some("zh-CN")
+        );
         assert_eq!(cli.verbose, 2);
         assert!(cli.quiet);
         assert!(cli.non_interactive);
@@ -1113,10 +1226,19 @@ mod cli_tests {
     #[test]
     fn test_apply_config_defaults_for_flash() {
         let mut config = Config::default();
-        config.port.connection.baud = Some(460800);
-        config.flash.chip = Some("bs2x".to_string());
-        config.flash.late_baud = true;
-        config.flash.skip_verify = true;
+        config
+            .port
+            .connection
+            .baud = Some(460800);
+        config
+            .flash
+            .chip = Some("bs2x".to_string());
+        config
+            .flash
+            .late_baud = true;
+        config
+            .flash
+            .skip_verify = true;
 
         let cmd = Cli::command();
         let matches = cmd
@@ -1145,10 +1267,19 @@ mod cli_tests {
     #[test]
     fn test_apply_config_does_not_override_explicit_cli_values() {
         let mut config = Config::default();
-        config.port.connection.baud = Some(460800);
-        config.flash.chip = Some("bs2x".to_string());
-        config.flash.late_baud = false;
-        config.flash.skip_verify = true;
+        config
+            .port
+            .connection
+            .baud = Some(460800);
+        config
+            .flash
+            .chip = Some("bs2x".to_string());
+        config
+            .flash
+            .late_baud = false;
+        config
+            .flash
+            .skip_verify = true;
 
         let cmd = Cli::command();
         let matches = cmd
@@ -1207,7 +1338,9 @@ mod cli_tests {
     #[test]
     fn test_apply_config_defaults_invalid_chip() {
         let mut config = Config::default();
-        config.flash.chip = Some("unknown-chip".to_string());
+        config
+            .flash
+            .chip = Some("unknown-chip".to_string());
 
         let cmd = Cli::command();
         let matches = cmd
@@ -1236,14 +1369,22 @@ mod cli_tests {
     #[test]
     fn test_parse_bin_arg_valid() {
         let (path, addr) = parse_bin_arg("app.bin:0x00800000").unwrap();
-        assert_eq!(path.to_str().unwrap(), "app.bin");
+        assert_eq!(
+            path.to_str()
+                .unwrap(),
+            "app.bin"
+        );
         assert_eq!(addr, 0x00800000);
     }
 
     #[test]
     fn test_parse_bin_arg_no_prefix() {
         let (path, addr) = parse_bin_arg("data.bin:800000").unwrap();
-        assert_eq!(path.to_str().unwrap(), "data.bin");
+        assert_eq!(
+            path.to_str()
+                .unwrap(),
+            "data.bin"
+        );
         assert_eq!(addr, 0x00800000);
     }
 
@@ -1338,13 +1479,15 @@ mod cli_tests {
     /// Render a command's short help to a String for assertion.
     fn render_help(cmd: &mut clap::Command) -> String {
         cmd.build();
-        cmd.render_help().to_string()
+        cmd.render_help()
+            .to_string()
     }
 
     /// Render a command's long help to a String for assertion.
     fn render_long_help(cmd: &mut clap::Command) -> String {
         cmd.build();
-        cmd.render_long_help().to_string()
+        cmd.render_long_help()
+            .to_string()
     }
 
     /// Get a built subcommand by name from the localized command.
@@ -1360,7 +1503,8 @@ mod cli_tests {
     fn test_build_localized_command_creates_valid_command() {
         let cmd = localized_cmd("en");
         // Should be valid
-        cmd.clone().debug_assert();
+        cmd.clone()
+            .debug_assert();
         assert_eq!(cmd.get_name(), "hisiflash");
     }
 
@@ -1369,7 +1513,10 @@ mod cli_tests {
         let cmd = localized_cmd("en");
         let subcmd_names: Vec<_> = cmd
             .get_subcommands()
-            .map(|s| s.get_name().to_string())
+            .map(|s| {
+                s.get_name()
+                    .to_string()
+            })
             .collect();
         assert!(subcmd_names.contains(&"flash".to_string()));
         assert!(subcmd_names.contains(&"write".to_string()));
@@ -1383,7 +1530,8 @@ mod cli_tests {
     #[test]
     fn test_build_localized_command_zh_cn() {
         let cmd = localized_cmd("zh-CN");
-        cmd.clone().debug_assert();
+        cmd.clone()
+            .debug_assert();
         // About should be Chinese
         let about = cmd
             .get_about()
@@ -1704,7 +1852,9 @@ mod cli_tests {
             ("help", "帮助"),
         ];
         for (name, keyword) in expected {
-            let sub = app.get_subcommands().find(|s| s.get_name() == name);
+            let sub = app
+                .get_subcommands()
+                .find(|s| s.get_name() == name);
             assert!(sub.is_some(), "Subcommand '{name}' not found");
             let about = sub
                 .unwrap()

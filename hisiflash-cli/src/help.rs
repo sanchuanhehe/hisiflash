@@ -25,7 +25,10 @@ pub(crate) fn detect_locale() -> String {
 
     // Normalize the locale string
     // Remove encoding suffix (e.g., .UTF-8)
-    let locale = system_locale.split('.').next().unwrap_or(&system_locale);
+    let locale = system_locale
+        .split('.')
+        .next()
+        .unwrap_or(&system_locale);
 
     // Replace underscore with hyphen for BCP 47 format
     let locale = locale.replace('_', "-");
@@ -36,9 +39,15 @@ pub(crate) fn detect_locale() -> String {
     }
 
     // Try matching by language code (first part before hyphen)
-    let lang_code = locale.split('-').next().unwrap_or(&locale);
+    let lang_code = locale
+        .split('-')
+        .next()
+        .unwrap_or(&locale);
 
-    match lang_code.to_lowercase().as_str() {
+    match lang_code
+        .to_lowercase()
+        .as_str()
+    {
         "zh" => "zh-CN".to_string(), // Chinese -> Simplified Chinese
         _ => "en".to_string(),       // English and all others fallback to English
     }
@@ -51,10 +60,16 @@ pub(crate) fn detect_locale() -> String {
 /// argument help) with translations from the locale files.
 pub(crate) fn build_localized_command() -> clap::Command {
     // Leak localized heading strings once (CLI runs once, tiny and harmless)
-    let args_heading: &'static str =
-        Box::leak(t!("help.arguments_heading").to_string().into_boxed_str());
-    let opts_heading: &'static str =
-        Box::leak(t!("help.options_heading").to_string().into_boxed_str());
+    let args_heading: &'static str = Box::leak(
+        t!("help.arguments_heading")
+            .to_string()
+            .into_boxed_str(),
+    );
+    let opts_heading: &'static str = Box::leak(
+        t!("help.options_heading")
+            .to_string()
+            .into_boxed_str(),
+    );
 
     let tpl = format!(
         "{bin} {version}\n\n{about}\n\n\
@@ -112,14 +127,22 @@ pub(crate) fn build_localized_command() -> clap::Command {
         )
         .mut_args(move |arg| {
             let arg = localize_arg(arg);
-            if arg.get_short().is_none() && arg.get_long().is_none() {
+            if arg
+                .get_short()
+                .is_none()
+                && arg
+                    .get_long()
+                    .is_none()
+            {
                 arg.help_heading(args_heading)
             } else {
                 arg.help_heading(opts_heading)
             }
         })
         .mut_subcommands(move |sub| {
-            let name = sub.get_name().to_string();
+            let name = sub
+                .get_name()
+                .to_string();
             let about_key = format!("cmd.{}.about", name.replace('-', "_"));
             let localized = t!(&about_key).to_string();
             let sub = if localized != about_key {
@@ -127,14 +150,21 @@ pub(crate) fn build_localized_command() -> clap::Command {
             } else {
                 sub
             };
-            sub.help_template(sub_tpl.clone()).mut_args(move |arg| {
-                let arg = localize_arg(arg);
-                if arg.get_short().is_none() && arg.get_long().is_none() {
-                    arg.help_heading(args_heading)
-                } else {
-                    arg.help_heading(opts_heading)
-                }
-            })
+            sub.help_template(sub_tpl.clone())
+                .mut_args(move |arg| {
+                    let arg = localize_arg(arg);
+                    if arg
+                        .get_short()
+                        .is_none()
+                        && arg
+                            .get_long()
+                            .is_none()
+                    {
+                        arg.help_heading(args_heading)
+                    } else {
+                        arg.help_heading(opts_heading)
+                    }
+                })
         })
         .disable_help_subcommand(true)
         .subcommand(clap::Command::new("help").about(t!("cmd.help.about").to_string()))
@@ -149,7 +179,10 @@ pub(crate) fn build_localized_command() -> clap::Command {
 /// and hides clap's auto-generated "Possible values:" section to avoid
 /// duplicate content.
 pub(crate) fn localize_arg(arg: clap::Arg) -> clap::Arg {
-    let id = arg.get_id().as_str().to_string();
+    let id = arg
+        .get_id()
+        .as_str()
+        .to_string();
 
     // Short help
     let key = format!("arg.{id}.help");
@@ -164,7 +197,8 @@ pub(crate) fn localize_arg(arg: clap::Arg) -> clap::Arg {
     let long_key = format!("arg.{id}.long_help");
     let long_localized = t!(&long_key).to_string();
     if long_localized != long_key {
-        arg.long_help(long_localized).hide_possible_values(true)
+        arg.long_help(long_localized)
+            .hide_possible_values(true)
     } else {
         arg
     }

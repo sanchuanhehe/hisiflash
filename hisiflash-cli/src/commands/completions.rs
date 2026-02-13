@@ -15,7 +15,9 @@ use crate::Cli;
 /// Generate shell completions to stdout.
 pub(crate) fn cmd_completions(shell: Shell) {
     let mut cmd = Cli::command();
-    let name = cmd.get_name().to_string();
+    let name = cmd
+        .get_name()
+        .to_string();
     generate(shell, &mut cmd, name, &mut io::stdout());
 }
 
@@ -57,7 +59,9 @@ fn get_completion_install_path(shell: Shell) -> Result<PathBuf> {
     match shell {
         Shell::Bash => {
             // ~/.local/share/bash-completion/completions/hisiflash
-            let dir = dirs_for_data().join("bash-completion").join("completions");
+            let dir = dirs_for_data()
+                .join("bash-completion")
+                .join("completions");
             Ok(dir.join("hisiflash"))
         },
         Shell::Zsh => {
@@ -83,13 +87,19 @@ fn get_completion_install_path(shell: Shell) -> Result<PathBuf> {
                 Ok(dir.join("hisiflash.ps1"))
             } else {
                 let home = home_dir()?;
-                let dir = home.join(".config").join("powershell").join("completions");
+                let dir = home
+                    .join(".config")
+                    .join("powershell")
+                    .join("completions");
                 Ok(dir.join("hisiflash.ps1"))
             }
         },
         Shell::Elvish => {
             let config_dir = xdg_config_dir();
-            Ok(config_dir.join("elvish").join("lib").join("hisiflash.elv"))
+            Ok(config_dir
+                .join("elvish")
+                .join("lib")
+                .join("hisiflash.elv"))
         },
         _ => anyhow::bail!("Unsupported shell for auto-install"),
     }
@@ -106,7 +116,11 @@ fn home_dir() -> Result<PathBuf> {
 /// Get XDG config directory (~/.config by default).
 fn xdg_config_dir() -> PathBuf {
     env::var("XDG_CONFIG_HOME").map_or_else(
-        |_| home_dir().unwrap_or_default().join(".config"),
+        |_| {
+            home_dir()
+                .unwrap_or_default()
+                .join(".config")
+        },
         PathBuf::from,
     )
 }
@@ -114,7 +128,12 @@ fn xdg_config_dir() -> PathBuf {
 /// Get XDG data directory.
 fn dirs_for_data() -> PathBuf {
     env::var("XDG_DATA_HOME").map_or_else(
-        |_| home_dir().unwrap_or_default().join(".local").join("share"),
+        |_| {
+            home_dir()
+                .unwrap_or_default()
+                .join(".local")
+                .join("share")
+        },
         PathBuf::from,
     )
 }
@@ -134,7 +153,9 @@ pub(crate) fn cmd_completions_install(shell_arg: Option<Shell>) -> Result<()> {
     // Generate the completion script to a buffer
     let mut buf = Vec::new();
     let mut cmd = Cli::command();
-    let name = cmd.get_name().to_string();
+    let name = cmd
+        .get_name()
+        .to_string();
     generate(shell, &mut cmd, name, &mut buf);
 
     // Create parent directory
@@ -149,7 +170,9 @@ pub(crate) fn cmd_completions_install(shell_arg: Option<Shell>) -> Result<()> {
 
     eprintln!(
         "{} Installed {} completions to {}",
-        style("✓").green().bold(),
+        style("✓")
+            .green()
+            .bold(),
         style(format!("{shell:?}")).cyan(),
         style(path.display()).yellow()
     );
@@ -188,7 +211,9 @@ pub(crate) fn cmd_completions_install(shell_arg: Option<Shell>) -> Result<()> {
                 writeln!(file, "autoload -Uz compinit && compinit")?;
                 eprintln!(
                     "{} Added fpath to {}",
-                    style("✓").green().bold(),
+                    style("✓")
+                        .green()
+                        .bold(),
                     style(zshrc.display()).yellow()
                 );
             }
@@ -280,35 +305,71 @@ mod tests {
     #[test]
     fn test_install_path_bash() {
         let path = get_completion_install_path(Shell::Bash).unwrap();
-        assert!(path.to_str().unwrap().contains("bash-completion"));
-        assert!(path.to_str().unwrap().ends_with("hisiflash"));
+        assert!(
+            path.to_str()
+                .unwrap()
+                .contains("bash-completion")
+        );
+        assert!(
+            path.to_str()
+                .unwrap()
+                .ends_with("hisiflash")
+        );
     }
 
     #[test]
     fn test_install_path_zsh() {
         let path = get_completion_install_path(Shell::Zsh).unwrap();
-        assert!(path.to_str().unwrap().contains(".zfunc"));
-        assert!(path.to_str().unwrap().ends_with("_hisiflash"));
+        assert!(
+            path.to_str()
+                .unwrap()
+                .contains(".zfunc")
+        );
+        assert!(
+            path.to_str()
+                .unwrap()
+                .ends_with("_hisiflash")
+        );
     }
 
     #[test]
     fn test_install_path_fish() {
         let path = get_completion_install_path(Shell::Fish).unwrap();
-        assert!(path.to_str().unwrap().contains("fish"));
-        assert!(path.to_str().unwrap().ends_with("hisiflash.fish"));
+        assert!(
+            path.to_str()
+                .unwrap()
+                .contains("fish")
+        );
+        assert!(
+            path.to_str()
+                .unwrap()
+                .ends_with("hisiflash.fish")
+        );
     }
 
     #[test]
     fn test_install_path_elvish() {
         let path = get_completion_install_path(Shell::Elvish).unwrap();
-        assert!(path.to_str().unwrap().contains("elvish"));
-        assert!(path.to_str().unwrap().ends_with("hisiflash.elv"));
+        assert!(
+            path.to_str()
+                .unwrap()
+                .contains("elvish")
+        );
+        assert!(
+            path.to_str()
+                .unwrap()
+                .ends_with("hisiflash.elv")
+        );
     }
 
     #[test]
     fn test_install_path_powershell() {
         let path = get_completion_install_path(Shell::PowerShell).unwrap();
-        assert!(path.to_str().unwrap().ends_with("hisiflash.ps1"));
+        assert!(
+            path.to_str()
+                .unwrap()
+                .ends_with("hisiflash.ps1")
+        );
     }
 
     // ---- home_dir / xdg helpers (read-only, no mutation) ----
@@ -318,7 +379,12 @@ mod tests {
         // HOME is set on most *nix systems
         if env::var("HOME").is_ok() {
             assert!(home_dir().is_ok());
-            assert!(!home_dir().unwrap().as_os_str().is_empty());
+            assert!(
+                !home_dir()
+                    .unwrap()
+                    .as_os_str()
+                    .is_empty()
+            );
         }
     }
 
@@ -326,14 +392,18 @@ mod tests {
     fn test_xdg_config_dir_returns_path() {
         let dir = xdg_config_dir();
         // Should be either $XDG_CONFIG_HOME or $HOME/.config
-        let dir_str = dir.to_str().unwrap();
+        let dir_str = dir
+            .to_str()
+            .unwrap();
         assert!(!dir_str.is_empty());
     }
 
     #[test]
     fn test_dirs_for_data_returns_path() {
         let dir = dirs_for_data();
-        let dir_str = dir.to_str().unwrap();
+        let dir_str = dir
+            .to_str()
+            .unwrap();
         assert!(!dir_str.is_empty());
     }
 
@@ -343,7 +413,9 @@ mod tests {
     fn test_cmd_completions_bash_generates_output() {
         let mut buf = Vec::new();
         let mut cmd = Cli::command();
-        let name = cmd.get_name().to_string();
+        let name = cmd
+            .get_name()
+            .to_string();
         generate(Shell::Bash, &mut cmd, name, &mut buf);
         assert!(!buf.is_empty());
         let output = String::from_utf8(buf).unwrap();
@@ -354,7 +426,9 @@ mod tests {
     fn test_cmd_completions_zsh_generates_output() {
         let mut buf = Vec::new();
         let mut cmd = Cli::command();
-        let name = cmd.get_name().to_string();
+        let name = cmd
+            .get_name()
+            .to_string();
         generate(Shell::Zsh, &mut cmd, name, &mut buf);
         assert!(!buf.is_empty());
         let output = String::from_utf8(buf).unwrap();
@@ -365,7 +439,9 @@ mod tests {
     fn test_cmd_completions_fish_generates_output() {
         let mut buf = Vec::new();
         let mut cmd = Cli::command();
-        let name = cmd.get_name().to_string();
+        let name = cmd
+            .get_name()
+            .to_string();
         generate(Shell::Fish, &mut cmd, name, &mut buf);
         assert!(!buf.is_empty());
         let output = String::from_utf8(buf).unwrap();
@@ -376,7 +452,9 @@ mod tests {
     fn test_cmd_completions_powershell_generates_output() {
         let mut buf = Vec::new();
         let mut cmd = Cli::command();
-        let name = cmd.get_name().to_string();
+        let name = cmd
+            .get_name()
+            .to_string();
         generate(Shell::PowerShell, &mut cmd, name, &mut buf);
         assert!(!buf.is_empty());
     }
@@ -385,7 +463,9 @@ mod tests {
     fn test_cmd_completions_elvish_generates_output() {
         let mut buf = Vec::new();
         let mut cmd = Cli::command();
-        let name = cmd.get_name().to_string();
+        let name = cmd
+            .get_name()
+            .to_string();
         generate(Shell::Elvish, &mut cmd, name, &mut buf);
         assert!(!buf.is_empty());
     }

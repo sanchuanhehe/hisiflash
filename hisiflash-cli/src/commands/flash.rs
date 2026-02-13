@@ -36,8 +36,14 @@ pub(crate) fn cmd_flash(
     }
 
     // Load FWPKG
-    let fwpkg = Fwpkg::from_file(firmware)
-        .with_context(|| t!("error.load_firmware", path = firmware.display().to_string()))?;
+    let fwpkg = Fwpkg::from_file(firmware).with_context(|| {
+        t!(
+            "error.load_firmware",
+            path = firmware
+                .display()
+                .to_string()
+        )
+    })?;
 
     // Verify CRC
     if !skip_verify {
@@ -84,7 +90,9 @@ pub(crate) fn cmd_flash(
     }
 
     // Create flasher using chip abstraction
-    let chip: ChipFamily = cli.chip.into();
+    let chip: ChipFamily = cli
+        .chip
+        .into();
     let mut flasher = chip.create_flasher(&port, cli.baud, late_baud, cli.verbose)?;
     if let Err(err) = ensure_not_interrupted() {
         flasher.close();
@@ -124,7 +132,12 @@ pub(crate) fn cmd_flash(
     };
 
     // Flash
-    let filter_names: Option<Vec<&str>> = filter.as_ref().map(|f| f.split(',').collect());
+    let filter_names: Option<Vec<&str>> = filter
+        .as_ref()
+        .map(|f| {
+            f.split(',')
+                .collect()
+        });
     let filter_slice = filter_names.as_deref();
 
     let mut current_partition = String::new();
@@ -173,7 +186,13 @@ pub(crate) fn cmd_flash(
     flasher.close();
 
     if !cli.quiet {
-        eprintln!("\n{} {}", style("🎉").green().bold(), t!("flash.completed"));
+        eprintln!(
+            "\n{} {}",
+            style("🎉")
+                .green()
+                .bold(),
+            t!("flash.completed")
+        );
     }
 
     Ok(())
@@ -198,7 +217,9 @@ pub(crate) fn cmd_write(
     let lb_data = std::fs::read(loaderboot).with_context(|| {
         t!(
             "error.read_loaderboot",
-            path = loaderboot.display().to_string()
+            path = loaderboot
+                .display()
+                .to_string()
         )
     })?;
 
@@ -215,8 +236,14 @@ pub(crate) fn cmd_write(
                 )
             );
         }
-        let data = std::fs::read(path)
-            .with_context(|| t!("error.read_binary", path = path.display().to_string()))?;
+        let data = std::fs::read(path).with_context(|| {
+            t!(
+                "error.read_binary",
+                path = path
+                    .display()
+                    .to_string()
+            )
+        })?;
         bin_data.push((data, *addr));
     }
 
@@ -229,7 +256,9 @@ pub(crate) fn cmd_write(
         );
     }
 
-    let chip: ChipFamily = cli.chip.into();
+    let chip: ChipFamily = cli
+        .chip
+        .into();
     let mut flasher = chip.create_flasher(&port, cli.baud, late_baud, cli.verbose)?;
     if let Err(err) = ensure_not_interrupted() {
         flasher.close();
@@ -251,7 +280,10 @@ pub(crate) fn cmd_write(
         eprintln!("{} {}", style("✓").green(), t!("common.connected"));
     }
 
-    let bins_ref: Vec<(&[u8], u32)> = bin_data.iter().map(|(d, a)| (d.as_slice(), *a)).collect();
+    let bins_ref: Vec<(&[u8], u32)> = bin_data
+        .iter()
+        .map(|(d, a)| (d.as_slice(), *a))
+        .collect();
     if let Err(err) = flasher.write_bins(&lb_data, &bins_ref) {
         flasher.close();
         return Err(err.into());
@@ -269,7 +301,13 @@ pub(crate) fn cmd_write(
     flasher.close();
 
     if !cli.quiet {
-        eprintln!("\n{} {}", style("🎉").green().bold(), t!("write.completed"));
+        eprintln!(
+            "\n{} {}",
+            style("🎉")
+                .green()
+                .bold(),
+            t!("write.completed")
+        );
     }
 
     Ok(())
@@ -305,7 +343,9 @@ pub(crate) fn cmd_erase(cli: &Cli, config: &mut Config, all: bool) -> Result<()>
         );
     }
 
-    let chip: ChipFamily = cli.chip.into();
+    let chip: ChipFamily = cli
+        .chip
+        .into();
     let mut flasher = chip.create_flasher(&port, cli.baud, false, cli.verbose)?;
     if let Err(err) = ensure_not_interrupted() {
         flasher.close();
@@ -342,7 +382,13 @@ pub(crate) fn cmd_erase(cli: &Cli, config: &mut Config, all: bool) -> Result<()>
     flasher.close();
 
     if !cli.quiet {
-        eprintln!("\n{} {}", style("✓").green().bold(), t!("erase.completed"));
+        eprintln!(
+            "\n{} {}",
+            style("✓")
+                .green()
+                .bold(),
+            t!("erase.completed")
+        );
     }
 
     Ok(())

@@ -122,7 +122,8 @@ pub struct DetectedPort {
 impl DetectedPort {
     /// Check if this endpoint is likely a HiSilicon development board.
     pub fn is_likely_hisilicon(&self) -> bool {
-        self.device.is_known()
+        self.device
+            .is_known()
     }
 }
 
@@ -135,7 +136,9 @@ pub fn detect_ports() -> Vec<DetectedPort> {
         Ok(ports) => {
             for port_info in ports {
                 let mut detected = DetectedPort {
-                    name: port_info.port_name.clone(),
+                    name: port_info
+                        .port_name
+                        .clone(),
                     transport: TransportKind::Serial,
                     device: DeviceKind::Unknown,
                     vid: None,
@@ -189,30 +192,50 @@ pub fn detect_hisilicon_ports() -> Vec<DetectedPort> {
 pub fn auto_detect_port() -> Result<DetectedPort> {
     let ports = detect_ports();
 
-    if let Some(port) = ports.iter().find(|p| p.device == DeviceKind::HiSilicon) {
+    if let Some(port) = ports
+        .iter()
+        .find(|p| p.device == DeviceKind::HiSilicon)
+    {
         info!("Auto-detected HiSilicon USB device: {}", port.name);
         return Ok(port.clone());
     }
 
-    if let Some(port) = ports.iter().find(|p| p.device.is_high_priority()) {
+    if let Some(port) = ports
+        .iter()
+        .find(|p| {
+            p.device
+                .is_high_priority()
+        })
+    {
         info!(
             "Auto-detected {} USB-UART bridge: {}",
-            port.device.name(),
+            port.device
+                .name(),
             port.name
         );
         return Ok(port.clone());
     }
 
-    if let Some(port) = ports.iter().find(|p| p.device.is_known()) {
+    if let Some(port) = ports
+        .iter()
+        .find(|p| {
+            p.device
+                .is_known()
+        })
+    {
         info!(
             "Auto-detected {} USB-UART bridge: {}",
-            port.device.name(),
+            port.device
+                .name(),
             port.name
         );
         return Ok(port.clone());
     }
 
-    if let Some(port) = ports.into_iter().next() {
+    if let Some(port) = ports
+        .into_iter()
+        .next()
+    {
         info!("Using first available port: {}", port.name);
         return Ok(port);
     }
@@ -236,7 +259,10 @@ pub fn find_port_by_pattern(pattern: &str) -> Result<DetectedPort> {
 
     ports
         .into_iter()
-        .find(|p| p.name.contains(pattern))
+        .find(|p| {
+            p.name
+                .contains(pattern)
+        })
         .ok_or(Error::DeviceNotFound)
 }
 
@@ -254,8 +280,15 @@ pub fn format_port_list(ports: &[DetectedPort]) -> Vec<String> {
     let mut result = Vec::new();
 
     for port in ports {
-        let device_info = if port.device.is_known() {
-            format!(" [{}]", port.device.name())
+        let device_info = if port
+            .device
+            .is_known()
+        {
+            format!(
+                " [{}]",
+                port.device
+                    .name()
+            )
         } else if let (Some(vid), Some(pid)) = (port.vid, port.pid) {
             format!(" [VID:{vid:04X} PID:{pid:04X}]")
         } else {

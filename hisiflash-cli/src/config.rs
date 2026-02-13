@@ -166,7 +166,10 @@ impl Config {
 
     /// Get the global configuration directory.
     pub fn global_config_dir() -> Option<PathBuf> {
-        ProjectDirs::from("", "", "hisiflash").map(|dirs| dirs.config_dir().to_path_buf())
+        ProjectDirs::from("", "", "hisiflash").map(|dirs| {
+            dirs.config_dir()
+                .to_path_buf()
+        })
     }
 
     /// Get the global configuration file path.
@@ -177,23 +180,64 @@ impl Config {
     /// Merge another config into this one.
     fn merge(&mut self, other: Self) {
         // Port config
-        if other.port.connection.serial.is_some() {
-            self.port.connection.serial = other.port.connection.serial;
+        if other
+            .port
+            .connection
+            .serial
+            .is_some()
+        {
+            self.port
+                .connection
+                .serial = other
+                .port
+                .connection
+                .serial;
         }
-        if other.port.connection.baud.is_some() {
-            self.port.connection.baud = other.port.connection.baud;
+        if other
+            .port
+            .connection
+            .baud
+            .is_some()
+        {
+            self.port
+                .connection
+                .baud = other
+                .port
+                .connection
+                .baud;
         }
-        self.port.usb_device.extend(other.port.usb_device);
+        self.port
+            .usb_device
+            .extend(
+                other
+                    .port
+                    .usb_device,
+            );
 
         // Flash config
-        if other.flash.chip.is_some() {
-            self.flash.chip = other.flash.chip;
+        if other
+            .flash
+            .chip
+            .is_some()
+        {
+            self.flash
+                .chip = other
+                .flash
+                .chip;
         }
-        if other.flash.skip_verify {
-            self.flash.skip_verify = true;
+        if other
+            .flash
+            .skip_verify
+        {
+            self.flash
+                .skip_verify = true;
         }
-        if other.flash.late_baud {
-            self.flash.late_baud = true;
+        if other
+            .flash
+            .late_baud
+        {
+            self.flash
+                .late_baud = true;
         }
     }
 
@@ -208,10 +252,14 @@ impl Config {
         let path = Path::new("hisiflash_ports.toml");
 
         let mut port_config = PortConfig::default();
-        port_config.connection.serial = Some(serial.to_string());
+        port_config
+            .connection
+            .serial = Some(serial.to_string());
 
         if let (Some(vid), Some(pid)) = (vid, pid) {
-            port_config.usb_device.push(UsbDevice { vid, pid });
+            port_config
+                .usb_device
+                .push(UsbDevice { vid, pid });
         }
 
         let content = toml::to_string_pretty(&port_config)?;
@@ -226,7 +274,11 @@ impl Config {
         let device = UsbDevice { vid, pid };
 
         // Don't add duplicates
-        if self.port.usb_device.contains(&device) {
+        if self
+            .port
+            .usb_device
+            .contains(&device)
+        {
             return Ok(());
         }
 
@@ -241,7 +293,9 @@ impl Config {
                 PathBuf::from("hisiflash_ports.toml")
             };
 
-        self.port.usb_device.push(device);
+        self.port
+            .usb_device
+            .push(device);
 
         let content = toml::to_string_pretty(&self.port)?;
         fs::write(&path, content)?;
@@ -265,32 +319,79 @@ mod tests {
     #[test]
     fn test_default_config() {
         let config = Config::default();
-        assert!(config.port.connection.serial.is_none());
-        assert!(config.port.connection.baud.is_none());
-        assert!(config.port.usb_device.is_empty());
-        assert!(config.flash.chip.is_none());
-        assert!(!config.flash.skip_verify);
-        assert!(!config.flash.late_baud);
+        assert!(
+            config
+                .port
+                .connection
+                .serial
+                .is_none()
+        );
+        assert!(
+            config
+                .port
+                .connection
+                .baud
+                .is_none()
+        );
+        assert!(
+            config
+                .port
+                .usb_device
+                .is_empty()
+        );
+        assert!(
+            config
+                .flash
+                .chip
+                .is_none()
+        );
+        assert!(
+            !config
+                .flash
+                .skip_verify
+        );
+        assert!(
+            !config
+                .flash
+                .late_baud
+        );
     }
 
     #[test]
     fn test_default_connection_config() {
         let conn = ConnectionConfig::default();
-        assert!(conn.serial.is_none());
-        assert!(conn.baud.is_none());
+        assert!(
+            conn.serial
+                .is_none()
+        );
+        assert!(
+            conn.baud
+                .is_none()
+        );
     }
 
     #[test]
     fn test_default_port_config() {
         let port = PortConfig::default();
-        assert!(port.connection.serial.is_none());
-        assert!(port.usb_device.is_empty());
+        assert!(
+            port.connection
+                .serial
+                .is_none()
+        );
+        assert!(
+            port.usb_device
+                .is_empty()
+        );
     }
 
     #[test]
     fn test_default_flash_config() {
         let flash = FlashConfig::default();
-        assert!(flash.chip.is_none());
+        assert!(
+            flash
+                .chip
+                .is_none()
+        );
         assert!(!flash.skip_verify);
         assert!(!flash.late_baud);
     }
@@ -342,74 +443,135 @@ mod tests {
     fn test_config_merge_serial() {
         let mut base = Config::default();
         let mut other = Config::default();
-        other.port.connection.serial = Some("/dev/ttyUSB0".to_string());
-        other.flash.chip = Some("ws63".to_string());
+        other
+            .port
+            .connection
+            .serial = Some("/dev/ttyUSB0".to_string());
+        other
+            .flash
+            .chip = Some("ws63".to_string());
 
         base.merge(other);
 
-        assert_eq!(base.port.connection.serial.as_deref(), Some("/dev/ttyUSB0"));
-        assert_eq!(base.flash.chip.as_deref(), Some("ws63"));
+        assert_eq!(
+            base.port
+                .connection
+                .serial
+                .as_deref(),
+            Some("/dev/ttyUSB0")
+        );
+        assert_eq!(
+            base.flash
+                .chip
+                .as_deref(),
+            Some("ws63")
+        );
     }
 
     #[test]
     fn test_config_merge_baud() {
         let mut base = Config::default();
-        base.port.connection.baud = Some(115200);
+        base.port
+            .connection
+            .baud = Some(115200);
 
         let mut other = Config::default();
-        other.port.connection.baud = Some(921600);
+        other
+            .port
+            .connection
+            .baud = Some(921600);
 
         base.merge(other);
-        assert_eq!(base.port.connection.baud, Some(921600));
+        assert_eq!(
+            base.port
+                .connection
+                .baud,
+            Some(921600)
+        );
     }
 
     #[test]
     fn test_config_merge_does_not_overwrite_with_none() {
         let mut base = Config::default();
-        base.port.connection.serial = Some("/dev/ttyUSB0".to_string());
-        base.port.connection.baud = Some(115200);
+        base.port
+            .connection
+            .serial = Some("/dev/ttyUSB0".to_string());
+        base.port
+            .connection
+            .baud = Some(115200);
 
         let other = Config::default(); // all None
         base.merge(other);
 
-        assert_eq!(base.port.connection.serial.as_deref(), Some("/dev/ttyUSB0"));
-        assert_eq!(base.port.connection.baud, Some(115200));
+        assert_eq!(
+            base.port
+                .connection
+                .serial
+                .as_deref(),
+            Some("/dev/ttyUSB0")
+        );
+        assert_eq!(
+            base.port
+                .connection
+                .baud,
+            Some(115200)
+        );
     }
 
     #[test]
     fn test_config_merge_usb_devices_extend() {
         let mut base = Config::default();
-        base.port.usb_device.push(UsbDevice {
-            vid: 0x1A86,
-            pid: 0x7523,
-        });
+        base.port
+            .usb_device
+            .push(UsbDevice {
+                vid: 0x1A86,
+                pid: 0x7523,
+            });
 
         let mut other = Config::default();
-        other.port.usb_device.push(UsbDevice {
-            vid: 0x10C4,
-            pid: 0xEA60,
-        });
+        other
+            .port
+            .usb_device
+            .push(UsbDevice {
+                vid: 0x10C4,
+                pid: 0xEA60,
+            });
 
         base.merge(other);
-        assert_eq!(base.port.usb_device.len(), 2);
+        assert_eq!(
+            base.port
+                .usb_device
+                .len(),
+            2
+        );
     }
 
     #[test]
     fn test_config_merge_skip_verify() {
         let mut base = Config::default();
         let mut other = Config::default();
-        other.flash.skip_verify = true;
+        other
+            .flash
+            .skip_verify = true;
         base.merge(other);
-        assert!(base.flash.skip_verify);
+        assert!(
+            base.flash
+                .skip_verify
+        );
     }
 
     #[test]
     fn test_config_merge_late_baud() {
         let mut base = Config::default();
         let mut other = Config::default();
-        other.flash.late_baud = true;
+        other
+            .flash
+            .late_baud = true;
         base.merge(other);
-        assert!(base.flash.late_baud);
+        assert!(
+            base.flash
+                .late_baud
+        );
     }
 
     // ---- TOML serialization/deserialization ----
@@ -432,24 +594,82 @@ late_baud = false
 "#;
         let config: Config = toml::from_str(toml_str).unwrap();
         assert_eq!(
-            config.port.connection.serial.as_deref(),
+            config
+                .port
+                .connection
+                .serial
+                .as_deref(),
             Some("/dev/ttyUSB0")
         );
-        assert_eq!(config.port.connection.baud, Some(921600));
-        assert_eq!(config.port.usb_device.len(), 1);
-        assert_eq!(config.port.usb_device[0].vid, 6790);
-        assert_eq!(config.port.usb_device[0].pid, 29987);
-        assert_eq!(config.flash.chip.as_deref(), Some("ws63"));
-        assert!(config.flash.skip_verify);
-        assert!(!config.flash.late_baud);
+        assert_eq!(
+            config
+                .port
+                .connection
+                .baud,
+            Some(921600)
+        );
+        assert_eq!(
+            config
+                .port
+                .usb_device
+                .len(),
+            1
+        );
+        assert_eq!(
+            config
+                .port
+                .usb_device[0]
+                .vid,
+            6790
+        );
+        assert_eq!(
+            config
+                .port
+                .usb_device[0]
+                .pid,
+            29987
+        );
+        assert_eq!(
+            config
+                .flash
+                .chip
+                .as_deref(),
+            Some("ws63")
+        );
+        assert!(
+            config
+                .flash
+                .skip_verify
+        );
+        assert!(
+            !config
+                .flash
+                .late_baud
+        );
     }
 
     #[test]
     fn test_config_from_empty_toml() {
         let config: Config = toml::from_str("").unwrap();
-        assert!(config.port.connection.serial.is_none());
-        assert!(config.port.usb_device.is_empty());
-        assert!(config.flash.chip.is_none());
+        assert!(
+            config
+                .port
+                .connection
+                .serial
+                .is_none()
+        );
+        assert!(
+            config
+                .port
+                .usb_device
+                .is_empty()
+        );
+        assert!(
+            config
+                .flash
+                .chip
+                .is_none()
+        );
     }
 
     #[test]
@@ -459,52 +679,117 @@ late_baud = false
 chip = "bs2x"
 "#;
         let config: Config = toml::from_str(toml_str).unwrap();
-        assert!(config.port.connection.serial.is_none());
-        assert_eq!(config.flash.chip.as_deref(), Some("bs2x"));
+        assert!(
+            config
+                .port
+                .connection
+                .serial
+                .is_none()
+        );
+        assert_eq!(
+            config
+                .flash
+                .chip
+                .as_deref(),
+            Some("bs2x")
+        );
     }
 
     #[test]
     fn test_config_roundtrip_toml() {
         let mut config = Config::default();
-        config.port.connection.serial = Some("COM3".to_string());
-        config.port.connection.baud = Some(460800);
-        config.flash.chip = Some("ws63".to_string());
-        config.port.usb_device.push(UsbDevice {
-            vid: 0x1A86,
-            pid: 0x7523,
-        });
+        config
+            .port
+            .connection
+            .serial = Some("COM3".to_string());
+        config
+            .port
+            .connection
+            .baud = Some(460800);
+        config
+            .flash
+            .chip = Some("ws63".to_string());
+        config
+            .port
+            .usb_device
+            .push(UsbDevice {
+                vid: 0x1A86,
+                pid: 0x7523,
+            });
 
         let serialized = toml::to_string_pretty(&config).unwrap();
         let deserialized: Config = toml::from_str(&serialized).unwrap();
 
-        assert_eq!(deserialized.port.connection.serial.as_deref(), Some("COM3"));
-        assert_eq!(deserialized.port.connection.baud, Some(460800));
-        assert_eq!(deserialized.flash.chip.as_deref(), Some("ws63"));
-        assert_eq!(deserialized.port.usb_device.len(), 1);
-        assert_eq!(deserialized.port.usb_device[0].vid, 0x1A86);
+        assert_eq!(
+            deserialized
+                .port
+                .connection
+                .serial
+                .as_deref(),
+            Some("COM3")
+        );
+        assert_eq!(
+            deserialized
+                .port
+                .connection
+                .baud,
+            Some(460800)
+        );
+        assert_eq!(
+            deserialized
+                .flash
+                .chip
+                .as_deref(),
+            Some("ws63")
+        );
+        assert_eq!(
+            deserialized
+                .port
+                .usb_device
+                .len(),
+            1
+        );
+        assert_eq!(
+            deserialized
+                .port
+                .usb_device[0]
+                .vid,
+            0x1A86
+        );
     }
 
     #[test]
     fn test_port_config_toml_roundtrip() {
         let mut port = PortConfig::default();
-        port.connection.serial = Some("/dev/ttyACM0".to_string());
-        port.usb_device.push(UsbDevice {
-            vid: 0x10C4,
-            pid: 0xEA60,
-        });
-        port.usb_device.push(UsbDevice {
-            vid: 0x0403,
-            pid: 0x6001,
-        });
+        port.connection
+            .serial = Some("/dev/ttyACM0".to_string());
+        port.usb_device
+            .push(UsbDevice {
+                vid: 0x10C4,
+                pid: 0xEA60,
+            });
+        port.usb_device
+            .push(UsbDevice {
+                vid: 0x0403,
+                pid: 0x6001,
+            });
 
         let serialized = toml::to_string_pretty(&port).unwrap();
         let deserialized: PortConfig = toml::from_str(&serialized).unwrap();
 
         assert_eq!(
-            deserialized.connection.serial.as_deref(),
+            deserialized
+                .connection
+                .serial
+                .as_deref(),
             Some("/dev/ttyACM0")
         );
-        assert_eq!(deserialized.usb_device.len(), 2);
+        assert_eq!(
+            deserialized
+                .usb_device
+                .len(),
+            2
+        );
     }
 
     // ---- load_from_path with tempfile ----
@@ -527,10 +812,20 @@ chip = "bs2x"
 
         let config = Config::load_from_path(&path);
         assert_eq!(
-            config.port.connection.serial.as_deref(),
+            config
+                .port
+                .connection
+                .serial
+                .as_deref(),
             Some("/dev/ttyUSB1")
         );
-        assert_eq!(config.flash.chip.as_deref(), Some("bs2x"));
+        assert_eq!(
+            config
+                .flash
+                .chip
+                .as_deref(),
+            Some("bs2x")
+        );
 
         let _ = fs::remove_dir_all(&dir);
     }
@@ -539,7 +834,13 @@ chip = "bs2x"
     fn test_load_from_path_nonexistent() {
         let config = Config::load_from_path(Path::new("/nonexistent/path/config.toml"));
         // Should return default
-        assert!(config.port.connection.serial.is_none());
+        assert!(
+            config
+                .port
+                .connection
+                .serial
+                .is_none()
+        );
     }
 
     // ---- global_config_path ----
@@ -549,8 +850,16 @@ chip = "bs2x"
         // On most systems this should return Some
         let path = Config::global_config_path();
         if let Some(p) = path {
-            assert!(p.to_str().unwrap().contains("hisiflash"));
-            assert!(p.to_str().unwrap().ends_with("config.toml"));
+            assert!(
+                p.to_str()
+                    .unwrap()
+                    .contains("hisiflash")
+            );
+            assert!(
+                p.to_str()
+                    .unwrap()
+                    .ends_with("config.toml")
+            );
         }
     }
 
@@ -558,7 +867,11 @@ chip = "bs2x"
     fn test_global_config_dir_is_some() {
         let dir = Config::global_config_dir();
         if let Some(d) = dir {
-            assert!(d.to_str().unwrap().contains("hisiflash"));
+            assert!(
+                d.to_str()
+                    .unwrap()
+                    .contains("hisiflash")
+            );
         }
     }
 
@@ -574,13 +887,26 @@ chip = "bs2x"
             .save_port("/dev/ttyACM0", Some(0x10C4), Some(0xEA60))
             .unwrap();
 
-        let path = tmp.path().join("hisiflash_ports.toml");
+        let path = tmp
+            .path()
+            .join("hisiflash_ports.toml");
         assert!(path.exists(), "hisiflash_ports.toml should be created");
 
         let content = fs::read_to_string(&path).unwrap();
         let parsed: PortConfig = toml::from_str(&content).unwrap();
-        assert_eq!(parsed.connection.serial.as_deref(), Some("/dev/ttyACM0"));
-        assert_eq!(parsed.usb_device.len(), 1);
+        assert_eq!(
+            parsed
+                .connection
+                .serial
+                .as_deref(),
+            Some("/dev/ttyACM0")
+        );
+        assert_eq!(
+            parsed
+                .usb_device
+                .len(),
+            1
+        );
         assert_eq!(parsed.usb_device[0].vid, 0x10C4);
         assert_eq!(parsed.usb_device[0].pid, 0xEA60);
     }
@@ -591,23 +917,37 @@ chip = "bs2x"
         let _guard = TempCwdGuard::new(tmp.path());
 
         let config = Config::default();
-        config.save_port("COM3", None, None).unwrap();
+        config
+            .save_port("COM3", None, None)
+            .unwrap();
 
-        let content = fs::read_to_string(tmp.path().join("hisiflash_ports.toml")).unwrap();
+        let content = fs::read_to_string(
+            tmp.path()
+                .join("hisiflash_ports.toml"),
+        )
+        .unwrap();
         assert!(content.contains("COM3"));
         let parsed: PortConfig = toml::from_str(&content).unwrap();
-        assert!(parsed.usb_device.is_empty());
+        assert!(
+            parsed
+                .usb_device
+                .is_empty()
+        );
     }
 
     #[test]
     fn test_save_port_serialization_only() {
         // Test the serialization logic without file I/O.
         let mut port_config = PortConfig::default();
-        port_config.connection.serial = Some("/dev/ttyUSB0".to_string());
-        port_config.usb_device.push(UsbDevice {
-            vid: 0x1A86,
-            pid: 0x7523,
-        });
+        port_config
+            .connection
+            .serial = Some("/dev/ttyUSB0".to_string());
+        port_config
+            .usb_device
+            .push(UsbDevice {
+                vid: 0x1A86,
+                pid: 0x7523,
+            });
         let content = toml::to_string_pretty(&port_config).unwrap();
         assert!(content.contains("/dev/ttyUSB0"));
         assert!(content.contains("vid"));
@@ -615,8 +955,19 @@ chip = "bs2x"
 
         // Roundtrip
         let parsed: PortConfig = toml::from_str(&content).unwrap();
-        assert_eq!(parsed.connection.serial.as_deref(), Some("/dev/ttyUSB0"));
-        assert_eq!(parsed.usb_device.len(), 1);
+        assert_eq!(
+            parsed
+                .connection
+                .serial
+                .as_deref(),
+            Some("/dev/ttyUSB0")
+        );
+        assert_eq!(
+            parsed
+                .usb_device
+                .len(),
+            1
+        );
     }
 
     // ---- remember_usb_device ----
@@ -626,16 +977,43 @@ chip = "bs2x"
         let tmp = tempfile::tempdir().unwrap();
         let _guard = TempCwdGuard::new(tmp.path());
         // Create an hisiflash.toml so it chooses local path
-        fs::write(tmp.path().join("hisiflash.toml"), "").unwrap();
+        fs::write(
+            tmp.path()
+                .join("hisiflash.toml"),
+            "",
+        )
+        .unwrap();
 
         let mut config = Config::default();
-        config.remember_usb_device(0x1A86, 0x7523).unwrap();
+        config
+            .remember_usb_device(0x1A86, 0x7523)
+            .unwrap();
 
-        assert_eq!(config.port.usb_device.len(), 1);
-        assert_eq!(config.port.usb_device[0].vid, 0x1A86);
-        assert_eq!(config.port.usb_device[0].pid, 0x7523);
+        assert_eq!(
+            config
+                .port
+                .usb_device
+                .len(),
+            1
+        );
+        assert_eq!(
+            config
+                .port
+                .usb_device[0]
+                .vid,
+            0x1A86
+        );
+        assert_eq!(
+            config
+                .port
+                .usb_device[0]
+                .pid,
+            0x7523
+        );
 
-        let path = tmp.path().join("hisiflash_ports.toml");
+        let path = tmp
+            .path()
+            .join("hisiflash_ports.toml");
         assert!(path.exists());
     }
 
@@ -643,26 +1021,56 @@ chip = "bs2x"
     fn test_remember_usb_device_no_duplicates() {
         let tmp = tempfile::tempdir().unwrap();
         let _guard = TempCwdGuard::new(tmp.path());
-        fs::write(tmp.path().join("hisiflash.toml"), "").unwrap();
+        fs::write(
+            tmp.path()
+                .join("hisiflash.toml"),
+            "",
+        )
+        .unwrap();
 
         let mut config = Config::default();
-        config.remember_usb_device(0x1A86, 0x7523).unwrap();
-        config.remember_usb_device(0x1A86, 0x7523).unwrap(); // duplicate
+        config
+            .remember_usb_device(0x1A86, 0x7523)
+            .unwrap();
+        config
+            .remember_usb_device(0x1A86, 0x7523)
+            .unwrap(); // duplicate
 
-        assert_eq!(config.port.usb_device.len(), 1);
+        assert_eq!(
+            config
+                .port
+                .usb_device
+                .len(),
+            1
+        );
     }
 
     #[test]
     fn test_remember_usb_device_multiple_different() {
         let tmp = tempfile::tempdir().unwrap();
         let _guard = TempCwdGuard::new(tmp.path());
-        fs::write(tmp.path().join("hisiflash.toml"), "").unwrap();
+        fs::write(
+            tmp.path()
+                .join("hisiflash.toml"),
+            "",
+        )
+        .unwrap();
 
         let mut config = Config::default();
-        config.remember_usb_device(0x1A86, 0x7523).unwrap();
-        config.remember_usb_device(0x10C4, 0xEA60).unwrap();
+        config
+            .remember_usb_device(0x1A86, 0x7523)
+            .unwrap();
+        config
+            .remember_usb_device(0x10C4, 0xEA60)
+            .unwrap();
 
-        assert_eq!(config.port.usb_device.len(), 2);
+        assert_eq!(
+            config
+                .port
+                .usb_device
+                .len(),
+            2
+        );
     }
 
     /// RAII guard that temporarily changes the working directory.
@@ -674,7 +1082,9 @@ chip = "bs2x"
 
     impl TempCwdGuard {
         fn new(path: &Path) -> Self {
-            let lock = CWD_LOCK.lock().unwrap();
+            let lock = CWD_LOCK
+                .lock()
+                .unwrap();
             let original = std::env::current_dir().unwrap();
             std::env::set_current_dir(path).unwrap();
             Self {

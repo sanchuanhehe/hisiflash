@@ -54,7 +54,10 @@ fn select_non_interactive_port(
     // Non-interactive mode must be deterministic and never prompt.
     // 0 or >1 candidates are treated as usage/setup issues (exit 2),
     // while exactly one candidate is a valid auto-selection.
-    match selection_ports.len().cmp(&1) {
+    match selection_ports
+        .len()
+        .cmp(&1)
+    {
         Ordering::Equal => {
             let port = selection_ports
                 .into_iter()
@@ -78,7 +81,11 @@ pub fn select_serial_port(options: &SerialOptions, config: &Config) -> Result<Se
     }
 
     // If port in config, use it
-    if let Some(port_name) = &config.port.connection.serial {
+    if let Some(port_name) = &config
+        .port
+        .connection
+        .serial
+    {
         debug!("Using port from config: {port_name}");
         return Ok(find_port_by_name(port_name));
     }
@@ -110,7 +117,10 @@ pub fn select_serial_port(options: &SerialOptions, config: &Config) -> Result<Se
         return select_non_interactive_port(selection_ports, config);
     }
 
-    match selection_ports.len().cmp(&1) {
+    match selection_ports
+        .len()
+        .cmp(&1)
+    {
         Ordering::Greater => {
             ensure_interactive_terminal()?;
             select_port_interactive(selection_ports, config)
@@ -123,7 +133,12 @@ pub fn select_serial_port(options: &SerialOptions, config: &Config) -> Result<Se
             let is_known = is_known_device(&port, config);
 
             if is_known && !options.confirm_port {
-                info!("Auto-selected port: {} [{}]", port.name, port.device.name());
+                info!(
+                    "Auto-selected port: {} [{}]",
+                    port.name,
+                    port.device
+                        .name()
+                );
                 Ok(SelectedPort { port, is_known })
             } else {
                 ensure_interactive_terminal()?;
@@ -159,18 +174,31 @@ fn find_port_by_name(name: &str) -> SelectedPort {
     let ports = discover_ports();
 
     // Try exact match first
-    if let Some(port) = ports.iter().find(|p| p.name == name) {
+    if let Some(port) = ports
+        .iter()
+        .find(|p| p.name == name)
+    {
         return SelectedPort {
             port: port.clone(),
-            is_known: port.device.is_known(),
+            is_known: port
+                .device
+                .is_known(),
         };
     }
 
     // Try case-insensitive match (Windows)
-    if let Some(port) = ports.iter().find(|p| p.name.eq_ignore_ascii_case(name)) {
+    if let Some(port) = ports
+        .iter()
+        .find(|p| {
+            p.name
+                .eq_ignore_ascii_case(name)
+        })
+    {
         return SelectedPort {
             port: port.clone(),
-            is_known: port.device.is_known(),
+            is_known: port
+                .device
+                .is_known(),
         };
     }
 
@@ -194,13 +222,19 @@ fn find_port_by_name(name: &str) -> SelectedPort {
 /// Check if a port matches a known device (from config or built-in list).
 fn is_known_device(port: &DetectedPort, config: &Config) -> bool {
     // Check built-in device types
-    if port.device.is_known() {
+    if port
+        .device
+        .is_known()
+    {
         return true;
     }
 
     // Check configured USB devices
     if let (Some(vid), Some(pid)) = (port.vid, port.pid) {
-        for device in &config.port.usb_device {
+        for device in &config
+            .port
+            .usb_device
+        {
             if device.matches(vid, pid) {
                 return true;
             }
@@ -227,13 +261,26 @@ fn select_port_interactive(mut ports: Vec<DetectedPort>, config: &Config) -> Res
         .iter()
         .map(|port| {
             let name = if is_known_device(port, config) {
-                style(&port.name).bold().to_string()
+                style(&port.name)
+                    .bold()
+                    .to_string()
             } else {
-                port.name.clone()
+                port.name
+                    .clone()
             };
 
-            let device_info = if port.device.is_known() {
-                format!(" [{}]", style(port.device.name()).yellow())
+            let device_info = if port
+                .device
+                .is_known()
+            {
+                format!(
+                    " [{}]",
+                    style(
+                        port.device
+                            .name()
+                    )
+                    .yellow()
+                )
             } else if let (Some(vid), Some(pid)) = (port.vid, port.pid) {
                 format!(" ({vid:04X}:{pid:04X})")
             } else {
@@ -251,7 +298,9 @@ fn select_port_interactive(mut ports: Vec<DetectedPort>, config: &Config) -> Res
         .collect();
 
     // Truncate labels to fit terminal width to prevent wrapping in narrow terminals.
-    let term_width = console::Term::stderr().size().1 as usize;
+    let term_width = console::Term::stderr()
+        .size()
+        .1 as usize;
     let max_item_width = term_width.saturating_sub(4);
     let port_names: Vec<String> = port_names
         .into_iter()
@@ -290,7 +339,9 @@ fn confirm_single_port(port: DetectedPort, _config: &Config) -> Result<SelectedP
         .with_prompt(
             t!(
                 "serial.confirm_use",
-                port = port.name.clone(),
+                port = port
+                    .name
+                    .clone(),
                 info = product_info
             )
             .to_string(),
@@ -314,7 +365,10 @@ fn confirm_single_port(port: DetectedPort, _config: &Config) -> Result<SelectedP
 pub fn ask_remember_port(port: &DetectedPort, config: &mut Config) -> Result<()> {
     if let (Some(vid), Some(pid)) = (port.vid, port.pid) {
         // Check if already known
-        for device in &config.port.usb_device {
+        for device in &config
+            .port
+            .usb_device
+        {
             if device.matches(vid, pid) {
                 return Ok(()); // Already saved
             }
@@ -370,7 +424,11 @@ mod tests {
     #[test]
     fn test_serial_options_default() {
         let options = SerialOptions::default();
-        assert!(options.port.is_none());
+        assert!(
+            options
+                .port
+                .is_none()
+        );
         assert!(!options.list_all_ports);
         assert!(!options.non_interactive);
         assert!(!options.confirm_port);
@@ -381,7 +439,9 @@ mod tests {
         let port = "/dev/verylongttyusb0";
         let product = " - Very Long Product Name That Would Wrap";
         let name = format!("{port}{product}");
-        let styled = style(&name).bold().to_string();
+        let styled = style(&name)
+            .bold()
+            .to_string();
 
         let term_width = 30usize;
         let max_item_width = term_width.saturating_sub(4);
@@ -412,7 +472,12 @@ mod tests {
             port: Some("/dev/ttyUSB0".to_string()),
             ..Default::default()
         };
-        assert_eq!(options.port.as_deref(), Some("/dev/ttyUSB0"));
+        assert_eq!(
+            options
+                .port
+                .as_deref(),
+            Some("/dev/ttyUSB0")
+        );
     }
 
     #[test]
@@ -476,10 +541,13 @@ mod tests {
             serial: None,
         };
         let mut config = Config::default();
-        config.port.usb_device.push(crate::config::UsbDevice {
-            vid: 0xABCD,
-            pid: 0x1234,
-        });
+        config
+            .port
+            .usb_device
+            .push(crate::config::UsbDevice {
+                vid: 0xABCD,
+                pid: 0x1234,
+            });
         assert!(is_known_device(&port, &config));
     }
 
@@ -516,9 +584,17 @@ mod tests {
             },
             is_known: true,
         };
-        assert_eq!(sp.port.name, "COM1");
+        assert_eq!(
+            sp.port
+                .name,
+            "COM1"
+        );
         assert!(sp.is_known);
-        assert!(sp.port.device.is_known());
+        assert!(
+            sp.port
+                .device
+                .is_known()
+        );
     }
 
     // ---- non-interactive error mapping regression ----
@@ -550,8 +626,13 @@ mod tests {
 
         let result = select_non_interactive_port(ports, &Config::default());
         assert!(result.is_err());
-        let err = result.err().expect("expected error");
-        assert!(err.downcast_ref::<CliError>().is_some());
+        let err = result
+            .err()
+            .expect("expected error");
+        assert!(
+            err.downcast_ref::<CliError>()
+                .is_some()
+        );
         if let Some(cli_err) = err.downcast_ref::<CliError>() {
             assert!(matches!(cli_err, CliError::Usage(_)));
         }
@@ -561,8 +642,13 @@ mod tests {
     fn test_select_non_interactive_no_ports_returns_usage_error() {
         let result = select_non_interactive_port(vec![], &Config::default());
         assert!(result.is_err());
-        let err = result.err().expect("expected error");
-        assert!(err.downcast_ref::<CliError>().is_some());
+        let err = result
+            .err()
+            .expect("expected error");
+        assert!(
+            err.downcast_ref::<CliError>()
+                .is_some()
+        );
         if let Some(cli_err) = err.downcast_ref::<CliError>() {
             assert!(matches!(cli_err, CliError::Usage(_)));
         }
@@ -582,6 +668,11 @@ mod tests {
         }];
 
         let selected = select_non_interactive_port(ports, &Config::default()).unwrap();
-        assert_eq!(selected.port.name, "/dev/ttyUSB0");
+        assert_eq!(
+            selected
+                .port
+                .name,
+            "/dev/ttyUSB0"
+        );
     }
 }

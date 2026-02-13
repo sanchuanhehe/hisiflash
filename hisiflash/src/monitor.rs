@@ -21,24 +21,29 @@ impl MonitorSession {
 
     /// Create a cloned reader handle for a background read loop.
     pub fn try_clone_reader(&self) -> crate::Result<Box<dyn serialport::SerialPort>> {
-        Ok(self.port.try_clone()?)
+        Ok(self
+            .port
+            .try_clone()?)
     }
 
     /// Write raw bytes to the serial connection.
     pub fn write_bytes(&mut self, data: &[u8]) -> crate::Result<()> {
-        self.port.write_all(data)?;
+        self.port
+            .write_all(data)?;
         Ok(())
     }
 
     /// Set DTR line state.
     pub fn set_data_terminal_ready(&mut self, enabled: bool) -> crate::Result<()> {
-        self.port.write_data_terminal_ready(enabled)?;
+        self.port
+            .write_data_terminal_ready(enabled)?;
         Ok(())
     }
 
     /// Set RTS line state.
     pub fn set_request_to_send(&mut self, enabled: bool) -> crate::Result<()> {
-        self.port.write_request_to_send(enabled)?;
+        self.port
+            .write_request_to_send(enabled)?;
         Ok(())
     }
 }
@@ -95,7 +100,9 @@ pub fn drain_utf8_lossy(buffer: &mut Vec<u8>) -> String {
                 match err.error_len() {
                     Some(invalid_len) => {
                         output.push('�');
-                        let drain_to = valid_up_to.saturating_add(invalid_len).min(buffer.len());
+                        let drain_to = valid_up_to
+                            .saturating_add(invalid_len)
+                            .min(buffer.len());
                         buffer.drain(..drain_to);
                     },
                     None => {
@@ -132,7 +139,9 @@ pub fn clean_monitor_text(text: &str) -> String {
 
 /// Format monitor output with optional timestamps.
 pub fn format_monitor_output(text: &str, timestamp: bool, at_line_start: &mut bool) -> String {
-    let normalized = text.replace("\r\n", "\n").replace('\r', "\n");
+    let normalized = text
+        .replace("\r\n", "\n")
+        .replace('\r', "\n");
 
     if !timestamp {
         let mut out = String::with_capacity(normalized.len() * 2);

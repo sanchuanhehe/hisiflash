@@ -267,7 +267,11 @@ mod tests {
     #[test]
     fn test_serial_config_default() {
         let config = SerialConfig::default();
-        assert!(config.port_name.is_empty());
+        assert!(
+            config
+                .port_name
+                .is_empty()
+        );
         assert_eq!(config.baud_rate, 115200);
         assert_eq!(config.timeout, Duration::from_millis(1000));
     }
@@ -319,7 +323,10 @@ mod tests {
         assert_eq!(info.name, "/dev/ttyUSB0");
         assert_eq!(info.vid, Some(0x1A86));
         assert_eq!(info.pid, Some(0x7523));
-        assert!(info.serial_number.is_none());
+        assert!(
+            info.serial_number
+                .is_none()
+        );
     }
 
     #[test]

@@ -74,7 +74,9 @@ fn list_ports_json_returns_valid_json() {
 fn info_json_error_keeps_stdout_clean() {
     // Use temp dir for non-existent file path
     let dir = tempdir().expect("tempdir should be created");
-    let nonexistent = dir.path().join("not_exists.fwpkg");
+    let nonexistent = dir
+        .path()
+        .join("not_exists.fwpkg");
 
     let mut cmd = cli_cmd();
     cmd.arg("info")
@@ -89,8 +91,12 @@ fn info_json_error_keeps_stdout_clean() {
 #[test]
 fn non_interactive_flash_with_multiple_firmwares_fails_fast() {
     let dir = tempdir().expect("tempdir should be created");
-    let fw_a = dir.path().join("a.fwpkg");
-    let fw_b = dir.path().join("b.fwpkg");
+    let fw_a = dir
+        .path()
+        .join("a.fwpkg");
+    let fw_b = dir
+        .path()
+        .join("b.fwpkg");
     fs::write(&fw_a, b"dummy").expect("write a.fwpkg");
     fs::write(&fw_b, b"dummy").expect("write b.fwpkg");
 
@@ -112,15 +118,24 @@ fn non_interactive_flash_with_multiple_firmwares_fails_fast() {
 fn exit_code_zero_on_success() {
     // --help exits 0
     let mut cmd = cli_cmd();
-    cmd.arg("--help").assert().success().code(0);
+    cmd.arg("--help")
+        .assert()
+        .success()
+        .code(0);
 
     // --version exits 0
     let mut cmd = cli_cmd();
-    cmd.arg("--version").assert().success().code(0);
+    cmd.arg("--version")
+        .assert()
+        .success()
+        .code(0);
 
     // completions bash exits 0 (doesn't require hardware)
     let mut cmd = cli_cmd();
-    cmd.args(["completions", "bash"]).assert().success().code(0);
+    cmd.args(["completions", "bash"])
+        .assert()
+        .success()
+        .code(0);
 }
 
 /// Exit code 2: usage error (unknown command, invalid arguments)
@@ -137,7 +152,10 @@ fn exit_code_two_for_usage_error_unknown_command() {
 #[test]
 fn exit_code_two_for_usage_error_invalid_flag() {
     let mut cmd = cli_cmd();
-    cmd.arg("--invalid-flag-xyz").assert().failure().code(2);
+    cmd.arg("--invalid-flag-xyz")
+        .assert()
+        .failure()
+        .code(2);
 }
 
 #[test]
@@ -156,7 +174,9 @@ fn exit_code_two_for_usage_error_missing_required_arg() {
 fn exit_code_three_for_config_error_invalid_file() {
     // Create a temp dir with invalid config
     let dir = tempdir().expect("tempdir should be created");
-    let config = dir.path().join("hisiflash.toml");
+    let config = dir
+        .path()
+        .join("hisiflash.toml");
     fs::write(&config, "invalid toml [[[").expect("write invalid config");
 
     let mut cmd = cli_cmd();
@@ -169,7 +189,9 @@ fn exit_code_three_for_config_error_invalid_file() {
         .expect("command should execute");
     // Should succeed but warn about config
     assert!(
-        output.status.success(),
+        output
+            .status
+            .success(),
         "command should succeed despite config warning"
     );
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -183,7 +205,9 @@ fn exit_code_four_for_device_not_found() {
     // We test by checking flash with an invalid port name
     // Use platform-independent invalid port path
     let dir = tempdir().expect("tempdir should be created");
-    let fwpkg = dir.path().join("test.fwpkg");
+    let fwpkg = dir
+        .path()
+        .join("test.fwpkg");
     fs::write(&fwpkg, b"HFWP").expect("write dummy firmware");
 
     let mut cmd = cli_cmd();
@@ -198,7 +222,9 @@ fn exit_code_four_for_device_not_found() {
     // Device not found should exit non-zero, but may be 4, 1, or other
     // Just verify it's not 0 (success)
     assert!(
-        !output.status.success(),
+        !output
+            .status
+            .success(),
         "device not found should not succeed"
     );
 }
@@ -210,7 +236,9 @@ fn exit_code_130_for_cancelled_operation() {
     // Here we verify the test exists and document the contract
     // The actual Ctrl+C test requires signal handling which is hard to simulate
     let mut cmd = cli_cmd();
-    cmd.arg("--help").assert().code(0); // Sanity check - help is NOT cancelled
+    cmd.arg("--help")
+        .assert()
+        .code(0); // Sanity check - help is NOT cancelled
 }
 
 /// Exit code 1: generic error fallback
@@ -218,7 +246,9 @@ fn exit_code_130_for_cancelled_operation() {
 fn exit_code_one_for_unexpected_error() {
     // info with non-existent file should fail with error
     let dir = tempdir().expect("tempdir should be created");
-    let nonexistent = dir.path().join("does_not_exist.fwpkg");
+    let nonexistent = dir
+        .path()
+        .join("does_not_exist.fwpkg");
 
     let mut cmd = cli_cmd();
     cmd.arg("info")
@@ -293,7 +323,9 @@ fn info_command_with_valid_file_writes_to_stdout() {
     // Create a minimal valid fwpkg for testing - this tests the command executes
     // The actual parsing is tested in unit tests
     let dir = tempdir().expect("tempdir should be created");
-    let fwpkg = dir.path().join("test.fwpkg");
+    let fwpkg = dir
+        .path()
+        .join("test.fwpkg");
     // Create a minimal valid fwpkg - info should at least attempt to load it
     // and not fail with "file not found" type error
     let valid_header: Vec<u8> = vec![
@@ -331,17 +363,25 @@ fn option_terminator_allows_dash_prefixed_operand() {
     // Test that -- terminates option parsing for positional args
     // This allows operands starting with dash
     let dir = tempdir().expect("tempdir should be created");
-    let test_file = dir.path().join("test.fwpkg");
+    let test_file = dir
+        .path()
+        .join("test.fwpkg");
 
     let mut cmd = cli_cmd();
-    cmd.arg("info").arg("--").arg(test_file).assert().failure(); // File doesn't exist, but parses correctly
+    cmd.arg("info")
+        .arg("--")
+        .arg(test_file)
+        .assert()
+        .failure(); // File doesn't exist, but parses correctly
 }
 
 #[test]
 fn option_terminator_with_flash_command() {
     // -- should work with flash to allow firmware files starting with -
     let dir = tempdir().expect("tempdir should be created");
-    let dummy_file = dir.path().join("dummy.fwpkg");
+    let dummy_file = dir
+        .path()
+        .join("dummy.fwpkg");
 
     let mut cmd = cli_cmd();
     cmd.arg("flash")
@@ -415,7 +455,9 @@ fn info_json_error_returns_clean_error_json() {
     // When --json is used, errors should also be JSON-formatted if possible
     // Otherwise should be empty stdout with error in stderr
     let dir = tempdir().expect("tempdir should be created");
-    let nonexistent = dir.path().join("not_exists.fwpkg");
+    let nonexistent = dir
+        .path()
+        .join("not_exists.fwpkg");
 
     let mut cmd = cli_cmd();
     cmd.arg("info")
@@ -436,7 +478,12 @@ fn colors_disabled_when_not_tty() {
     // When stdout is not a TTY, colors should be disabled
     // This is tested by running in non-TTY mode (like in tests)
     let mut cmd = cli_cmd();
-    let output = cmd.arg("--help").assert().success().get_output().clone();
+    let output = cmd
+        .arg("--help")
+        .assert()
+        .success()
+        .get_output()
+        .clone();
 
     let stdout = String::from_utf8(output.stdout).expect("stdout should be utf-8");
     // ANSI color codes should NOT appear in non-TTY output

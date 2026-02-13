@@ -81,8 +81,14 @@ impl CommandFrame {
     #[allow(clippy::unwrap_used)] // Writing to Vec<u8> cannot fail
     pub fn handshake(baud: u32) -> Self {
         let mut frame = Self::new(Command::Handshake);
-        frame.data.write_u32::<LittleEndian>(baud).unwrap();
-        frame.data.write_u32::<LittleEndian>(0x0108).unwrap(); // Magic constant
+        frame
+            .data
+            .write_u32::<LittleEndian>(baud)
+            .unwrap();
+        frame
+            .data
+            .write_u32::<LittleEndian>(0x0108)
+            .unwrap(); // Magic constant
         frame
     }
 
@@ -90,8 +96,14 @@ impl CommandFrame {
     #[allow(clippy::unwrap_used)] // Writing to Vec<u8> cannot fail
     pub fn set_baud_rate(baud: u32) -> Self {
         let mut frame = Self::new(Command::SetBaudRate);
-        frame.data.write_u32::<LittleEndian>(baud).unwrap();
-        frame.data.write_u32::<LittleEndian>(0x0108).unwrap();
+        frame
+            .data
+            .write_u32::<LittleEndian>(baud)
+            .unwrap();
+        frame
+            .data
+            .write_u32::<LittleEndian>(0x0108)
+            .unwrap();
         frame
     }
 
@@ -105,10 +117,21 @@ impl CommandFrame {
     #[allow(clippy::unwrap_used)] // Writing to Vec<u8> cannot fail
     pub fn download(addr: u32, len: u32, erase_size: u32) -> Self {
         let mut frame = Self::new(Command::Download);
-        frame.data.write_u32::<LittleEndian>(addr).unwrap();
-        frame.data.write_u32::<LittleEndian>(len).unwrap();
-        frame.data.write_u32::<LittleEndian>(erase_size).unwrap();
-        frame.data.extend_from_slice(&[0x00, 0xFF]); // Constant bytes
+        frame
+            .data
+            .write_u32::<LittleEndian>(addr)
+            .unwrap();
+        frame
+            .data
+            .write_u32::<LittleEndian>(len)
+            .unwrap();
+        frame
+            .data
+            .write_u32::<LittleEndian>(erase_size)
+            .unwrap();
+        frame
+            .data
+            .extend_from_slice(&[0x00, 0xFF]); // Constant bytes
         frame
     }
 
@@ -120,7 +143,9 @@ impl CommandFrame {
     /// Create a reset command frame.
     pub fn reset() -> Self {
         let mut frame = Self::new(Command::Reset);
-        frame.data.extend_from_slice(&[0x00, 0x00]);
+        frame
+            .data
+            .extend_from_slice(&[0x00, 0x00]);
         frame
     }
 
@@ -129,25 +154,34 @@ impl CommandFrame {
     #[allow(clippy::unwrap_used)] // Writing to Vec<u8> cannot fail
     pub fn build(&self) -> Vec<u8> {
         // Total length = Magic(4) + Len(2) + CMD(1) + SCMD(1) + Data + CRC(2)
-        let total_len = 10 + self.data.len();
+        let total_len = 10
+            + self
+                .data
+                .len();
         let mut buf = Vec::with_capacity(total_len);
 
         // Magic (little-endian)
-        buf.write_u32::<LittleEndian>(FRAME_MAGIC).unwrap();
+        buf.write_u32::<LittleEndian>(FRAME_MAGIC)
+            .unwrap();
 
         // Length - safe cast, frame size < 64KB
-        buf.write_u16::<LittleEndian>(total_len as u16).unwrap();
+        buf.write_u16::<LittleEndian>(total_len as u16)
+            .unwrap();
 
         // CMD + SCMD
         buf.push(self.cmd as u8);
-        buf.push(self.cmd.swapped());
+        buf.push(
+            self.cmd
+                .swapped(),
+        );
 
         // Data
         buf.extend_from_slice(&self.data);
 
         // CRC16 (calculated over everything before CRC)
         let crc = crc16_xmodem(&buf);
-        buf.write_u16::<LittleEndian>(crc).unwrap();
+        buf.write_u16::<LittleEndian>(crc)
+            .unwrap();
 
         buf
     }
@@ -203,12 +237,19 @@ impl ResponseFrame {
     /// Check if this is a successful handshake ACK.
     pub fn is_handshake_ack(&self) -> bool {
         // CMD = 0xE1 (response to 0x0F), first data byte = 0x5A (ACK)
-        self.cmd == 0xE1 && !self.data.is_empty() && self.data[0] == 0x5A
+        self.cmd == 0xE1
+            && !self
+                .data
+                .is_empty()
+            && self.data[0] == 0x5A
     }
 
     /// Check if this is a successful ACK response.
     pub fn is_ack(&self) -> bool {
-        !self.data.is_empty() && self.data[0] == 0x5A
+        !self
+            .data
+            .is_empty()
+            && self.data[0] == 0x5A
     }
 }
 

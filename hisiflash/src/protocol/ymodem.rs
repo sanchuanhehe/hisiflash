@@ -95,7 +95,10 @@ impl<'a, P: Read + Write> YmodemTransfer<'a, P> {
         let mut buf = [0u8; 1];
         // Note: Actual timeout handling depends on the port implementation.
         // serialport crate handles this internally.
-        match self.port.read(&mut buf) {
+        match self
+            .port
+            .read(&mut buf)
+        {
             Ok(1) => Ok(buf[0]),
             Ok(_) => Err(Error::Timeout("read_byte: no data".into())),
             Err(e) if e.kind() == std::io::ErrorKind::TimedOut => {
@@ -110,8 +113,15 @@ impl<'a, P: Read + Write> YmodemTransfer<'a, P> {
         debug!("Waiting for 'C' from receiver...");
         let start = std::time::Instant::now();
 
-        while start.elapsed() < self.config.c_timeout {
-            match self.read_byte(self.config.char_timeout) {
+        while start.elapsed()
+            < self
+                .config
+                .c_timeout
+        {
+            match self.read_byte(
+                self.config
+                    .char_timeout,
+            ) {
                 Ok(control::C) => {
                     debug!("Received 'C', starting transfer");
                     return Ok(());
@@ -161,13 +171,21 @@ impl<'a, P: Read + Write> YmodemTransfer<'a, P> {
 
     /// Send a block and wait for ACK.
     fn send_block(&mut self, block: &[u8]) -> Result<()> {
-        for retry in 0..self.config.max_retries {
+        for retry in 0..self
+            .config
+            .max_retries
+        {
             trace!("Sending block (attempt {})", retry + 1);
 
-            self.port.write_all(block)?;
-            self.port.flush()?;
+            self.port
+                .write_all(block)?;
+            self.port
+                .flush()?;
 
-            match self.read_byte(self.config.char_timeout) {
+            match self.read_byte(
+                self.config
+                    .char_timeout,
+            ) {
                 Ok(control::ACK) => {
                     trace!("Block ACKed");
                     return Ok(());
@@ -190,7 +208,8 @@ impl<'a, P: Read + Write> YmodemTransfer<'a, P> {
 
         Err(Error::Ymodem(format!(
             "Block transfer failed after {} retries",
-            self.config.max_retries
+            self.config
+                .max_retries
         )))
     }
 
@@ -204,7 +223,11 @@ impl<'a, P: Read + Write> YmodemTransfer<'a, P> {
         let mut data = Vec::with_capacity(SOH_BLOCK_SIZE);
         data.extend_from_slice(filename.as_bytes());
         data.push(0x00);
-        data.extend_from_slice(filesize.to_string().as_bytes());
+        data.extend_from_slice(
+            filesize
+                .to_string()
+                .as_bytes(),
+        );
         data.push(0x00);
 
         let block = Self::build_block(0, &data, false);
@@ -215,11 +238,19 @@ impl<'a, P: Read + Write> YmodemTransfer<'a, P> {
     pub fn send_eot(&mut self) -> Result<()> {
         debug!("Sending EOT");
 
-        for _retry in 0..self.config.max_retries {
-            self.port.write_all(&[control::EOT])?;
-            self.port.flush()?;
+        for _retry in 0..self
+            .config
+            .max_retries
+        {
+            self.port
+                .write_all(&[control::EOT])?;
+            self.port
+                .flush()?;
 
-            match self.read_byte(self.config.char_timeout) {
+            match self.read_byte(
+                self.config
+                    .char_timeout,
+            ) {
                 Ok(control::ACK) => {
                     debug!("EOT ACKed");
                     return Ok(());
@@ -343,7 +374,10 @@ mod tests {
     impl MockSerial {
         fn new(response: &[u8]) -> Self {
             Self {
-                read_buf: response.iter().copied().collect(),
+                read_buf: response
+                    .iter()
+                    .copied()
+                    .collect(),
                 write_buf: Vec::new(),
             }
         }
@@ -351,12 +385,26 @@ mod tests {
 
     impl std::io::Read for MockSerial {
         fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-            if self.read_buf.is_empty() {
+            if self
+                .read_buf
+                .is_empty()
+            {
                 return Err(std::io::Error::new(std::io::ErrorKind::TimedOut, "no data"));
             }
-            let n = buf.len().min(self.read_buf.len());
-            for b in buf.iter_mut().take(n) {
-                *b = self.read_buf.pop_front().unwrap();
+            let n = buf
+                .len()
+                .min(
+                    self.read_buf
+                        .len(),
+                );
+            for b in buf
+                .iter_mut()
+                .take(n)
+            {
+                *b = self
+                    .read_buf
+                    .pop_front()
+                    .unwrap();
             }
             Ok(n)
         }
@@ -364,7 +412,8 @@ mod tests {
 
     impl std::io::Write for MockSerial {
         fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-            self.write_buf.extend_from_slice(buf);
+            self.write_buf
+                .extend_from_slice(buf);
             Ok(buf.len())
         }
         fn flush(&mut self) -> std::io::Result<()> {

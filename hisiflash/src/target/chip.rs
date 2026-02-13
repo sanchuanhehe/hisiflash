@@ -70,7 +70,10 @@ impl ChipFamily {
 
     /// Get the chip family from a string name.
     pub fn from_name(name: &str) -> Option<Self> {
-        match name.to_lowercase().as_str() {
+        match name
+            .to_lowercase()
+            .as_str()
+        {
             "ws63" => Some(Self::Ws63),
             "bs2x" | "bs21" => Some(Self::Bs2x),
             "bs25" => Some(Self::Bs25),

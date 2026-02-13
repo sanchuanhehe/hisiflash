@@ -25,15 +25,33 @@ impl NativePort {
     pub fn open(config: &SerialConfig) -> Result<Self> {
         let port = serialport::new(&config.port_name, config.baud_rate)
             .timeout(config.timeout)
-            .data_bits(config.data_bits.into())
-            .parity(config.parity.into())
-            .stop_bits(config.stop_bits.into())
-            .flow_control(config.flow_control.into())
+            .data_bits(
+                config
+                    .data_bits
+                    .into(),
+            )
+            .parity(
+                config
+                    .parity
+                    .into(),
+            )
+            .stop_bits(
+                config
+                    .stop_bits
+                    .into(),
+            )
+            .flow_control(
+                config
+                    .flow_control
+                    .into(),
+            )
             .open()?;
 
         Ok(Self {
             port: Some(port),
-            name: config.port_name.clone(),
+            name: config
+                .port_name
+                .clone(),
             timeout: config.timeout,
             baud_rate: config.baud_rate,
         })
@@ -111,7 +129,8 @@ impl Port for NativePort {
 
     fn close(&mut self) -> Result<()> {
         // Take ownership of the port and let it drop (close)
-        self.port.take();
+        self.port
+            .take();
         Ok(())
     }
 }
@@ -155,9 +174,12 @@ impl PortEnumerator for NativePortEnumerator {
                     serialport::SerialPortType::UsbPort(info) => (
                         Some(info.vid),
                         Some(info.pid),
-                        info.manufacturer.clone(),
-                        info.product.clone(),
-                        info.serial_number.clone(),
+                        info.manufacturer
+                            .clone(),
+                        info.product
+                            .clone(),
+                        info.serial_number
+                            .clone(),
                     ),
                     _ => (None, None, None, None, None),
                 };

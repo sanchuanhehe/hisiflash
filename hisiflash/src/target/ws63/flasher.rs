@@ -112,7 +112,11 @@ impl<P: Port> Ws63Flasher<P> {
     /// This waits for the device to boot into download mode and performs
     /// the initial handshake with retry mechanism.
     pub fn connect(&mut self) -> Result<()> {
-        info!("Waiting for device on {}...", self.port.name());
+        info!(
+            "Waiting for device on {}...",
+            self.port
+                .name()
+        );
         info!("Please reset the device to enter download mode.");
 
         for attempt in 1..=MAX_CONNECT_ATTEMPTS {
@@ -128,7 +132,8 @@ impl<P: Port> Ws63Flasher<P> {
                     if attempt < MAX_CONNECT_ATTEMPTS {
                         warn!("Connection failed (attempt {attempt}/{MAX_CONNECT_ATTEMPTS}): {e}");
                         thread::sleep(CONNECT_RETRY_DELAY);
-                        self.port.clear_buffers()?;
+                        self.port
+                            .clear_buffers()?;
                     } else {
                         return Err(e);
                     }
@@ -143,7 +148,8 @@ impl<P: Port> Ws63Flasher<P> {
 
     /// Single connection attempt.
     fn try_connect(&mut self) -> Result<()> {
-        self.port.clear_buffers()?;
+        self.port
+            .clear_buffers()?;
 
         let start = Instant::now();
         let handshake_frame = CommandFrame::handshake(self.target_baud);
@@ -152,17 +158,25 @@ impl<P: Port> Ws63Flasher<P> {
         // Send handshake frames repeatedly until we get a response
         while start.elapsed() < HANDSHAKE_TIMEOUT {
             // Send handshake
-            if let Err(e) = self.port.write_all(&handshake_data) {
+            if let Err(e) = self
+                .port
+                .write_all(&handshake_data)
+            {
                 trace!("Write error (ignoring): {e}");
             }
-            let _ = self.port.flush();
+            let _ = self
+                .port
+                .flush();
 
             // Small delay
             thread::sleep(Duration::from_millis(10));
 
             // Check for response
             let mut buf = [0u8; 256];
-            match self.port.read(&mut buf) {
+            match self
+                .port
+                .read(&mut buf)
+            {
                 Ok(n) if n > 0 => {
                     trace!("Received {n} bytes");
                     if contains_handshake_ack(&buf[..n]) {
@@ -202,11 +216,13 @@ impl<P: Port> Ws63Flasher<P> {
         thread::sleep(BAUD_CHANGE_DELAY);
 
         // Change local baud rate
-        self.port.set_baud_rate(baud)?;
+        self.port
+            .set_baud_rate(baud)?;
 
         // Clear buffers
         thread::sleep(BAUD_CHANGE_DELAY);
-        self.port.clear_buffers()?;
+        self.port
+            .clear_buffers()?;
 
         debug!("Baud rate changed to {baud}");
         Ok(())
@@ -221,8 +237,10 @@ impl<P: Port> Ws63Flasher<P> {
             data.len()
         );
 
-        self.port.write_all(&data)?;
-        self.port.flush()?;
+        self.port
+            .write_all(&data)?;
+        self.port
+            .flush()?;
 
         Ok(())
     }
@@ -242,7 +260,10 @@ impl<P: Port> Ws63Flasher<P> {
 
         while start.elapsed() < timeout {
             let mut buf = [0u8; 1];
-            match self.port.read(&mut buf) {
+            match self
+                .port
+                .read(&mut buf)
+            {
                 Ok(1) => {
                     if buf[0] == magic[match_idx] {
                         match_idx += 1;
@@ -250,7 +271,9 @@ impl<P: Port> Ws63Flasher<P> {
                             // Found magic, drain remaining frame data
                             thread::sleep(Duration::from_millis(50));
                             let mut drain = [0u8; 256];
-                            let _ = self.port.read(&mut drain);
+                            let _ = self
+                                .port
+                                .read(&mut drain);
                             debug!("Received SEBOOT magic response");
                             return Ok(());
                         }
@@ -340,7 +363,13 @@ impl<P: Port> Ws63Flasher<P> {
         for bin in fwpkg.normal_bins() {
             // Apply filter if provided
             if let Some(names) = filter {
-                if !names.iter().any(|n| bin.name.contains(n)) {
+                if !names
+                    .iter()
+                    .any(|n| {
+                        bin.name
+                            .contains(n)
+                    })
+                {
                     debug!("Skipping partition: {}", bin.name);
                     continue;
                 }
@@ -391,7 +420,9 @@ impl<P: Port> Ws63Flasher<P> {
                         last_error = Some(e);
 
                         // Clear buffers and wait before retry
-                        let _ = self.port.clear_buffers();
+                        let _ = self
+                            .port
+                            .clear_buffers();
                         thread::sleep(CONNECT_RETRY_DELAY);
                     } else {
                         return Err(e);
@@ -482,7 +513,10 @@ impl<P: Port> Ws63Flasher<P> {
         }
 
         // Download remaining binaries
-        for (i, (data, addr)) in bins.iter().enumerate() {
+        for (i, (data, addr)) in bins
+            .iter()
+            .enumerate()
+        {
             let name = format!("binary_{i}");
             info!("Writing {} ({} bytes) to 0x{:08X}", name, data.len(), addr);
             self.download_binary(&name, data, *addr, &mut |_, _, _| {})?;
@@ -664,7 +698,9 @@ impl<P: Port> crate::target::Flasher for Ws63Flasher<P> {
     fn close(&mut self) {
         // Close the underlying port to release resources
         // This is important for proper cleanup after reset
-        let _ = self.port.close();
+        let _ = self
+            .port
+            .close();
     }
 }
 
@@ -705,20 +741,32 @@ mod tests {
 
         /// Add data to the read buffer (simulates receiving data from device).
         fn add_read_data(&self, data: &[u8]) {
-            let mut buf = self.read_buffer.lock().unwrap();
+            let mut buf = self
+                .read_buffer
+                .lock()
+                .unwrap();
             buf.extend_from_slice(data);
         }
 
         /// Get data written to the port (simulates sending data to device).
         fn get_written_data(&self) -> Vec<u8> {
-            let buf = self.write_buffer.lock().unwrap();
+            let buf = self
+                .write_buffer
+                .lock()
+                .unwrap();
             buf.clone()
         }
 
         /// Clear all buffers.
         fn clear(&self) {
-            let mut read_buf = self.read_buffer.lock().unwrap();
-            let mut write_buf = self.write_buffer.lock().unwrap();
+            let mut read_buf = self
+                .read_buffer
+                .lock()
+                .unwrap();
+            let mut write_buf = self
+                .write_buffer
+                .lock()
+                .unwrap();
             read_buf.clear();
             write_buf.clear();
         }
@@ -845,8 +893,10 @@ mod tests {
         port.add_read_data(&[0xDE, 0xAD, 0xBE, 0xEF]);
 
         // Write some data
-        port.write_all(b"test").unwrap();
-        port.flush().unwrap();
+        port.write_all(b"test")
+            .unwrap();
+        port.flush()
+            .unwrap();
 
         // Verify written data
         let written = port.get_written_data();
@@ -865,10 +915,14 @@ mod tests {
 
         // Clear buffers
         port.clear();
-        assert!(port.get_written_data().is_empty());
+        assert!(
+            port.get_written_data()
+                .is_empty()
+        );
 
         // Write and add read data
-        port.write_all(b"hello").unwrap();
+        port.write_all(b"hello")
+            .unwrap();
         port.add_read_data(&[1, 2, 3]);
 
         // Verify
@@ -880,7 +934,10 @@ mod tests {
 
         // Clear and verify
         port.clear();
-        assert!(port.get_written_data().is_empty());
+        assert!(
+            port.get_written_data()
+                .is_empty()
+        );
     }
 
     /// Test MockPort pin control.
@@ -891,8 +948,10 @@ mod tests {
         assert!(!port.dtr);
         assert!(!port.rts);
 
-        port.set_dtr(true).unwrap();
-        port.set_rts(true).unwrap();
+        port.set_dtr(true)
+            .unwrap();
+        port.set_rts(true)
+            .unwrap();
 
         assert!(port.dtr);
         assert!(port.rts);
@@ -906,8 +965,10 @@ mod tests {
         assert_eq!(port.baud_rate(), 115200);
         assert_eq!(port.timeout(), Duration::from_millis(1000));
 
-        port.set_baud_rate(921600).unwrap();
-        port.set_timeout(Duration::from_millis(500)).unwrap();
+        port.set_baud_rate(921600)
+            .unwrap();
+        port.set_timeout(Duration::from_millis(500))
+            .unwrap();
 
         assert_eq!(port.baud_rate(), 921600);
         assert_eq!(port.timeout(), Duration::from_millis(500));
@@ -1104,19 +1165,23 @@ mod tests {
 
         // Transfer should succeed (or fail on mock port details, but NOT send 0xD2)
         // The key assertion: check that no download command frame was written
-        let written = flasher.port.get_written_data();
+        let written = flasher
+            .port
+            .get_written_data();
 
         // Download command frame starts with magic + has cmd byte 0xD2
         // Scan the written data for 0xD2 command byte at the expected position
         // Frame format: [EF BE AD DE] [len_lo len_hi] [CMD] [SCMD] ...
-        let has_download_cmd = written.windows(8).any(|w| {
-            w[0] == 0xEF
-                && w[1] == 0xBE
-                && w[2] == 0xAD
-                && w[3] == 0xDE
-                && w[6] == 0xD2
-                && w[7] == 0x2D
-        });
+        let has_download_cmd = written
+            .windows(8)
+            .any(|w| {
+                w[0] == 0xEF
+                    && w[1] == 0xBE
+                    && w[2] == 0xAD
+                    && w[3] == 0xDE
+                    && w[6] == 0xD2
+                    && w[7] == 0x2D
+            });
 
         assert!(
             !has_download_cmd,
@@ -1167,17 +1232,21 @@ mod tests {
             &mut |_, _, _| {},
         );
 
-        let written = flasher.port.get_written_data();
+        let written = flasher
+            .port
+            .get_written_data();
 
         // Verify download command WAS sent
-        let has_download_cmd = written.windows(8).any(|w| {
-            w[0] == 0xEF
-                && w[1] == 0xBE
-                && w[2] == 0xAD
-                && w[3] == 0xDE
-                && w[6] == 0xD2
-                && w[7] == 0x2D
-        });
+        let has_download_cmd = written
+            .windows(8)
+            .any(|w| {
+                w[0] == 0xEF
+                    && w[1] == 0xBE
+                    && w[2] == 0xAD
+                    && w[3] == 0xDE
+                    && w[6] == 0xD2
+                    && w[7] == 0x2D
+            });
 
         assert!(
             has_download_cmd,

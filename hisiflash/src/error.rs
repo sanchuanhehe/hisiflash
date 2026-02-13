@@ -66,7 +66,10 @@ mod tests {
     #[test]
     fn test_error_display_messages() {
         let err = Error::InvalidFwpkg("bad magic".into());
-        assert!(err.to_string().contains("bad magic"));
+        assert!(
+            err.to_string()
+                .contains("bad magic")
+        );
 
         let err = Error::CrcMismatch {
             expected: 0x1234,
@@ -77,25 +80,46 @@ mod tests {
         assert!(msg.contains("5678"));
 
         let err = Error::Timeout("read timed out".into());
-        assert!(err.to_string().contains("read timed out"));
+        assert!(
+            err.to_string()
+                .contains("read timed out")
+        );
 
         let err = Error::DeviceNotFound;
-        assert!(!err.to_string().is_empty());
+        assert!(
+            !err.to_string()
+                .is_empty()
+        );
 
         let err = Error::HandshakeFailed("no ack".into());
-        assert!(err.to_string().contains("no ack"));
+        assert!(
+            err.to_string()
+                .contains("no ack")
+        );
 
         let err = Error::Protocol("invalid frame".into());
-        assert!(err.to_string().contains("invalid frame"));
+        assert!(
+            err.to_string()
+                .contains("invalid frame")
+        );
 
         let err = Error::Ymodem("transfer aborted".into());
-        assert!(err.to_string().contains("transfer aborted"));
+        assert!(
+            err.to_string()
+                .contains("transfer aborted")
+        );
 
         let err = Error::Unsupported("bs2x".into());
-        assert!(err.to_string().contains("bs2x"));
+        assert!(
+            err.to_string()
+                .contains("bs2x")
+        );
 
         let err = Error::Config("missing field".into());
-        assert!(err.to_string().contains("missing field"));
+        assert!(
+            err.to_string()
+                .contains("missing field")
+        );
     }
 
     #[test]
@@ -103,7 +127,10 @@ mod tests {
         let io_err = std::io::Error::new(std::io::ErrorKind::NotFound, "file not found");
         let err: Error = io_err.into();
         assert!(matches!(err, Error::Io(_)));
-        assert!(err.to_string().contains("file not found"));
+        assert!(
+            err.to_string()
+                .contains("file not found")
+        );
     }
 
     #[test]

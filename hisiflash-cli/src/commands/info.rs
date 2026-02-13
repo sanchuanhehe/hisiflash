@@ -33,19 +33,37 @@ pub(crate) fn cmd_list_ports(json: bool) {
         return;
     }
 
-    eprintln!("{}", style(t!("list_ports.header")).bold().underlined());
+    eprintln!(
+        "{}",
+        style(t!("list_ports.header"))
+            .bold()
+            .underlined()
+    );
 
     if detected.is_empty() {
         eprintln!("  {}", style(t!("list_ports.no_ports")).dim());
     } else {
         for port in &detected {
-            let device_type = if port.device.is_known() {
-                format!(" [{}]", style(port.device.name()).yellow())
+            let device_type = if port
+                .device
+                .is_known()
+            {
+                format!(
+                    " [{}]",
+                    style(
+                        port.device
+                            .name()
+                    )
+                    .yellow()
+                )
             } else {
                 String::new()
             };
 
-            let product = port.product.as_deref().unwrap_or("");
+            let product = port
+                .product
+                .as_deref()
+                .unwrap_or("");
             let vid_pid = if let (Some(vid), Some(pid)) = (port.vid, port.pid) {
                 format!(" ({vid:04X}:{pid:04X})")
             } else {
@@ -70,10 +88,15 @@ pub(crate) fn cmd_list_ports(json: bool) {
         if let Ok(auto_port) = auto_detect_port() {
             eprintln!(
                 "\n{} {}",
-                style("→").green().bold(),
+                style("→")
+                    .green()
+                    .bold(),
                 t!(
                     "list_ports.auto_detected",
-                    port = style(&auto_port.name).cyan().bold().to_string()
+                    port = style(&auto_port.name)
+                        .cyan()
+                        .bold()
+                        .to_string()
                 )
             );
         }
@@ -92,10 +115,21 @@ pub(crate) fn cmd_info(firmware: &PathBuf, json: bool) -> Result<()> {
         t!("flash.loading_firmware", path = firmware.display())
     );
 
-    let fwpkg = Fwpkg::from_file(firmware)
-        .with_context(|| t!("error.load_firmware", path = firmware.display().to_string()))?;
+    let fwpkg = Fwpkg::from_file(firmware).with_context(|| {
+        t!(
+            "error.load_firmware",
+            path = firmware
+                .display()
+                .to_string()
+        )
+    })?;
 
-    eprintln!("\n{}", style(t!("info.header")).bold().underlined());
+    eprintln!(
+        "\n{}",
+        style(t!("info.header"))
+            .bold()
+            .underlined()
+    );
 
     // Show format version
     let version_str = match fwpkg.version() {
@@ -105,7 +139,10 @@ pub(crate) fn cmd_info(firmware: &PathBuf, json: bool) -> Result<()> {
     eprintln!("  {}: {}", t!("info.format"), version_str);
 
     // Show package name for V2
-    if !fwpkg.package_name().is_empty() {
+    if !fwpkg
+        .package_name()
+        .is_empty()
+    {
         eprintln!("  {}: {}", t!("info.package_name"), fwpkg.package_name());
     }
 
@@ -113,10 +150,26 @@ pub(crate) fn cmd_info(firmware: &PathBuf, json: bool) -> Result<()> {
         "  {}",
         t!("info.partitions", count = fwpkg.partition_count())
     );
-    eprintln!("  {}", t!("info.total_size", size = fwpkg.header.len));
     eprintln!(
         "  {}",
-        t!("info.crc", crc = format!("{:04X}", fwpkg.header.crc))
+        t!(
+            "info.total_size",
+            size = fwpkg
+                .header
+                .len
+        )
+    );
+    eprintln!(
+        "  {}",
+        t!(
+            "info.crc",
+            crc = format!(
+                "{:04X}",
+                fwpkg
+                    .header
+                    .crc
+            )
+        )
     );
 
     // Verify CRC
@@ -133,12 +186,24 @@ pub(crate) fn cmd_info(firmware: &PathBuf, json: bool) -> Result<()> {
 
     eprintln!(
         "\n{}",
-        style(t!("info.partitions_header")).bold().underlined()
+        style(t!("info.partitions_header"))
+            .bold()
+            .underlined()
     );
-    for (i, bin) in fwpkg.bins.iter().enumerate() {
+    for (i, bin) in fwpkg
+        .bins
+        .iter()
+        .enumerate()
+    {
         let type_str = format_partition_type(bin.partition_type);
 
-        eprintln!("\n  [{:2}] {}", i, style(&bin.name).cyan().bold());
+        eprintln!(
+            "\n  [{:2}] {}",
+            i,
+            style(&bin.name)
+                .cyan()
+                .bold()
+        );
         eprintln!("       {}", t!("info.type", "type" = type_str));
         eprintln!(
             "       {}",
@@ -157,15 +222,23 @@ pub(crate) fn cmd_info(firmware: &PathBuf, json: bool) -> Result<()> {
 
 /// Info command `--json` output: structured JSON to stdout.
 fn cmd_info_json(firmware: &PathBuf) -> Result<()> {
-    let fwpkg = Fwpkg::from_file(firmware)
-        .with_context(|| t!("error.load_firmware", path = firmware.display().to_string()))?;
+    let fwpkg = Fwpkg::from_file(firmware).with_context(|| {
+        t!(
+            "error.load_firmware",
+            path = firmware
+                .display()
+                .to_string()
+        )
+    })?;
 
     let version_str = match fwpkg.version() {
         FwpkgVersion::V1 => "V1",
         FwpkgVersion::V2 => "V2",
     };
 
-    let crc_valid = fwpkg.verify_crc().is_ok();
+    let crc_valid = fwpkg
+        .verify_crc()
+        .is_ok();
 
     let partitions: Vec<serde_json::Value> = fwpkg
         .bins
@@ -227,23 +300,43 @@ pub(crate) fn partition_type_str(pt: PartitionType) -> &'static str {
 /// Format partition type for display (with ANSI colors).
 pub(crate) fn format_partition_type(pt: PartitionType) -> String {
     match pt {
-        PartitionType::Loader => style("Loader").yellow().to_string(),
+        PartitionType::Loader => style("Loader")
+            .yellow()
+            .to_string(),
         PartitionType::Normal => "Normal".to_string(),
-        PartitionType::KvNv => style("KV-NV").magenta().to_string(),
-        PartitionType::Efuse => style("eFuse").red().to_string(),
-        PartitionType::Otp => style("OTP").red().to_string(),
-        PartitionType::Flashboot => style("FlashBoot").yellow().to_string(),
-        PartitionType::Factory => style("Factory").blue().to_string(),
+        PartitionType::KvNv => style("KV-NV")
+            .magenta()
+            .to_string(),
+        PartitionType::Efuse => style("eFuse")
+            .red()
+            .to_string(),
+        PartitionType::Otp => style("OTP")
+            .red()
+            .to_string(),
+        PartitionType::Flashboot => style("FlashBoot")
+            .yellow()
+            .to_string(),
+        PartitionType::Factory => style("Factory")
+            .blue()
+            .to_string(),
         PartitionType::Version => "Version".to_string(),
-        PartitionType::SecurityA => style("Security-A").red().to_string(),
-        PartitionType::SecurityB => style("Security-B").red().to_string(),
-        PartitionType::SecurityC => style("Security-C").red().to_string(),
+        PartitionType::SecurityA => style("Security-A")
+            .red()
+            .to_string(),
+        PartitionType::SecurityB => style("Security-B")
+            .red()
+            .to_string(),
+        PartitionType::SecurityC => style("Security-C")
+            .red()
+            .to_string(),
         PartitionType::ProtocolA => "Protocol-A".to_string(),
         PartitionType::AppsA => "Apps-A".to_string(),
         PartitionType::RadioConfig => "RadioConfig".to_string(),
         PartitionType::Rom => "ROM".to_string(),
         PartitionType::Emmc => "eMMC".to_string(),
-        PartitionType::Database => style("Database").dim().to_string(),
+        PartitionType::Database => style("Database")
+            .dim()
+            .to_string(),
         PartitionType::Unknown(v) => format!("Unknown({v})"),
     }
 }

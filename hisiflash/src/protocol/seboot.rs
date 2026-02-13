@@ -192,10 +192,18 @@ impl SebootFrame {
             .data
             .write_u32::<LittleEndian>(baud_rate)
             .expect("Vec<u8> write cannot fail");
-        frame.data.push(8); // DataBits = 8
-        frame.data.push(1); // StopBits = 1
-        frame.data.push(0); // Parity = None
-        frame.data.push(0); // FlowCtrl = None
+        frame
+            .data
+            .push(8); // DataBits = 8
+        frame
+            .data
+            .push(1); // StopBits = 1
+        frame
+            .data
+            .push(0); // Parity = None
+        frame
+            .data
+            .push(0); // FlowCtrl = None
         frame
     }
 
@@ -244,8 +252,12 @@ impl SebootFrame {
             .write_u32::<LittleEndian>(erase_size)
             .expect("Vec<u8> write cannot fail");
         let formal = u8::from(is_rom);
-        frame.data.push(formal);
-        frame.data.push(!formal);
+        frame
+            .data
+            .push(formal);
+        frame
+            .data
+            .push(!formal);
         frame
     }
 
@@ -253,11 +265,24 @@ impl SebootFrame {
     #[allow(clippy::unwrap_used)] // Writing to Vec<u8> cannot fail
     pub fn download_factory_bin(addr: u32, len: u32, erase_size: u32) -> Self {
         let mut frame = Self::new(CommandType::DownloadFactoryBin);
-        frame.data.write_u32::<LittleEndian>(addr).unwrap();
-        frame.data.write_u32::<LittleEndian>(len).unwrap();
-        frame.data.write_u32::<LittleEndian>(erase_size).unwrap();
-        frame.data.push(0x00); // formal
-        frame.data.push(0xFF); // ~formal
+        frame
+            .data
+            .write_u32::<LittleEndian>(addr)
+            .unwrap();
+        frame
+            .data
+            .write_u32::<LittleEndian>(len)
+            .unwrap();
+        frame
+            .data
+            .write_u32::<LittleEndian>(erase_size)
+            .unwrap();
+        frame
+            .data
+            .push(0x00); // formal
+        frame
+            .data
+            .push(0xFF); // ~formal
         frame
     }
 
@@ -265,10 +290,22 @@ impl SebootFrame {
     #[allow(clippy::unwrap_used)] // Writing to Vec<u8> cannot fail
     pub fn download_nv(addr: u32, len: u32, erase_size: u32, erase_all: bool) -> Self {
         let mut frame = Self::new(CommandType::DownloadNv);
-        frame.data.write_u32::<LittleEndian>(addr).unwrap();
-        frame.data.write_u32::<LittleEndian>(len).unwrap();
-        frame.data.write_u32::<LittleEndian>(erase_size).unwrap();
-        frame.data.write_u16::<LittleEndian>(0).unwrap(); // encItemCnt
+        frame
+            .data
+            .write_u32::<LittleEndian>(addr)
+            .unwrap();
+        frame
+            .data
+            .write_u32::<LittleEndian>(len)
+            .unwrap();
+        frame
+            .data
+            .write_u32::<LittleEndian>(erase_size)
+            .unwrap();
+        frame
+            .data
+            .write_u16::<LittleEndian>(0)
+            .unwrap(); // encItemCnt
         frame
             .data
             .write_u16::<LittleEndian>(u16::from(erase_all))
@@ -280,7 +317,10 @@ impl SebootFrame {
     #[allow(clippy::unwrap_used)] // Writing to Vec<u8> cannot fail
     pub fn download_otp_efuse(len: u32) -> Self {
         let mut frame = Self::new(CommandType::DownloadOtpEfuse);
-        frame.data.write_u32::<LittleEndian>(len).unwrap();
+        frame
+            .data
+            .write_u32::<LittleEndian>(len)
+            .unwrap();
         frame
     }
 
@@ -288,7 +328,10 @@ impl SebootFrame {
     #[allow(clippy::unwrap_used)] // Writing to Vec<u8> cannot fail
     pub fn download_version(len: u32) -> Self {
         let mut frame = Self::new(CommandType::DownloadVersion);
-        frame.data.write_u32::<LittleEndian>(len).unwrap();
+        frame
+            .data
+            .write_u32::<LittleEndian>(len)
+            .unwrap();
         frame
     }
 
@@ -296,8 +339,14 @@ impl SebootFrame {
     #[allow(clippy::unwrap_used)] // Writing to Vec<u8> cannot fail
     pub fn upload_data(addr: u32, len: u32) -> Self {
         let mut frame = Self::new(CommandType::UploadData);
-        frame.data.write_u32::<LittleEndian>(len).unwrap();
-        frame.data.write_u32::<LittleEndian>(addr).unwrap();
+        frame
+            .data
+            .write_u32::<LittleEndian>(len)
+            .unwrap();
+        frame
+            .data
+            .write_u32::<LittleEndian>(addr)
+            .unwrap();
         frame
     }
 
@@ -305,8 +354,14 @@ impl SebootFrame {
     #[allow(clippy::unwrap_used)] // Writing to Vec<u8> cannot fail
     pub fn read_otp_efuse(start_bit: u16, bit_width: u16) -> Self {
         let mut frame = Self::new(CommandType::ReadOtpEfuse);
-        frame.data.write_u16::<LittleEndian>(start_bit).unwrap();
-        frame.data.write_u16::<LittleEndian>(bit_width).unwrap();
+        frame
+            .data
+            .write_u16::<LittleEndian>(start_bit)
+            .unwrap();
+        frame
+            .data
+            .write_u16::<LittleEndian>(bit_width)
+            .unwrap();
         frame
     }
 
@@ -314,7 +369,10 @@ impl SebootFrame {
     #[allow(clippy::unwrap_used)] // Writing to Vec<u8> cannot fail
     pub fn flash_lock(param: u16) -> Self {
         let mut frame = Self::new(CommandType::FlashLock);
-        frame.data.write_u16::<LittleEndian>(param).unwrap();
+        frame
+            .data
+            .write_u16::<LittleEndian>(param)
+            .unwrap();
         frame
     }
 
@@ -322,7 +380,10 @@ impl SebootFrame {
     #[allow(clippy::unwrap_used)] // Writing to Vec<u8> cannot fail
     pub fn reset() -> Self {
         let mut frame = Self::new(CommandType::Reset);
-        frame.data.write_u16::<LittleEndian>(0).unwrap();
+        frame
+            .data
+            .write_u16::<LittleEndian>(0)
+            .unwrap();
         frame
     }
 
@@ -330,7 +391,10 @@ impl SebootFrame {
     #[allow(clippy::unwrap_used)] // Writing to Vec<u8> cannot fail
     pub fn switch_dfu() -> Self {
         let mut frame = Self::new(CommandType::SwitchDfu);
-        frame.data.write_u16::<LittleEndian>(0).unwrap();
+        frame
+            .data
+            .write_u16::<LittleEndian>(0)
+            .unwrap();
         frame
     }
 
@@ -344,25 +408,34 @@ impl SebootFrame {
     #[allow(clippy::unwrap_used)] // Writing to Vec<u8> cannot fail
     pub fn build(&self) -> Vec<u8> {
         // Total length = Magic(4) + Len(2) + Type(1) + ~Type(1) + Data + CRC(2)
-        let total_len = 10 + self.data.len();
+        let total_len = 10
+            + self
+                .data
+                .len();
         let mut buf = Vec::with_capacity(total_len);
 
         // Magic (little-endian)
-        buf.write_u32::<LittleEndian>(FRAME_MAGIC).unwrap();
+        buf.write_u32::<LittleEndian>(FRAME_MAGIC)
+            .unwrap();
 
         // Length (includes everything) - safe cast, frame size < 64KB
-        buf.write_u16::<LittleEndian>(total_len as u16).unwrap();
+        buf.write_u16::<LittleEndian>(total_len as u16)
+            .unwrap();
 
         // Frame type and its complement
         buf.push(self.frame_type as u8);
-        buf.push(self.frame_type.reversed());
+        buf.push(
+            self.frame_type
+                .reversed(),
+        );
 
         // Data payload
         buf.extend_from_slice(&self.data);
 
         // CRC16 (calculated over everything before CRC)
         let crc = crc16_xmodem(&buf);
-        buf.write_u16::<LittleEndian>(crc).unwrap();
+        buf.write_u16::<LittleEndian>(crc)
+            .unwrap();
 
         buf
     }
@@ -438,17 +511,18 @@ impl SebootAck {
 /// Check if data contains a valid handshake ACK pattern.
 pub fn contains_handshake_ack(data: &[u8]) -> bool {
     // Look for the pattern: Magic + Length(12) + Type(E1) + ~Type(1E) + Result(5A)
-    data.windows(10).any(|w| {
-        w[0] == 0xEF
-            && w[1] == 0xBE
-            && w[2] == 0xAD
-            && w[3] == 0xDE
-            && w[4] == 0x0C
-            && w[5] == 0x00
-            && w[6] == 0xE1
-            && w[7] == 0x1E
-            && w[8] == 0x5A
-    })
+    data.windows(10)
+        .any(|w| {
+            w[0] == 0xEF
+                && w[1] == 0xBE
+                && w[2] == 0xAD
+                && w[3] == 0xDE
+                && w[4] == 0x0C
+                && w[5] == 0x00
+                && w[6] == 0xE1
+                && w[7] == 0x1E
+                && w[8] == 0x5A
+        })
 }
 
 #[cfg(test)]
@@ -704,7 +778,10 @@ mod tests {
         data.extend_from_slice(&SebootAck::HANDSHAKE_ACK);
         let ack = SebootAck::parse(&data);
         assert!(ack.is_some());
-        assert!(ack.unwrap().is_success());
+        assert!(
+            ack.unwrap()
+                .is_success()
+        );
     }
 
     #[test]

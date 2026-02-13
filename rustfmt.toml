@@ -6,14 +6,37 @@ max_width = 100
 tab_spaces = 4
 newline_style = "Unix"
 
-# Imports (stable options only)
+# Imports
 reorder_imports = true
 reorder_modules = true
 
 # Match
 match_block_trailing_comma = true
 
+# Chain formatting - prefer breaking chains across lines for better git diffs
+chain_width = 0
+
 # Misc
 use_small_heuristics = "Default"
 use_field_init_shorthand = true
 force_explicit_abi = true
+
+# ---------------------------------------------------------------------------
+# Experimental options (uncomment if using nightly rustfmt)
+# These require: rustup run nightly cargo fmt
+# ---------------------------------------------------------------------------
+# Imports - group and sort
+# imports_granularity = "One"
+# group_imports = "StdExternalCrate"
+
+# Comments
+# normalize_comments = true
+# wrap_comments = true
+# comment_width = 80
+
+# Doc comments
+# format_code_in_doc_comments = true
+
+# Strings
+# format_strings = true
+# format_macro_matchers = true

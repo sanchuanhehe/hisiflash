@@ -72,7 +72,9 @@ pub(crate) fn cmd_monitor(
             } else {
                 eprintln!("{message}");
             }
-            io::stderr().flush().ok();
+            io::stderr()
+                .flush()
+                .ok();
         }
     }
 
@@ -96,7 +98,9 @@ pub(crate) fn cmd_monitor(
             style("📡").cyan(),
             t!(
                 "monitor.opening",
-                port = style(&port_name).green().to_string(),
+                port = style(&port_name)
+                    .green()
+                    .to_string(),
                 baud = monitor_baud
             )
         ),
@@ -104,7 +108,9 @@ pub(crate) fn cmd_monitor(
     );
     print_status_line(
         &term_lock,
-        &style(t!("monitor.exit_hint")).dim().to_string(),
+        &style(t!("monitor.exit_hint"))
+            .dim()
+            .to_string(),
         tty_mode,
     );
 
@@ -147,7 +153,12 @@ pub(crate) fn cmd_monitor(
             &format!(
                 "{} {}",
                 style("📝").cyan(),
-                t!("monitor.logging", path = path.display().to_string())
+                t!(
+                    "monitor.logging",
+                    path = path
+                        .display()
+                        .to_string()
+                )
             ),
             tty_mode,
         );
@@ -195,10 +206,14 @@ pub(crate) fn cmd_monitor(
                             if let Ok(_guard) = term_lock_reader.lock() {
                                 if tty_mode_reader {
                                     eprint!("\r\n");
-                                    io::stderr().flush().ok();
+                                    io::stderr()
+                                        .flush()
+                                        .ok();
                                 } else {
                                     print!("\r\n");
-                                    io::stdout().flush().ok();
+                                    io::stdout()
+                                        .flush()
+                                        .ok();
                                 }
                             }
                             at_line_start = true;
@@ -218,10 +233,14 @@ pub(crate) fn cmd_monitor(
                         if let Ok(_guard) = term_lock_reader.lock() {
                             if tty_mode_reader {
                                 eprint!("{output}");
-                                io::stderr().flush().ok();
+                                io::stderr()
+                                    .flush()
+                                    .ok();
                             } else {
                                 print!("{output}");
-                                io::stdout().flush().ok();
+                                io::stdout()
+                                    .flush()
+                                    .ok();
                             }
                         }
                     }
@@ -586,7 +605,9 @@ mod tests {
         // Should have timestamp before line1 and set up for line2
         assert!(result.contains("line1\r\n"));
         // line2 should also get a timestamp since at_line_start was reset
-        let parts: Vec<&str> = result.split("\r\n").collect();
+        let parts: Vec<&str> = result
+            .split("\r\n")
+            .collect();
         assert_eq!(parts.len(), 2);
         assert!(parts[0].contains("line1")); // First line has timestamp + text
         assert!(parts[1].contains("line2")); // Second line has timestamp + text
