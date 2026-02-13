@@ -68,9 +68,9 @@ pub mod protocol;
 pub mod target;
 
 // Re-exports for convenience
+pub use device::{DetectedPort, DeviceKind, TransportKind, UsbDevice};
 pub use error::{Error, Result};
 pub use image::fwpkg::{Fwpkg, FwpkgBinInfo, FwpkgHeader, FwpkgVersion, PartitionType};
-pub use device::{DetectedPort, DeviceKind, TransportKind, UsbDevice};
 pub use port::{Port, PortEnumerator, PortInfo, SerialConfig};
 pub use protocol::seboot::{
     CommandType, ImageType, SebootAck, SebootFrame, contains_handshake_ack,

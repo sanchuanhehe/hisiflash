@@ -45,13 +45,21 @@ const KNOWN_USB_DEVICES: &[(u16, &[u16], DeviceKind)] = &[
         &[0x7523, 0x7522, 0x5523, 0x5512, 0x55D4],
         DeviceKind::Ch340,
     ),
-    (0x10C4, &[0xEA60, 0xEA70, 0xEA71, 0xEA63], DeviceKind::Cp210x),
+    (
+        0x10C4,
+        &[0xEA60, 0xEA70, 0xEA71, 0xEA63],
+        DeviceKind::Cp210x,
+    ),
     (
         0x0403,
         &[0x6001, 0x6010, 0x6011, 0x6014, 0x6015],
         DeviceKind::Ftdi,
     ),
-    (0x067B, &[0x2303, 0x23A3, 0x23C3, 0x23D3], DeviceKind::Prolific),
+    (
+        0x067B,
+        &[0x2303, 0x23A3, 0x23C3, 0x23D3],
+        DeviceKind::Prolific,
+    ),
     (0x12D1, &[], DeviceKind::HiSilicon),
 ];
 
@@ -281,9 +289,18 @@ mod tests {
         assert_eq!(DeviceKind::from_vid_pid(0x1A86, 0x7523), DeviceKind::Ch340);
         assert_eq!(DeviceKind::from_vid_pid(0x10C4, 0xEA60), DeviceKind::Cp210x);
         assert_eq!(DeviceKind::from_vid_pid(0x0403, 0x6001), DeviceKind::Ftdi);
-        assert_eq!(DeviceKind::from_vid_pid(0x067B, 0x2303), DeviceKind::Prolific);
-        assert_eq!(DeviceKind::from_vid_pid(0x12D1, 0x1234), DeviceKind::HiSilicon);
-        assert_eq!(DeviceKind::from_vid_pid(0x1234, 0x5678), DeviceKind::Unknown);
+        assert_eq!(
+            DeviceKind::from_vid_pid(0x067B, 0x2303),
+            DeviceKind::Prolific
+        );
+        assert_eq!(
+            DeviceKind::from_vid_pid(0x12D1, 0x1234),
+            DeviceKind::HiSilicon
+        );
+        assert_eq!(
+            DeviceKind::from_vid_pid(0x1234, 0x5678),
+            DeviceKind::Unknown
+        );
     }
 
     #[test]
