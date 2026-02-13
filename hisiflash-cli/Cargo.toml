@@ -47,3 +47,5 @@ sys-locale = "0.3"
 
 [dev-dependencies]
 tempfile.workspace = true
+assert_cmd = "2"
+predicates = "3"
