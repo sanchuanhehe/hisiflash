@@ -1,10 +1,12 @@
 //! Firmware info and port listing command implementations.
 
-use anyhow::{Context, Result};
-use console::style;
-use hisiflash::{Fwpkg, FwpkgVersion, PartitionType, auto_detect_port, discover_ports};
-use rust_i18n::t;
-use std::path::PathBuf;
+use {
+    anyhow::{Context, Result},
+    console::style,
+    hisiflash::{Fwpkg, FwpkgVersion, PartitionType, auto_detect_port, discover_ports},
+    rust_i18n::t,
+    std::path::PathBuf,
+};
 
 /// List ports command implementation.
 pub(crate) fn cmd_list_ports(json: bool) {
@@ -343,8 +345,7 @@ pub(crate) fn format_partition_type(pt: PartitionType) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use hisiflash::PartitionType;
+    use {super::*, hisiflash::PartitionType};
 
     // ---- partition_type_str ----
 

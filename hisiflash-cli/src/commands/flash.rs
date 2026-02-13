@@ -1,14 +1,14 @@
 //! Flash, write, and erase command implementations.
 
-use anyhow::{Context, Result};
-use console::style;
-use hisiflash::{ChipFamily, Fwpkg};
-use indicatif::{ProgressBar, ProgressStyle};
-use rust_i18n::t;
-use std::path::PathBuf;
-
-use crate::config::Config;
-use crate::{Cli, CliError, get_port, use_fancy_output, was_interrupted};
+use {
+    crate::{Cli, CliError, config::Config, get_port, use_fancy_output, was_interrupted},
+    anyhow::{Context, Result},
+    console::style,
+    hisiflash::{ChipFamily, Fwpkg},
+    indicatif::{ProgressBar, ProgressStyle},
+    rust_i18n::t,
+    std::path::PathBuf,
+};
 
 fn ensure_not_interrupted() -> Result<()> {
     if was_interrupted() {

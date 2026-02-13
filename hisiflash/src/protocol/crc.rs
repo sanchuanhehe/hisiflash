@@ -92,8 +92,8 @@ mod tests {
 
     #[test]
     fn test_crc16_xmodem_123456789() {
-        // Standard test vector: CRC16-XMODEM (poly=0x1021, init=0, refin=false, refout=false, xorout=0)
-        // "123456789" must produce 0x31C3
+        // Standard test vector: CRC16-XMODEM (poly=0x1021, init=0, refin=false,
+        // refout=false, xorout=0) "123456789" must produce 0x31C3
         let data = b"123456789";
         assert_eq!(crc16_xmodem(data), 0x31C3);
     }

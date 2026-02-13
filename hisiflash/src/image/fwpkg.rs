@@ -56,13 +56,19 @@
 //! +--------------------+
 //! ```
 
-use crate::error::{Error, Result};
-use crate::protocol::crc::crc16_xmodem;
-use byteorder::{LittleEndian, ReadBytesExt};
-use log::debug;
-use std::fs::File;
-use std::io::{BufReader, Read};
-use std::path::Path;
+use {
+    crate::{
+        error::{Error, Result},
+        protocol::crc::crc16_xmodem,
+    },
+    byteorder::{LittleEndian, ReadBytesExt},
+    log::debug,
+    std::{
+        fs::File,
+        io::{BufReader, Read},
+        path::Path,
+    },
+};
 
 /// FWPKG V1 magic number (little-endian).
 /// Stored as 0xDFADBEEF, reads as 0xEFBEADDF.
@@ -89,7 +95,8 @@ pub const HEADER_SIZE_V2: usize = 272;
 pub const HEADER_SIZE: usize = HEADER_SIZE_V1;
 
 /// V1 BinInfo size in bytes.
-/// name\[32\] + offset(4) + length(4) + burn_addr(4) + burn_size(4) + type(4) = 52
+/// name\[32\] + offset(4) + length(4) + burn_addr(4) + burn_size(4) + type(4) =
+/// 52
 pub const BIN_INFO_SIZE_V1: usize = 52;
 
 /// V2 BinInfo size in bytes.
@@ -573,9 +580,10 @@ impl Fwpkg {
 
     /// Verify the CRC checksum.
     ///
-    /// CRC is calculated from the `cnt` field onwards (excluding magic and crc fields).
-    /// For V1: covers cnt(2) + len(4) + BinInfo[] (header total - 6 bytes)
-    /// For V2: covers cnt(2) + len(4) + name(260) + BinInfo[] (header total - 6 bytes)
+    /// CRC is calculated from the `cnt` field onwards (excluding magic and crc
+    /// fields). For V1: covers cnt(2) + len(4) + BinInfo[] (header total -
+    /// 6 bytes) For V2: covers cnt(2) + len(4) + name(260) + BinInfo[]
+    /// (header total - 6 bytes)
     pub fn verify_crc(&self) -> Result<()> {
         let header_size = self
             .header
@@ -589,7 +597,8 @@ impl Fwpkg {
         }
 
         // CRC covers: everything after magic(4) + crc(2), up to end of BinInfo array
-        // Per fbb_burntool: crcDataLen = sizeof(FWPKG_HEAD) - 6 + sizeof(IMAGE_INFO) * imageNum
+        // Per fbb_burntool: crcDataLen = sizeof(FWPKG_HEAD) - 6 + sizeof(IMAGE_INFO) *
+        // imageNum
         let crc_start = 6; // After magic(4) + crc(2)
         let crc_end = header_size
             + self

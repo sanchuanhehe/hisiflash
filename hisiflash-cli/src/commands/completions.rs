@@ -1,16 +1,17 @@
 //! Shell completion generation and installation.
 
-use anyhow::{Context, Result};
-use clap::CommandFactory;
-use clap_complete::{Shell, generate};
-use console::style;
-use std::env;
-use std::fs;
-use std::io;
-use std::io::Write as _;
-use std::path::{Path, PathBuf};
-
-use crate::Cli;
+use {
+    crate::Cli,
+    anyhow::{Context, Result},
+    clap::CommandFactory,
+    clap_complete::{Shell, generate},
+    console::style,
+    std::{
+        env, fs,
+        io::{self, Write as _},
+        path::{Path, PathBuf},
+    },
+};
 
 /// Generate shell completions to stdout.
 pub(crate) fn cmd_completions(shell: Shell) {
@@ -143,8 +144,8 @@ pub(crate) fn cmd_completions_install(shell_arg: Option<Shell>) -> Result<()> {
     let shell = match shell_arg {
         Some(s) => s,
         None => detect_shell_type().context(
-            "Could not detect your shell. Please specify it explicitly:\n  \
-             hisiflash completions --install bash",
+            "Could not detect your shell. Please specify it explicitly:\n  hisiflash completions \
+             --install bash",
         )?,
     };
 

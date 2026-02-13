@@ -74,7 +74,8 @@ pub fn split_utf8(bytes: &[u8]) -> (&str, &[u8]) {
     }
 }
 
-/// Drain buffered bytes into displayable UTF-8 text without stalling on invalid bytes.
+/// Drain buffered bytes into displayable UTF-8 text without stalling on invalid
+/// bytes.
 ///
 /// - Valid UTF-8 is emitted as-is.
 /// - Invalid byte sequences emit the replacement char `�` and continue.

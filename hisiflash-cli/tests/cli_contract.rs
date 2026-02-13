@@ -1,8 +1,6 @@
 //! Integration tests for core CLI contract behavior.
 
-use predicates::prelude::*;
-use std::fs;
-use tempfile::tempdir;
+use {predicates::prelude::*, std::fs, tempfile::tempdir};
 
 fn cli_cmd() -> assert_cmd::Command {
     assert_cmd::cargo::cargo_bin_cmd!("hisiflash")
@@ -161,7 +159,8 @@ fn exit_code_two_for_usage_error_invalid_flag() {
 #[test]
 fn exit_code_two_for_usage_error_missing_required_arg() {
     // flash without firmware returns error - actual exit depends on config vs usage
-    // This tests behavior is documented - it's a config-like error when no default found
+    // This tests behavior is documented - it's a config-like error when no default
+    // found
     let mut cmd = cli_cmd();
     cmd.arg("flash")
         .assert()

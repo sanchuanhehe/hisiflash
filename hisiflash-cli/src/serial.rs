@@ -7,17 +7,16 @@
 //! - Remembering selected ports in configuration
 //! - Non-interactive mode for CI/CD
 
-use std::cmp::Ordering;
-use std::io::IsTerminal;
-
-use crate::CliError;
-use crate::config::Config;
-use anyhow::Result;
-use console::style;
-use dialoguer::{Confirm, Error as DialoguerError, Select, theme::ColorfulTheme};
-use hisiflash::{DetectedPort, TransportKind, UsbDevice, discover_ports};
-use log::{debug, error, info};
-use rust_i18n::t;
+use {
+    crate::{CliError, config::Config},
+    anyhow::Result,
+    console::style,
+    dialoguer::{Confirm, Error as DialoguerError, Select, theme::ColorfulTheme},
+    hisiflash::{DetectedPort, TransportKind, UsbDevice, discover_ports},
+    log::{debug, error, info},
+    rust_i18n::t,
+    std::{cmp::Ordering, io::IsTerminal},
+};
 
 /// Options for serial port selection.
 #[derive(Debug, Clone, Default)]
@@ -297,7 +296,8 @@ fn select_port_interactive(mut ports: Vec<DetectedPort>, config: &Config) -> Res
         })
         .collect();
 
-    // Truncate labels to fit terminal width to prevent wrapping in narrow terminals.
+    // Truncate labels to fit terminal width to prevent wrapping in narrow
+    // terminals.
     let term_width = console::Term::stderr()
         .size()
         .1 as usize;
@@ -393,10 +393,11 @@ pub fn ask_remember_port(port: &DetectedPort, config: &mut Config) -> Result<()>
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use console::style;
-    use console::{measure_text_width, truncate_str};
-    use hisiflash::{DetectedPort, TransportKind, UsbDevice};
+    use {
+        super::*,
+        console::{measure_text_width, style, truncate_str},
+        hisiflash::{DetectedPort, TransportKind, UsbDevice},
+    };
 
     fn strip_ansi_codes(s: &str) -> String {
         let mut out = String::new();

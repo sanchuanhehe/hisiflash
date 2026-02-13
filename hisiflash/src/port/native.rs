@@ -3,14 +3,20 @@
 //! This module provides the serial port implementation for native platforms
 //! (Linux, macOS, Windows, FreeBSD, etc.).
 
-use crate::error::{Error, Result};
-use crate::port::{
-    DataBits, FlowControl, Parity, Port, PortEnumerator, PortInfo, SerialConfig, StopBits,
+use {
+    crate::{
+        error::{Error, Result},
+        port::{
+            DataBits, FlowControl, Parity, Port, PortEnumerator, PortInfo, SerialConfig, StopBits,
+        },
+    },
+    log::trace,
+    serialport::ClearBuffer,
+    std::{
+        io::{Read, Write},
+        time::Duration,
+    },
 };
-use log::trace;
-use serialport::ClearBuffer;
-use std::io::{Read, Write};
-use std::time::Duration;
 
 /// Native serial port implementation.
 pub struct NativePort {

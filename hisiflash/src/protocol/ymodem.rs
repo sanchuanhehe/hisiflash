@@ -16,11 +16,17 @@
 //! +-----+-----+------+---------------+--------+
 //! ```
 
-use crate::error::{Error, Result};
-use crate::protocol::crc::crc16_xmodem;
-use log::{debug, trace};
-use std::io::{Read, Write};
-use std::time::Duration;
+use {
+    crate::{
+        error::{Error, Result},
+        protocol::crc::crc16_xmodem,
+    },
+    log::{debug, trace},
+    std::{
+        io::{Read, Write},
+        time::Duration,
+    },
+};
 
 /// YMODEM control characters.
 pub mod control {
@@ -459,8 +465,8 @@ mod tests {
 
         assert!(
             result.is_ok(),
-            "YMODEM transfer should succeed with single 'C' (no second 'C' after block 0). \
-             Error: {:?}",
+            "YMODEM transfer should succeed with single 'C' (no second 'C' after block 0). Error: \
+             {:?}",
             result.err()
         );
     }
@@ -496,13 +502,13 @@ mod tests {
 
         assert!(
             result.is_ok(),
-            "YMODEM should complete without waiting for 'C' before finish block. \
-             Error: {:?}",
+            "YMODEM should complete without waiting for 'C' before finish block. Error: {:?}",
             result.err()
         );
     }
 
-    /// Regression: YMODEM transfer with exactly 1024 bytes (one full STX block).
+    /// Regression: YMODEM transfer with exactly 1024 bytes (one full STX
+    /// block).
     #[test]
     fn test_ymodem_transfer_exact_block_size() {
         let response = vec![

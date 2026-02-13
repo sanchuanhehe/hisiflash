@@ -4,10 +4,10 @@
 //! Currently, native discovery is serial-port based, but the data model is
 //! designed to support future transports (TCP, BLE, USB-HID, etc.).
 
-use crate::error::{Error, Result};
-
 #[cfg(feature = "native")]
 use log::{debug, info, trace};
+
+use crate::error::{Error, Result};
 
 /// Transport type for discovered endpoints.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -64,7 +64,8 @@ const KNOWN_USB_DEVICES: &[(u16, &[u16], DeviceKind)] = &[
 ];
 
 impl DeviceKind {
-    /// Check if this VID/PID combination is a known HiSilicon-compatible device.
+    /// Check if this VID/PID combination is a known HiSilicon-compatible
+    /// device.
     #[must_use]
     pub fn from_vid_pid(vid: u16, pid: u16) -> Self {
         for (known_vid, pids, device) in KNOWN_USB_DEVICES {

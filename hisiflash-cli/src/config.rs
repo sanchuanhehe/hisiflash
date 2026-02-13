@@ -1,16 +1,21 @@
 //! Configuration file support for hisiflash.
 //!
-//! Configuration is loaded from multiple sources with the following priority (highest first):
+//! Configuration is loaded from multiple sources with the following priority
+//! (highest first):
 //! 1. Command-line arguments
 //! 2. Environment variables (HISIFLASH_*)
 //! 3. Local config file (./hisiflash.toml or ./hisiflash_ports.toml)
 //! 4. Global config file (~/.config/hisiflash/config.toml)
 
-use directories::ProjectDirs;
-use log::{debug, info, warn};
-use serde::{Deserialize, Serialize};
-use std::fs;
-use std::path::{Path, PathBuf};
+use {
+    directories::ProjectDirs,
+    log::{debug, info, warn},
+    serde::{Deserialize, Serialize},
+    std::{
+        fs,
+        path::{Path, PathBuf},
+    },
+};
 
 /// USB device identification for port matching.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

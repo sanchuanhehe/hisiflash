@@ -1,7 +1,6 @@
 //! Error types for hisiflash.
 
-use std::io;
-use thiserror::Error;
+use {std::io, thiserror::Error};
 
 /// Result type for hisiflash operations.
 pub type Result<T> = std::result::Result<T, Error>;

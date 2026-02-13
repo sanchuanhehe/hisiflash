@@ -68,21 +68,19 @@ pub mod protocol;
 pub mod target;
 
 // Re-exports for convenience
-pub use device::{DetectedPort, DeviceKind, TransportKind, UsbDevice};
-pub use error::{Error, Result};
-pub use image::fwpkg::{Fwpkg, FwpkgBinInfo, FwpkgHeader, FwpkgVersion, PartitionType};
-pub use port::{Port, PortEnumerator, PortInfo, SerialConfig};
-pub use protocol::seboot::{
-    CommandType, ImageType, SebootAck, SebootFrame, contains_handshake_ack,
-};
-// Ws63Flasher 不直接导出，只通过 Flasher trait 访问
-pub use target::{ChipConfig, ChipFamily, ChipOps, Flasher};
-
 // Native-specific re-exports
 #[cfg(feature = "native")]
 pub use port::{NativePort, NativePortEnumerator};
-
-pub use host::{auto_detect_port, discover_hisilicon_ports, discover_ports};
-pub use monitor::{
-    MonitorSession, clean_monitor_text, drain_utf8_lossy, format_monitor_output, split_utf8,
+// Ws63Flasher 不直接导出，只通过 Flasher trait 访问
+pub use target::{ChipConfig, ChipFamily, ChipOps, Flasher};
+pub use {
+    device::{DetectedPort, DeviceKind, TransportKind, UsbDevice},
+    error::{Error, Result},
+    host::{auto_detect_port, discover_hisilicon_ports, discover_ports},
+    image::fwpkg::{Fwpkg, FwpkgBinInfo, FwpkgHeader, FwpkgVersion, PartitionType},
+    monitor::{
+        MonitorSession, clean_monitor_text, drain_utf8_lossy, format_monitor_output, split_utf8,
+    },
+    port::{Port, PortEnumerator, PortInfo, SerialConfig},
+    protocol::seboot::{CommandType, ImageType, SebootAck, SebootFrame, contains_handshake_ack},
 };

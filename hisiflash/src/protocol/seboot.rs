@@ -21,8 +21,10 @@
 //! +------------+--------+------+-------+---------------+--------+
 //! ```
 
-use crate::protocol::crc::crc16_xmodem;
-use byteorder::{LittleEndian, WriteBytesExt};
+use {
+    crate::protocol::crc::crc16_xmodem,
+    byteorder::{LittleEndian, WriteBytesExt},
+};
 
 /// Frame magic number (0xDEADBEEF stored as little-endian).
 pub const FRAME_MAGIC: u32 = 0xDEADBEEF;

@@ -10,20 +10,21 @@
 //! - Environment variable support
 //! - Internationalization (i18n) support
 
-use anyhow::Result;
-use clap::error::ErrorKind;
-use clap::parser::ValueSource;
-use clap::{CommandFactory, FromArgMatches, Parser, Subcommand, ValueEnum};
-use clap_complete::Shell;
-use console::style;
-use env_logger::Env;
-use hisiflash::{ChipFamily, Error as LibError};
-use log::debug;
-use rust_i18n::t;
-use std::env;
-use std::path::PathBuf;
-use std::sync::OnceLock;
-use thiserror::Error;
+use {
+    anyhow::Result,
+    clap::{
+        CommandFactory, FromArgMatches, Parser, Subcommand, ValueEnum, error::ErrorKind,
+        parser::ValueSource,
+    },
+    clap_complete::Shell,
+    console::style,
+    env_logger::Env,
+    hisiflash::{ChipFamily, Error as LibError},
+    log::debug,
+    rust_i18n::t,
+    std::{env, path::PathBuf, sync::OnceLock},
+    thiserror::Error,
+};
 
 /// Whether stderr is a terminal (set once at startup).
 static STDERR_IS_TTY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
@@ -67,14 +68,18 @@ mod config;
 mod help;
 mod serial;
 
-use commands::completions::{cmd_completions, cmd_completions_install};
-use commands::firmware::resolve_firmware;
-use commands::flash::{cmd_erase, cmd_flash, cmd_write, cmd_write_program};
-use commands::info::{cmd_info, cmd_list_ports};
-use commands::monitor::cmd_monitor;
-use config::Config;
-use help::{build_localized_command, detect_locale};
-use serial::{SerialOptions, ask_remember_port, select_serial_port};
+use {
+    commands::{
+        completions::{cmd_completions, cmd_completions_install},
+        firmware::resolve_firmware,
+        flash::{cmd_erase, cmd_flash, cmd_write, cmd_write_program},
+        info::{cmd_info, cmd_list_ports},
+        monitor::cmd_monitor,
+    },
+    config::Config,
+    help::{build_localized_command, detect_locale},
+    serial::{SerialOptions, ask_remember_port, select_serial_port},
+};
 
 // Initialize i18n with locale files from the locales directory
 rust_i18n::i18n!("locales", fallback = "en");
@@ -308,7 +313,8 @@ enum Commands {
 
     /// Open serial monitor.
     Monitor {
-        /// Serial port for monitor session (overrides global --port for this command).
+        /// Serial port for monitor session (overrides global --port for this
+        /// command).
         #[arg(long)]
         monitor_port: Option<String>,
 
@@ -335,7 +341,8 @@ enum Commands {
 
     /// Generate shell completion scripts.
     Completions {
-        /// Shell type for completions (auto-detected if not specified with --install).
+        /// Shell type for completions (auto-detected if not specified with
+        /// --install).
         #[arg(value_enum)]
         shell: Option<Shell>,
 
@@ -656,7 +663,9 @@ fn run_with_args(raw_args: &[String]) -> Result<()> {
             } else {
                 let shell = (*shell).ok_or_else(|| {
                     CliError::Usage(
-                        "specify a shell type, e.g.: hisiflash completions bash\n  Or use hisiflash completions --install to auto-install completions.".to_string(),
+                        "specify a shell type, e.g.: hisiflash completions bash\n  Or use \
+                         hisiflash completions --install to auto-install completions."
+                            .to_string(),
                     )
                 })?;
                 cmd_completions(shell);
@@ -849,11 +858,15 @@ mod locale_tests {
 
 #[cfg(test)]
 mod cli_tests {
-    use super::*;
-    use crate::commands::info::partition_type_str;
-    use crate::help::{build_localized_command, localize_arg};
-    use clap::CommandFactory;
-    use std::sync::Mutex;
+    use {
+        super::*,
+        crate::{
+            commands::info::partition_type_str,
+            help::{build_localized_command, localize_arg},
+        },
+        clap::CommandFactory,
+        std::sync::Mutex,
+    };
 
     // ---- use_fancy_output ----
 

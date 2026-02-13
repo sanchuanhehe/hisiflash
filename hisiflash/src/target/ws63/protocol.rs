@@ -14,8 +14,10 @@
 //! +------------+--------+-----+------+---------------+--------+
 //! ```
 
-use crate::protocol::crc::crc16_xmodem;
-use byteorder::{LittleEndian, WriteBytesExt};
+use {
+    crate::protocol::crc::crc16_xmodem,
+    byteorder::{LittleEndian, WriteBytesExt},
+};
 
 /// Frame magic number.
 pub const FRAME_MAGIC: u32 = 0xDEADBEEF;
@@ -322,7 +324,8 @@ mod tests {
 
     #[test]
     fn test_response_frame_parse_handshake_ack() {
-        // Build a valid response frame: magic + len(12) + cmd(0xE1) + scmd(0x1E) + data(0x5A, 0x00) + crc
+        // Build a valid response frame: magic + len(12) + cmd(0xE1) + scmd(0x1E) +
+        // data(0x5A, 0x00) + crc
         let mut buf = Vec::new();
         buf.extend_from_slice(&FRAME_MAGIC.to_le_bytes());
         buf.extend_from_slice(&12u16.to_le_bytes()); // len

@@ -1,20 +1,21 @@
 //! Serial monitor command implementation.
 //!
-//! Dual-threaded serial monitor with keyboard input, timestamps, and log file support.
-
-use anyhow::{Context, Result};
-use console::style;
-use hisiflash::MonitorSession;
-use rust_i18n::t;
-use std::io;
-use std::io::IsTerminal;
-use std::io::Write as _;
-use std::path::PathBuf;
-
-use crate::config::Config;
-use crate::{Cli, clear_interrupted_flag, get_port, was_interrupted};
+//! Dual-threaded serial monitor with keyboard input, timestamps, and log file
+//! support.
 
 pub(crate) use hisiflash::{clean_monitor_text, drain_utf8_lossy, format_monitor_output};
+use {
+    crate::{Cli, clear_interrupted_flag, config::Config, get_port, was_interrupted},
+    anyhow::{Context, Result},
+    console::style,
+    hisiflash::MonitorSession,
+    rust_i18n::t,
+    std::{
+        io,
+        io::{IsTerminal, Write as _},
+        path::PathBuf,
+    },
+};
 
 fn contains_reset_evidence(text: &str) -> bool {
     let lower = text.to_ascii_lowercase();
@@ -27,7 +28,8 @@ fn contains_reset_evidence(text: &str) -> bool {
 
 /// Run the serial monitor.
 ///
-/// - Reader thread: serial → terminal (with optional timestamps and ANSI passthrough)
+/// - Reader thread: serial → terminal (with optional timestamps and ANSI
+///   passthrough)
 /// - Main thread: keyboard (crossterm raw mode) → serial
 /// - Ctrl+C: graceful exit
 /// - Ctrl+R: reset device (DTR/RTS toggle)
@@ -41,12 +43,20 @@ pub(crate) fn cmd_monitor(
     clean_output: bool,
     log_file: Option<&PathBuf>,
 ) -> Result<()> {
-    use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyModifiers};
-    use crossterm::terminal;
-    use std::io::Read as _;
-    use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-    use std::sync::{Arc, Mutex};
-    use std::time::{Duration, SystemTime, UNIX_EPOCH};
+    use {
+        crossterm::{
+            event::{self, Event, KeyCode, KeyEvent, KeyModifiers},
+            terminal,
+        },
+        std::{
+            io::Read as _,
+            sync::{
+                Arc, Mutex,
+                atomic::{AtomicBool, AtomicU64, Ordering},
+            },
+            time::{Duration, SystemTime, UNIX_EPOCH},
+        },
+    };
 
     fn now_millis() -> u64 {
         SystemTime::now()
@@ -87,8 +97,8 @@ pub(crate) fn cmd_monitor(
     // Design trade-off (explicit):
     // - TTY mode: prioritize alignment/readability by coalescing monitor data and
     //   status lines onto one channel (stderr).
-    // - non-TTY mode: prioritize CLI stream contract by splitting channels:
-    //   monitor data -> stdout, status/hints -> stderr.
+    // - non-TTY mode: prioritize CLI stream contract by splitting channels: monitor
+    //   data -> stdout, status/hints -> stderr.
     let term_lock = Arc::new(Mutex::new(()));
 
     print_status_line(
@@ -490,8 +500,7 @@ impl Drop for RawModeGuard {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use hisiflash::split_utf8;
+    use {super::*, hisiflash::split_utf8};
 
     // ---- split_utf8 ----
 

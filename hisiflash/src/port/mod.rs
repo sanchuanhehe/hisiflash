@@ -37,11 +37,11 @@
 //!
 //! fn example<P: Port>(port: &mut P) -> std::io::Result<()> {
 //!     port.write_all(b"Hello")?;
-//!     
+//!
 //!     let mut buf = [0u8; 32];
 //!     let n = port.read(&mut buf)?;
 //!     println!("Received: {:?}", &buf[..n]);
-//!     
+//!
 //!     Ok(())
 //! }
 //! ```
@@ -52,10 +52,13 @@ pub mod native;
 #[cfg(feature = "wasm")]
 pub mod wasm;
 
-use std::io::{Read, Write};
-use std::time::Duration;
-
-use crate::error::Result;
+use {
+    crate::error::Result,
+    std::{
+        io::{Read, Write},
+        time::Duration,
+    },
+};
 
 /// Serial port configuration.
 #[derive(Debug, Clone)]
@@ -175,8 +178,8 @@ pub struct PortInfo {
 
 /// Unified port trait for serial communication.
 ///
-/// This trait provides a platform-agnostic interface for serial port operations.
-/// Implementations exist for:
+/// This trait provides a platform-agnostic interface for serial port
+/// operations. Implementations exist for:
 ///
 /// - Native platforms via the `serialport` crate
 /// - WASM/Web via the Web Serial API
@@ -245,7 +248,6 @@ pub trait PortEnumerator {
 // Re-export the appropriate implementation based on features
 #[cfg(feature = "native")]
 pub use native::{NativePort, NativePortEnumerator};
-
 #[cfg(feature = "wasm")]
 pub use wasm::{WebSerialPort, WebSerialPortEnumerator};
 

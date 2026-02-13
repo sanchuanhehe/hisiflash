@@ -3,18 +3,15 @@
 //! Builds a clap `Command` with fully translated section headings,
 //! subcommand descriptions, and argument help text.
 
-use clap::CommandFactory;
-use rust_i18n::t;
-
-use crate::Cli;
+use {crate::Cli, clap::CommandFactory, rust_i18n::t};
 
 /// Supported locales for i18n.
 pub(crate) const SUPPORTED_LOCALES: &[&str] = &["en", "zh-CN"];
 
 /// Detect the best matching locale from system settings.
 ///
-/// This function tries to match the system locale to one of the supported locales.
-/// It handles various locale formats like:
+/// This function tries to match the system locale to one of the supported
+/// locales. It handles various locale formats like:
 /// - `zh_CN.UTF-8` -> `zh-CN`
 /// - `zh-CN` -> `zh-CN`
 /// - `zh` -> `zh-CN`
@@ -56,8 +53,8 @@ pub(crate) fn detect_locale() -> String {
 /// Build a clap `Command` with fully localized help output.
 ///
 /// Uses clap as the single source of truth for structure (args, subcommands),
-/// while replacing all user-visible text (section headings, command descriptions,
-/// argument help) with translations from the locale files.
+/// while replacing all user-visible text (section headings, command
+/// descriptions, argument help) with translations from the locale files.
 pub(crate) fn build_localized_command() -> clap::Command {
     // Leak localized heading strings once (CLI runs once, tiny and harmless)
     let args_heading: &'static str = Box::leak(
@@ -72,11 +69,8 @@ pub(crate) fn build_localized_command() -> clap::Command {
     );
 
     let tpl = format!(
-        "{bin} {version}\n\n{about}\n\n\
-         {usage_h}:\n  {usage}\n\n\
-         {cmds_h}:\n{subcommands}\n\n\
-         {opts_h}:\n{options}\n\n\
-         {after_help}\n",
+        "{bin} {version}\n\n{about}\n\n{usage_h}:\n  \
+         {usage}\n\n{cmds_h}:\n{subcommands}\n\n{opts_h}:\n{options}\n\n{after_help}\n",
         bin = "{bin}",
         version = "{version}",
         about = "{about}",
@@ -90,9 +84,7 @@ pub(crate) fn build_localized_command() -> clap::Command {
     );
 
     let sub_tpl = format!(
-        "{bin} {version}\n\n{about}\n\n\
-         {usage_h}:\n  {usage}\n\n\
-         {all_args}\n",
+        "{bin} {version}\n\n{about}\n\n{usage_h}:\n  {usage}\n\n{all_args}\n",
         bin = "{bin}",
         version = "{version}",
         about = "{about}",

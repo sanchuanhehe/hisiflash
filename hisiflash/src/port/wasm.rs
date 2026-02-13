@@ -26,10 +26,16 @@
 //! wasm_module.set_serial_port(port);
 //! ```
 
-use crate::error::{Error, Result};
-use crate::port::{Port, PortEnumerator, PortInfo, SerialConfig};
-use std::io::{Read, Write};
-use std::time::Duration;
+use {
+    crate::{
+        error::{Error, Result},
+        port::{Port, PortEnumerator, PortInfo, SerialConfig},
+    },
+    std::{
+        io::{Read, Write},
+        time::Duration,
+    },
+};
 
 /// Web Serial port implementation.
 ///
@@ -54,8 +60,8 @@ impl WebSerialPort {
     /// be opened from JavaScript.
     pub fn new(_config: &SerialConfig) -> Result<Self> {
         Err(Error::Unsupported(
-            "Web Serial API support is not yet implemented. \
-             Please use the native version of hisiflash."
+            "Web Serial API support is not yet implemented. Please use the native version of \
+             hisiflash."
                 .to_string(),
         ))
     }
@@ -185,8 +191,8 @@ impl PortEnumerator for WebSerialPortEnumerator {
         // Web Serial API doesn't allow enumeration without user gesture
         // getPorts() only returns previously granted ports
         Err(Error::Unsupported(
-            "Web Serial cannot enumerate ports without user interaction. \
-             Use navigator.serial.requestPort() from JavaScript instead."
+            "Web Serial cannot enumerate ports without user interaction. Use \
+             navigator.serial.requestPort() from JavaScript instead."
                 .to_string(),
         ))
     }
@@ -201,7 +207,8 @@ impl PortEnumerator for WebSerialPortEnumerator {
 /// inherently async Web Serial API.
 ///
 /// Note: This trait is intended for internal use within this crate.
-/// The `async fn` in traits warning is suppressed as we control all implementations.
+/// The `async fn` in traits warning is suppressed as we control all
+/// implementations.
 #[cfg(feature = "wasm")]
 #[allow(async_fn_in_trait)]
 pub trait AsyncPort {

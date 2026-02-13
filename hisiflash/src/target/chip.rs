@@ -3,10 +3,14 @@
 //! This module provides a trait-based abstraction for different chip families,
 //! allowing the same codebase to support WS63, BS2X, and other HiSilicon chips.
 
-use crate::error::{Error, Result};
-use crate::image::fwpkg::Fwpkg;
-use crate::port::{Port, SerialConfig};
-use std::fmt;
+use {
+    crate::{
+        error::{Error, Result},
+        image::fwpkg::Fwpkg,
+        port::{Port, SerialConfig},
+    },
+    std::fmt,
+};
 
 /// Supported chip families.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
@@ -170,7 +174,8 @@ pub trait Flasher {
     ///
     /// * `fwpkg` - The firmware package to flash
     /// * `filter` - Optional filter for partition names (None = flash all)
-    /// * `progress` - Progress callback (partition_name, current_bytes, total_bytes)
+    /// * `progress` - Progress callback (partition_name, current_bytes,
+    ///   total_bytes)
     fn flash_fwpkg(
         &mut self,
         fwpkg: &Fwpkg,
@@ -244,7 +249,8 @@ impl ChipFamily {
         }
     }
 
-    /// Create a flasher with an existing port (generic, works for any Port type).
+    /// Create a flasher with an existing port (generic, works for any Port
+    /// type).
     ///
     /// This is useful for testing or custom port implementations.
     #[cfg(feature = "native")]

@@ -32,14 +32,20 @@
 //! }
 //! ```
 
-use crate::error::{Error, Result};
-use crate::image::fwpkg::Fwpkg;
-use crate::port::Port;
-use crate::protocol::ymodem::{YmodemConfig, YmodemTransfer};
-use crate::target::ws63::protocol::{CommandFrame, DEFAULT_BAUD, contains_handshake_ack};
-use log::{debug, info, trace, warn};
-use std::thread;
-use std::time::{Duration, Instant};
+use {
+    crate::{
+        error::{Error, Result},
+        image::fwpkg::Fwpkg,
+        port::Port,
+        protocol::ymodem::{YmodemConfig, YmodemTransfer},
+        target::ws63::protocol::{CommandFrame, DEFAULT_BAUD, contains_handshake_ack},
+    },
+    log::{debug, info, trace, warn},
+    std::{
+        thread,
+        time::{Duration, Instant},
+    },
+};
 
 /// Timeout for waiting for handshake.
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(30);
@@ -329,7 +335,8 @@ impl<P: Port> Ws63Flasher<P> {
     ///
     /// * `fwpkg` - The firmware package to flash
     /// * `filter` - Optional filter for partition names (None = flash all)
-    /// * `progress` - Progress callback (partition_name, current_bytes, total_bytes)
+    /// * `progress` - Progress callback (partition_name, current_bytes,
+    ///   total_bytes)
     pub fn flash_fwpkg<F>(
         &mut self,
         fwpkg: &Fwpkg,
@@ -414,7 +421,8 @@ impl<P: Port> Ws63Flasher<P> {
                 Err(e) => {
                     if attempt < MAX_DOWNLOAD_RETRIES {
                         warn!(
-                            "Download failed for {name} (attempt {attempt}/{MAX_DOWNLOAD_RETRIES}): {e}"
+                            "Download failed for {name} (attempt \
+                             {attempt}/{MAX_DOWNLOAD_RETRIES}): {e}"
                         );
                         warn!("Retrying...");
                         last_error = Some(e);
@@ -469,8 +477,8 @@ impl<P: Port> Ws63Flasher<P> {
         self.send_command(&frame)?;
 
         // Wait for ACK frame (SEBOOT magic response) from device
-        // The device responds with a SEBOOT frame after processing the download command.
-        // ws63flash calls uart_read_until_magic() here.
+        // The device responds with a SEBOOT frame after processing the download
+        // command. ws63flash calls uart_read_until_magic() here.
         self.wait_for_magic(MAGIC_TIMEOUT)?;
 
         // Transfer using YMODEM
@@ -556,8 +564,10 @@ impl<P: Port> Ws63Flasher<P> {
 // Native-specific convenience functions
 #[cfg(feature = "native")]
 mod native_impl {
-    use super::{DEFAULT_BAUD, Duration, Error, Result, Ws63Flasher, debug, thread, warn};
-    use crate::port::NativePort;
+    use {
+        super::{DEFAULT_BAUD, Duration, Error, Result, Ws63Flasher, debug, thread, warn},
+        crate::port::NativePort,
+    };
 
     impl Ws63Flasher<NativePort> {
         /// Create a new WS63 flasher by opening a serial port.
@@ -639,7 +649,8 @@ mod native_impl {
                     },
                     Err(e) => {
                         warn!(
-                            "Failed to open port {port_name} (attempt {attempt}/{MAX_OPEN_PORT_ATTEMPTS}): {e}"
+                            "Failed to open port {port_name} (attempt \
+                             {attempt}/{MAX_OPEN_PORT_ATTEMPTS}): {e}"
                         );
                         last_error = Some(e);
 
@@ -706,10 +717,14 @@ impl<P: Port> crate::target::Flasher for Ws63Flasher<P> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::port::Port;
-    use std::io::{Read, Write};
-    use std::sync::{Arc, Mutex};
+    use {
+        super::*,
+        crate::port::Port,
+        std::{
+            io::{Read, Write},
+            sync::{Arc, Mutex},
+        },
+    };
 
     /// Mock port implementation for testing without real hardware.
     ///
@@ -984,7 +999,8 @@ mod tests {
         assert_eq!(port2.name(), "COM3");
     }
 
-    /// Test creating flasher with mock port through ChipFamily::create_flasher_with_port.
+    /// Test creating flasher with mock port through
+    /// ChipFamily::create_flasher_with_port.
     #[test]
     fn test_create_flasher_with_mock_port() {
         use crate::target::ChipFamily;
@@ -995,7 +1011,8 @@ mod tests {
         assert!(flasher.is_ok());
         let flasher = flasher.unwrap();
 
-        // Flasher should be usable (even though connect will fail without mock response data)
+        // Flasher should be usable (even though connect will fail without mock response
+        // data)
         assert_eq!(flasher.connection_baud(), 115200); // DEFAULT_BAUD for handshake
         assert_eq!(flasher.target_baud(), Some(921600));
     }
@@ -1053,9 +1070,11 @@ mod tests {
     /// Regression: erase_size must be aligned to 0x1000 (4KB) boundary.
     ///
     /// The official fbb_burntool aligns erase_size to 0x1000:
-    ///   `if (eraseSize % 0x1000 != 0) eraseSize = 0x1000 * (eraseSize / 0x1000 + 1)`
+    ///   `if (eraseSize % 0x1000 != 0) eraseSize = 0x1000 * (eraseSize / 0x1000
+    /// + 1)`
     ///
-    /// Previously hisiflash passed `len` directly as erase_size without alignment.
+    /// Previously hisiflash passed `len` directly as erase_size without
+    /// alignment.
     #[test]
     fn test_erase_size_alignment_4k() {
         // Already aligned values should stay the same
@@ -1081,8 +1100,8 @@ mod tests {
     /// Regression: wait_for_magic correctly detects SEBOOT magic bytes.
     ///
     /// After LoaderBoot transfer and after each download command, the device
-    /// sends a SEBOOT frame starting with 0xDEADBEEF (little-endian: EF BE AD DE).
-    /// wait_for_magic must find this pattern in the byte stream.
+    /// sends a SEBOOT frame starting with 0xDEADBEEF (little-endian: EF BE AD
+    /// DE). wait_for_magic must find this pattern in the byte stream.
     #[test]
     fn test_wait_for_magic_finds_magic() {
         let port = MockPort::new("/dev/ttyUSB0");
@@ -1117,7 +1136,8 @@ mod tests {
     /// Regression: wait_for_magic with magic preceded by partial match.
     ///
     /// Tests the edge case where some bytes of the magic appear before the
-    /// full magic sequence (e.g., 0xEF followed by garbage, then the real magic).
+    /// full magic sequence (e.g., 0xEF followed by garbage, then the real
+    /// magic).
     #[test]
     fn test_wait_for_magic_partial_then_real() {
         let port = MockPort::new("/dev/ttyUSB0");
@@ -1141,7 +1161,8 @@ mod tests {
     ///
     /// In the official fbb_burntool, `SendBurnCmd()` skips the download payload
     /// for LOADER type: `if (GetCurrentCmdType() != BurnCtrl::LOADER)`.
-    /// ws63flash also only calls ymodem_xfer() directly after handshake for LoaderBoot.
+    /// ws63flash also only calls ymodem_xfer() directly after handshake for
+    /// LoaderBoot.
     ///
     /// Previously hisiflash called download_binary() for LoaderBoot, which sent
     /// a 0xD2 download command frame. This caused the device to misinterpret
@@ -1185,8 +1206,8 @@ mod tests {
 
         assert!(
             !has_download_cmd,
-            "LoaderBoot transfer must NOT send download command (0xD2). \
-             Written data should only contain YMODEM blocks, not SEBOOT command frames."
+            "LoaderBoot transfer must NOT send download command (0xD2). Written data should only \
+             contain YMODEM blocks, not SEBOOT command frames."
         );
 
         // Also verify that the YMODEM transfer actually wrote something
@@ -1203,7 +1224,8 @@ mod tests {
         );
     }
 
-    /// Regression: download_binary for normal partitions MUST send download command (0xD2).
+    /// Regression: download_binary for normal partitions MUST send download
+    /// command (0xD2).
     ///
     /// After LoaderBoot, all subsequent partitions require a download command
     /// with addr, len, and aligned erase_size before the YMODEM transfer.
@@ -1218,7 +1240,8 @@ mod tests {
         response.extend_from_slice(&[0x0C, 0x00, 0xE1, 0x1E, 0x5A, 0x00, 0x00, 0x00]);
         // Note: wait_for_magic drains remaining bytes after the magic in one read call,
         // so YMODEM responses (C, ACKs) get consumed. This is a mock limitation.
-        // We just verify the download command was sent; full flow is tested on hardware.
+        // We just verify the download command was sent; full flow is tested on
+        // hardware.
         port.add_read_data(&response);
 
         let mut flasher = Ws63Flasher::new(port, 921600);
@@ -1250,12 +1273,13 @@ mod tests {
 
         assert!(
             has_download_cmd,
-            "Normal partition download must send download command (0xD2). \
-             Written data should contain a SEBOOT command frame."
+            "Normal partition download must send download command (0xD2). Written data should \
+             contain a SEBOOT command frame."
         );
     }
 
-    /// Regression: download command frame must contain properly aligned erase_size.
+    /// Regression: download command frame must contain properly aligned
+    /// erase_size.
     ///
     /// Verifies the actual bytes written in the download command frame have
     /// the erase_size field aligned to 0x1000 (4KB).
@@ -1266,8 +1290,8 @@ mod tests {
         let frame = CommandFrame::download(0x00800000, 100, (100 + 0xFFF) & !0xFFF);
         let data = frame.build();
 
-        // Frame layout: Magic(4) + Len(2) + CMD(1) + SCMD(1) + addr(4) + len(4) + erase_size(4) + const(2) + CRC(2)
-        // erase_size starts at offset 16
+        // Frame layout: Magic(4) + Len(2) + CMD(1) + SCMD(1) + addr(4) + len(4) +
+        // erase_size(4) + const(2) + CRC(2) erase_size starts at offset 16
         let erase_size = u32::from_le_bytes([data[16], data[17], data[18], data[19]]);
         assert_eq!(
             erase_size, 0x1000,

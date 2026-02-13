@@ -1,5 +1,12 @@
 # Rustfmt configuration for hisiflash
 # https://rust-lang.github.io/rustfmt/
+#
+# Usage:
+#   - Stable: cargo fmt
+#   - Nightly: rustup run nightly cargo fmt
+#
+# For automatic nightly formatting, add this alias to your shell:
+#   alias cargo-fmt='rustup run nightly cargo fmt'
 
 edition = "2024"
 max_width = 100
@@ -21,22 +28,13 @@ use_small_heuristics = "Default"
 use_field_init_shorthand = true
 force_explicit_abi = true
 
-# ---------------------------------------------------------------------------
-# Experimental options (uncomment if using nightly rustfmt)
-# These require: rustup run nightly cargo fmt
-# ---------------------------------------------------------------------------
-# Imports - group and sort
+# Nightly-only options (will be silently ignored on stable)
+# Uncomment these or use rustup run nightly cargo fmt:
 # imports_granularity = "One"
 # group_imports = "StdExternalCrate"
-
-# Comments
 # normalize_comments = true
 # wrap_comments = true
 # comment_width = 80
-
-# Doc comments
 # format_code_in_doc_comments = true
-
-# Strings
 # format_strings = true
 # format_macro_matchers = true

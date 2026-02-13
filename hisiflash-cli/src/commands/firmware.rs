@@ -4,15 +4,17 @@
 //! searches the current directory tree for `.fwpkg` files and presents
 //! an interactive selection if multiple candidates are found.
 
-use std::path::{Path, PathBuf};
-use std::time::SystemTime;
-
-use anyhow::{Context, Result};
-use console::style;
-use dialoguer::{Select, theme::ColorfulTheme};
-use rust_i18n::t;
-
-use crate::use_fancy_output;
+use {
+    crate::use_fancy_output,
+    anyhow::{Context, Result},
+    console::style,
+    dialoguer::{Select, theme::ColorfulTheme},
+    rust_i18n::t,
+    std::{
+        path::{Path, PathBuf},
+        time::SystemTime,
+    },
+};
 
 /// Maximum directory depth when searching for firmware files.
 const MAX_SEARCH_DEPTH: usize = 5;
@@ -356,8 +358,7 @@ fn truncate_start(s: &str, max_width: usize) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use std::fs;
+    use {super::*, std::fs};
 
     /// Helper to create a temporary directory structure with firmware files.
     fn create_test_tree(dir: &Path, files: &[&str]) {
