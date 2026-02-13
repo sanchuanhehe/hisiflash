@@ -35,6 +35,7 @@ fn contains_reset_evidence(text: &str) -> bool {
 pub(crate) fn cmd_monitor(
     cli: &Cli,
     config: &mut Config,
+    monitor_port_override: Option<&str>,
     monitor_baud: u32,
     timestamp: bool,
     clean_output: bool,
@@ -75,7 +76,11 @@ pub(crate) fn cmd_monitor(
         }
     }
 
-    let port_name = get_port(cli, config)?;
+    let port_name = if let Some(port) = monitor_port_override {
+        port.to_string()
+    } else {
+        get_port(cli, config)?
+    };
     let tty_mode = io::stdout().is_terminal() && io::stderr().is_terminal();
     // Design trade-off (explicit):
     // - TTY mode: prioritize alignment/readability by coalescing monitor data and

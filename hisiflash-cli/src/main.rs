@@ -233,6 +233,10 @@ enum Commands {
         #[arg(long, default_value = "115200")]
         monitor_baud: u32,
 
+        /// Serial port for monitor session (can differ from flashing port).
+        #[arg(long)]
+        monitor_port: Option<String>,
+
         /// Clean monitor output by filtering non-printable control characters.
         #[arg(long = "monitor-clean-output", action = clap::ArgAction::Set, default_value_t = true)]
         monitor_clean_output: bool,
@@ -301,6 +305,10 @@ enum Commands {
 
     /// Open serial monitor.
     Monitor {
+        /// Serial port for monitor session (overrides global --port for this command).
+        #[arg(long)]
+        monitor_port: Option<String>,
+
         /// Baud rate for monitoring (default: 115200).
         #[arg(long, default_value = "115200")]
         monitor_baud: u32,
@@ -524,6 +532,7 @@ fn run_with_args(raw_args: &[String]) -> Result<()> {
             skip_verify,
             monitor,
             monitor_baud,
+            monitor_port,
             monitor_clean_output,
             monitor_raw,
         } => {
@@ -541,6 +550,7 @@ fn run_with_args(raw_args: &[String]) -> Result<()> {
                 cmd_monitor(
                     &cli,
                     &mut config,
+                    monitor_port.as_deref(),
                     *monitor_baud,
                     false,
                     *monitor_clean_output && !*monitor_raw,
@@ -580,6 +590,7 @@ fn run_with_args(raw_args: &[String]) -> Result<()> {
             cmd_list_ports(*json);
         },
         Commands::Monitor {
+            monitor_port,
             monitor_baud,
             timestamp,
             log,
@@ -589,6 +600,7 @@ fn run_with_args(raw_args: &[String]) -> Result<()> {
             cmd_monitor(
                 &cli,
                 &mut config,
+                monitor_port.as_deref(),
                 *monitor_baud,
                 *timestamp,
                 *clean_output && !*raw,
@@ -868,6 +880,7 @@ mod cli_tests {
             skip_verify,
             monitor,
             monitor_baud,
+            monitor_port,
             monitor_clean_output,
             monitor_raw,
         } = cli.command
@@ -878,6 +891,7 @@ mod cli_tests {
             assert!(skip_verify);
             assert!(monitor);
             assert_eq!(monitor_baud, 115200);
+            assert_eq!(monitor_port, None);
             assert!(monitor_clean_output);
             assert!(!monitor_raw);
         } else {
@@ -974,6 +988,37 @@ mod cli_tests {
         let cli = Cli::try_parse_from(["hisiflash", "monitor", "--monitor-baud", "9600"]).unwrap();
         if let Commands::Monitor { monitor_baud, .. } = cli.command {
             assert_eq!(monitor_baud, 9600);
+        } else {
+            panic!("Expected Monitor command");
+        }
+    }
+
+    #[test]
+    fn test_cli_parse_flash_monitor_port() {
+        let cli = Cli::try_parse_from([
+            "hisiflash",
+            "flash",
+            "fw.fwpkg",
+            "--monitor",
+            "--monitor-port",
+            "/dev/ttyUSB1",
+        ])
+        .unwrap();
+
+        if let Commands::Flash { monitor_port, .. } = cli.command {
+            assert_eq!(monitor_port.as_deref(), Some("/dev/ttyUSB1"));
+        } else {
+            panic!("Expected Flash command");
+        }
+    }
+
+    #[test]
+    fn test_cli_parse_monitor_with_monitor_port() {
+        let cli = Cli::try_parse_from(["hisiflash", "monitor", "--monitor-port", "/dev/ttyUSB2"])
+            .unwrap();
+
+        if let Commands::Monitor { monitor_port, .. } = cli.command {
+            assert_eq!(monitor_port.as_deref(), Some("/dev/ttyUSB2"));
         } else {
             panic!("Expected Monitor command");
         }

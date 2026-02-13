@@ -136,6 +136,7 @@ arg.raw.help: "输出原始串口数据（不做控制字符过滤）"
 
 # flash --monitor-baud
 arg.monitor_baud_flash.help: "串口监视器波特率 (配合 --monitor 使用)"
+arg.monitor_port.help: "监视器会话使用的串口（可与烧录端口不同）"
 
 # completions 命令选项
 arg.shell.help: "Shell 补全脚本类型"

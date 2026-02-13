@@ -136,6 +136,7 @@ arg.raw.help: "Show raw serial output without control-character filtering"
 
 # Flash --monitor-baud
 arg.monitor_baud_flash.help: "Baud rate for serial monitor (used with --monitor)"
+arg.monitor_port.help: "Serial port for monitor session (can differ from flashing port)"
 
 # Completions command options
 arg.shell.help: "Shell type for completions"
