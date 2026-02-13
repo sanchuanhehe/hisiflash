@@ -677,32 +677,36 @@ fn run_with_args(raw_args: &[String]) -> Result<()> {
 }
 
 fn apply_config_defaults(cli: &mut Cli, matches: &clap::ArgMatches, config: &Config) -> Result<()> {
-    if matches.value_source("baud") == Some(ValueSource::DefaultValue)
-        && let Some(config_baud) = config
+    // Apply default baud from config if not set on command line
+    if matches.value_source("baud") == Some(ValueSource::DefaultValue) {
+        if let Some(config_baud) = config
             .port
             .connection
             .baud
-    {
-        cli.baud = config_baud;
+        {
+            cli.baud = config_baud;
+        }
     }
 
-    if matches.value_source("chip") == Some(ValueSource::DefaultValue)
-        && let Some(config_chip_name) = config
+    // Apply default chip from config if not set on command line
+    if matches.value_source("chip") == Some(ValueSource::DefaultValue) {
+        if let Some(config_chip_name) = config
             .flash
             .chip
             .as_deref()
-    {
-        let config_chip = Chip::from_config_name(config_chip_name).ok_or_else(|| {
-            CliError::Config(
-                t!(
-                    "error.invalid_config_chip",
-                    chip = config_chip_name,
-                    supported = "ws63, bs2x, bs25"
+        {
+            let config_chip = Chip::from_config_name(config_chip_name).ok_or_else(|| {
+                CliError::Config(
+                    t!(
+                        "error.invalid_config_chip",
+                        chip = config_chip_name,
+                        supported = "ws63, bs2x, bs25"
+                    )
+                    .to_string(),
                 )
-                .to_string(),
-            )
-        })?;
-        cli.chip = config_chip;
+            })?;
+            cli.chip = config_chip;
+        }
     }
 
     match &mut cli.command {
