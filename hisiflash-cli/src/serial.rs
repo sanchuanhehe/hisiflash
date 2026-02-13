@@ -15,7 +15,7 @@ use crate::config::Config;
 use anyhow::Result;
 use console::style;
 use dialoguer::{Confirm, Error as DialoguerError, Select, theme::ColorfulTheme};
-use hisiflash::{DetectedPort, UsbDevice, discover_ports};
+use hisiflash::{DetectedPort, TransportKind, UsbDevice, discover_ports};
 use log::{debug, error, info};
 use rust_i18n::t;
 
@@ -179,6 +179,7 @@ fn find_port_by_name(name: &str) -> SelectedPort {
     SelectedPort {
         port: DetectedPort {
             name: name.to_string(),
+            transport: TransportKind::Serial,
             device: UsbDevice::Unknown,
             vid: None,
             pid: None,
@@ -341,7 +342,7 @@ mod tests {
     use super::*;
     use console::style;
     use console::{measure_text_width, truncate_str};
-    use hisiflash::connection::detect::{DetectedPort, UsbDevice};
+    use hisiflash::{DetectedPort, TransportKind, UsbDevice};
 
     fn strip_ansi_codes(s: &str) -> String {
         let mut out = String::new();
@@ -434,6 +435,7 @@ mod tests {
     fn test_is_known_device_builtin() {
         let port = DetectedPort {
             name: "/dev/ttyUSB0".to_string(),
+            transport: TransportKind::Serial,
             device: UsbDevice::Ch340,
             vid: Some(0x1A86),
             pid: Some(0x7523),
@@ -449,6 +451,7 @@ mod tests {
     fn test_is_known_device_unknown() {
         let port = DetectedPort {
             name: "/dev/ttyUSB0".to_string(),
+            transport: TransportKind::Serial,
             device: UsbDevice::Unknown,
             vid: Some(0x9999),
             pid: Some(0x9999),
@@ -464,6 +467,7 @@ mod tests {
     fn test_is_known_device_from_config() {
         let port = DetectedPort {
             name: "/dev/ttyUSB0".to_string(),
+            transport: TransportKind::Serial,
             device: UsbDevice::Unknown,
             vid: Some(0xABCD),
             pid: Some(0x1234),
@@ -483,6 +487,7 @@ mod tests {
     fn test_is_known_device_no_vid_pid() {
         let port = DetectedPort {
             name: "/dev/ttyS0".to_string(),
+            transport: TransportKind::Serial,
             device: UsbDevice::Unknown,
             vid: None,
             pid: None,
@@ -501,6 +506,7 @@ mod tests {
         let sp = SelectedPort {
             port: DetectedPort {
                 name: "COM1".to_string(),
+                transport: TransportKind::Serial,
                 device: UsbDevice::Cp210x,
                 vid: Some(0x10C4),
                 pid: Some(0xEA60),
@@ -522,6 +528,7 @@ mod tests {
         let ports = vec![
             DetectedPort {
                 name: "/dev/ttyUSB0".to_string(),
+                transport: TransportKind::Serial,
                 device: UsbDevice::Unknown,
                 vid: None,
                 pid: None,
@@ -531,6 +538,7 @@ mod tests {
             },
             DetectedPort {
                 name: "/dev/ttyUSB1".to_string(),
+                transport: TransportKind::Serial,
                 device: UsbDevice::Unknown,
                 vid: None,
                 pid: None,
@@ -564,6 +572,7 @@ mod tests {
     fn test_select_non_interactive_single_port_returns_selected_port() {
         let ports = vec![DetectedPort {
             name: "/dev/ttyUSB0".to_string(),
+            transport: TransportKind::Serial,
             device: UsbDevice::Unknown,
             vid: None,
             pid: None,

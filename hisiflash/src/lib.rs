@@ -58,7 +58,7 @@
 #![warn(missing_docs)]
 #![warn(clippy::all)]
 
-pub mod connection;
+pub mod device;
 pub mod error;
 pub mod host;
 pub mod image;
@@ -70,6 +70,7 @@ pub mod target;
 // Re-exports for convenience
 pub use error::{Error, Result};
 pub use image::fwpkg::{Fwpkg, FwpkgBinInfo, FwpkgHeader, FwpkgVersion, PartitionType};
+pub use device::{DetectedPort, DeviceKind, TransportKind, UsbDevice};
 pub use port::{Port, PortEnumerator, PortInfo, SerialConfig};
 pub use protocol::seboot::{
     CommandType, ImageType, SebootAck, SebootFrame, contains_handshake_ack,
@@ -81,11 +82,6 @@ pub use target::{ChipConfig, ChipFamily, ChipOps, Flasher};
 #[cfg(feature = "native")]
 pub use port::{NativePort, NativePortEnumerator};
 
-// Legacy re-exports for backward compatibility
-pub use connection::ConnectionPort;
-pub use connection::detect::{DetectedPort, UsbDevice};
-#[cfg(feature = "native")]
-pub use connection::serial::SerialPort;
 pub use host::{auto_detect_port, discover_hisilicon_ports, discover_ports};
 pub use monitor::{
     MonitorSession, clean_monitor_text, drain_utf8_lossy, format_monitor_output, split_utf8,

@@ -24,12 +24,10 @@ hisiflash/
 │       ├── lib.rs                # 库入口
 │       ├── error.rs              # 错误定义
 │       │
-│       ├── connection/           # 连接模块 (旧版，正被 port/ 替代)
-│       │   ├── mod.rs
-│       │   ├── serial.rs         # 串口连接
-│       │   └── detect.rs         # USB VID/PID 自动检测
+│       ├── device/               # 设备发现与分类模块
+│       │   └── mod.rs            # 端点发现 + USB VID/PID 分类
 │       │
-│       ├── port/                 # 新 Port 抽象 (跨平台)
+│       ├── port/                 # Port 传输抽象 (跨平台)
 │       │   ├── mod.rs            # Port trait 定义
 │       │   ├── native.rs         # 原生串口 (Linux/macOS/Windows)
 │       │   └── wasm.rs           # WASM/Web Serial API (实验性)
@@ -310,12 +308,12 @@ pub mod control {
 }
 
 /// YMODEM 传输器
-pub struct YmodemTransfer<'a, P: ConnectionPort> {
+pub struct YmodemTransfer<'a, P: Port> {
     port: &'a mut P,
     verbose: u8,
 }
 
-impl<'a, P: ConnectionPort> YmodemTransfer<'a, P> {
+impl<'a, P: Port> YmodemTransfer<'a, P> {
     pub fn new(port: &'a mut P, verbose: u8) -> Self {
         Self { port, verbose }
     }
@@ -377,7 +375,7 @@ pub fn crc16_xmodem(data: &[u8]) -> u16 {
 
 /// WS63 烧写器
 pub struct Ws63Flasher {
-    port: Box<dyn ConnectionPort>,
+    port: NativePort,
     baud: u32,
     late_baud: bool,
     verbose: u8,
@@ -422,68 +420,57 @@ impl Ws63Flasher {
 
 ```rust
 // lib.rs
-pub mod connection;
+pub mod device;
+pub mod port;
 pub mod target;
-pub mod flasher;
 pub mod protocol;
 pub mod image;
-pub mod command;
 pub mod error;
+pub mod host;
 
 // Re-exports
 pub use error::{Error, Result};
-pub use connection::{Connection, Port};
-pub use target::{Chip, ChipTarget};
-pub use flasher::{Flasher, FlashData, FlashSettings};
-pub use image::{FirmwareImage, ImageFormat};
+pub use device::{DetectedPort, DeviceKind, TransportKind};
+pub use port::{Port, PortEnumerator, PortInfo, SerialConfig};
+pub use target::{ChipFamily, ChipOps, Flasher};
+pub use host::{discover_ports, discover_hisilicon_ports, auto_detect_port};
 ```
 
 ### 主要 Traits
 
-#### ConnectionPort - 连接抽象
+#### Port - 传输抽象
 
 ```rust
-// connection/mod.rs
+// port/mod.rs
 use std::time::Duration;
 use crate::Result;
 
-/// 连接端口抽象 trait
-pub trait ConnectionPort: Send {
-    /// 打开连接
-    fn open(&mut self) -> Result<()>;
-    
-    /// 关闭连接
-    fn close(&mut self) -> Result<()>;
-    
-    /// 连接是否打开
-    fn is_open(&self) -> bool;
-    
-    /// 写入数据
-    fn write(&mut self, data: &[u8]) -> Result<usize>;
-    
-    /// 读取数据
-    fn read(&mut self, buf: &mut [u8]) -> Result<usize>;
-    
-    /// 读取到超时
-    fn read_timeout(&mut self, buf: &mut [u8], timeout: Duration) -> Result<usize>;
-    
-    /// 设置超时
+/// 统一传输端口抽象 trait
+pub trait Port: Read + Write + Send {
+    /// 设置读写超时
     fn set_timeout(&mut self, timeout: Duration) -> Result<()>;
-    
-    /// 设置波特率 (仅串口)
+
+    /// 获取当前超时
+    fn timeout(&self) -> Duration;
+
+    /// 设置波特率
     fn set_baud_rate(&mut self, baud: u32) -> Result<()>;
-    
+
     /// 获取波特率
     fn baud_rate(&self) -> u32;
-    
-    /// 清空缓冲区
-    fn flush(&mut self) -> Result<()>;
-    
-    /// 清空输入缓冲区
-    fn clear_input(&mut self) -> Result<()>;
-    
-    /// 端口标识
-    fn port_name(&self) -> &str;
+
+    /// 清理缓冲区
+    fn clear_buffers(&mut self) -> Result<()>;
+
+    /// 端口名称
+    fn name(&self) -> &str;
+
+    /// 控制线
+    fn set_dtr(&mut self, level: bool) -> Result<()>;
+    fn set_rts(&mut self, level: bool) -> Result<()>;
+
+    /// 关闭端口
+    fn close(&mut self) -> Result<()>;
 }
 ```
 
@@ -564,7 +551,7 @@ pub trait ChipTarget: Send + Sync {
 ```rust
 // protocol/mod.rs
 use std::path::Path;
-use crate::{ConnectionPort, Result};
+use crate::{Port, Result};
 
 /// 传输进度回调
 pub type ProgressCallback = Box<dyn Fn(u64, u64) + Send>;
@@ -575,18 +562,18 @@ pub trait TransferProtocol: Send {
     fn name(&self) -> &'static str;
     
     /// 初始化协议
-    fn init(&mut self, conn: &mut dyn ConnectionPort) -> Result<()>;
+    fn init(&mut self, port: &mut dyn Port) -> Result<()>;
     
     /// 发送数据块
-    fn send_block(&mut self, conn: &mut dyn ConnectionPort, data: &[u8]) -> Result<()>;
+    fn send_block(&mut self, port: &mut dyn Port, data: &[u8]) -> Result<()>;
     
     /// 接收数据块
-    fn receive_block(&mut self, conn: &mut dyn ConnectionPort) -> Result<Vec<u8>>;
+    fn receive_block(&mut self, port: &mut dyn Port) -> Result<Vec<u8>>;
     
     /// 发送文件
     fn send_file<P: AsRef<Path>>(
         &mut self, 
-        conn: &mut dyn ConnectionPort, 
+        port: &mut dyn Port,
         path: P,
         progress: Option<ProgressCallback>
     ) -> Result<()>;
@@ -594,16 +581,16 @@ pub trait TransferProtocol: Send {
     /// 接收文件
     fn receive_file<P: AsRef<Path>>(
         &mut self,
-        conn: &mut dyn ConnectionPort,
+        port: &mut dyn Port,
         path: P,
         progress: Option<ProgressCallback>
     ) -> Result<()>;
     
     /// 结束传输
-    fn finish(&mut self, conn: &mut dyn ConnectionPort) -> Result<()>;
+    fn finish(&mut self, port: &mut dyn Port) -> Result<()>;
     
     /// 取消传输
-    fn cancel(&mut self, conn: &mut dyn ConnectionPort) -> Result<()>;
+    fn cancel(&mut self, port: &mut dyn Port) -> Result<()>;
 }
 ```
 

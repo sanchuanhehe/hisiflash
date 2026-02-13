@@ -82,9 +82,8 @@ hisiflash/
 │   └── src/
 │       ├── lib.rs                # Library entry point
 │       ├── error.rs              # Error definitions
-│       ├── connection/           # Serial port handling (legacy, being replaced by port/)
-│       │   ├── serial.rs         # Serial port abstraction
-│       │   └── detect.rs         # USB VID/PID auto-detection
+│       ├── device/               # Device discovery and classification
+│       │   └── mod.rs            # Endpoint detection + USB bridge classification
 │       ├── port/                 # New port abstraction (cross-platform)
 │       │   ├── mod.rs            # Port trait definition
 │       │   ├── native.rs         # Native serial port (Linux/macOS/Windows)
@@ -115,7 +114,7 @@ hisiflash/
 |--------|---------|
 | `protocol::seboot` | Official HiSilicon SEBOOT protocol (0xDEADBEEF frames) |
 | `protocol::ymodem` | YMODEM-1K file transfer protocol |
-| `connection::detect` | USB VID/PID based port auto-detection (CH340, CP210x, FTDI, etc.) |
+| `device` | Endpoint discovery + USB VID/PID classification (CH340, CP210x, FTDI, etc.) |
 | `target::chip` | Chip family abstraction (WS63, BS2X, etc.) |
 | `target::ws63::flasher` | WS63 flasher with retry mechanisms |
 | `image::fwpkg` | FWPKG firmware package parser |

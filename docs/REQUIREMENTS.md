@@ -372,28 +372,28 @@ pub trait ChipTarget {
 }
 ```
 
-#### 4.3.2 连接方式扩展
+#### 4.3.2 传输方式扩展
 
 ```rust
-// 连接 trait
-pub trait ConnectionPort: Send {
-    /// 打开连接
-    fn open(&mut self) -> Result<()>;
-    
-    /// 关闭连接
-    fn close(&mut self) -> Result<()>;
-    
-    /// 写入数据
-    fn write(&mut self, data: &[u8]) -> Result<usize>;
-    
-    /// 读取数据
-    fn read(&mut self, buf: &mut [u8]) -> Result<usize>;
-    
+// 统一传输 trait
+pub trait Port: Read + Write + Send {
     /// 设置超时
     fn set_timeout(&mut self, timeout: Duration) -> Result<()>;
+
+  /// 获取超时
+  fn timeout(&self) -> Duration;
+
+  /// 设置波特率（适用于串口类传输）
+  fn set_baud_rate(&mut self, baud: u32) -> Result<()>;
+
+  /// 获取波特率
+  fn baud_rate(&self) -> u32;
     
     /// 清空缓冲区
-    fn flush(&mut self) -> Result<()>;
+  fn clear_buffers(&mut self) -> Result<()>;
+
+  /// 连接名称/地址
+  fn name(&self) -> &str;
 }
 ```
 
@@ -406,13 +406,13 @@ pub trait TransferProtocol {
     fn name(&self) -> &'static str;
     
     /// 发送数据
-    fn send(&mut self, conn: &mut dyn ConnectionPort, data: &[u8]) -> Result<()>;
+    fn send(&mut self, port: &mut dyn Port, data: &[u8]) -> Result<()>;
     
     /// 接收数据
-    fn receive(&mut self, conn: &mut dyn ConnectionPort) -> Result<Vec<u8>>;
+    fn receive(&mut self, port: &mut dyn Port) -> Result<Vec<u8>>;
     
     /// 发送文件
-    fn send_file<P: AsRef<Path>>(&mut self, conn: &mut dyn ConnectionPort, path: P) -> Result<()>;
+    fn send_file<P: AsRef<Path>>(&mut self, port: &mut dyn Port, path: P) -> Result<()>;
 }
 ```
 
@@ -425,13 +425,11 @@ pub trait TransferProtocol {
 ```toml
 # HisiFlash 全局配置文件
 
-[connection]
+[port.connection]
 # 默认串口
-default_port = "/dev/ttyUSB0"
+serial = "/dev/ttyUSB0"
 # 默认波特率
-default_baud = 115200
-# 超时时间 (毫秒)
-timeout = 5000
+baud = 115200
 
 [flash]
 # 默认擦除模式: "normal", "all", "none"

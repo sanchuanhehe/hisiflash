@@ -382,10 +382,8 @@ hisiflash/
 │   └── src/
 │       ├── lib.rs
 │       ├── error.rs        # 错误类型
-│       ├── connection/     # 连接抽象 (旧版)
-│       │   ├── mod.rs
-│       │   ├── serial.rs
-│       │   └── detect.rs   # USB VID/PID 检测
+│       ├── device/         # 设备发现与分类
+│       │   └── mod.rs      # 端点发现 + USB VID/PID 分类
 │       ├── port/           # Port 抽象 (跨平台)
 │       │   ├── mod.rs
 │       │   ├── native.rs
