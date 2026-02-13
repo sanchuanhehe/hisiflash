@@ -18,6 +18,7 @@ Primary references:
 - GNU CLI standards (`--help`, `--version`, long options)
 - Git CLI conventions (disambiguation with `--`, options-before-args discipline)
 - CLIG (human-first UX, errors, output, discoverability)
+- [External Standards Reference](./references/external-standards.md) (compiled URLs and key points)
 
 ## When to activate
 
