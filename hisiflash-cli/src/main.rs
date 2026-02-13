@@ -19,7 +19,7 @@ use {
     clap_complete::Shell,
     console::style,
     env_logger::Env,
-    hisiflash::{ChipFamily, Error as LibError},
+    hisiflash::{ChipFamily, Error as LibError, set_interrupt_checker},
     log::debug,
     rust_i18n::t,
     std::{env, path::PathBuf, sync::OnceLock},
@@ -414,6 +414,7 @@ fn main() {
 fn run() -> Result<()> {
     install_signal_handler()?;
     clear_interrupted_flag();
+    set_interrupt_checker(was_interrupted);
 
     let raw_args: Vec<String> = env::args().collect();
     let result = run_with_args(&raw_args);

@@ -68,6 +68,56 @@ const MAX_CONNECT_ATTEMPTS: usize = 7;
 /// Maximum number of download retry attempts.
 const MAX_DOWNLOAD_RETRIES: usize = 3;
 
+fn is_interrupted_error(e: &Error) -> bool {
+    match e {
+        Error::Io(io) => {
+            io.kind() == std::io::ErrorKind::Interrupted
+                || io.raw_os_error() == Some(4)
+                || io
+                    .to_string()
+                    .to_ascii_lowercase()
+                    .contains("interrupted")
+        },
+        Error::Serial(serial) => {
+            matches!(
+                serial.kind(),
+                serialport::ErrorKind::Io(std::io::ErrorKind::Interrupted)
+            ) || serial
+                .to_string()
+                .to_ascii_lowercase()
+                .contains("interrupted")
+        },
+        _ => e
+            .to_string()
+            .to_ascii_lowercase()
+            .contains("interrupted"),
+    }
+}
+
+fn check_user_interrupted() -> Result<()> {
+    if crate::is_interrupted_requested() {
+        return Err(Error::Io(std::io::Error::new(
+            std::io::ErrorKind::Interrupted,
+            "operation interrupted",
+        )));
+    }
+    Ok(())
+}
+
+fn sleep_interruptible(total: Duration) -> Result<()> {
+    const CHUNK: Duration = Duration::from_millis(20);
+
+    let start = Instant::now();
+    while start.elapsed() < total {
+        check_user_interrupted()?;
+        let elapsed = start.elapsed();
+        let remain = total.saturating_sub(elapsed);
+        thread::sleep(remain.min(CHUNK));
+    }
+
+    Ok(())
+}
+
 /// WS63 flasher.
 ///
 /// Generic over the port type `P`, which must implement the `Port` trait.
@@ -126,6 +176,8 @@ impl<P: Port> Ws63Flasher<P> {
         info!("Please reset the device to enter download mode.");
 
         for attempt in 1..=MAX_CONNECT_ATTEMPTS {
+            check_user_interrupted()?;
+
             if attempt > 1 {
                 info!("Connection attempt {attempt}/{MAX_CONNECT_ATTEMPTS}");
             }
@@ -135,9 +187,13 @@ impl<P: Port> Ws63Flasher<P> {
                     return Ok(());
                 },
                 Err(e) => {
+                    if is_interrupted_error(&e) {
+                        return Err(e);
+                    }
+
                     if attempt < MAX_CONNECT_ATTEMPTS {
                         warn!("Connection failed (attempt {attempt}/{MAX_CONNECT_ATTEMPTS}): {e}");
-                        thread::sleep(CONNECT_RETRY_DELAY);
+                        sleep_interruptible(CONNECT_RETRY_DELAY)?;
                         self.port
                             .clear_buffers()?;
                     } else {
@@ -154,6 +210,8 @@ impl<P: Port> Ws63Flasher<P> {
 
     /// Single connection attempt.
     fn try_connect(&mut self) -> Result<()> {
+        check_user_interrupted()?;
+
         self.port
             .clear_buffers()?;
 
@@ -163,19 +221,29 @@ impl<P: Port> Ws63Flasher<P> {
 
         // Send handshake frames repeatedly until we get a response
         while start.elapsed() < HANDSHAKE_TIMEOUT {
+            check_user_interrupted()?;
+
             // Send handshake
             if let Err(e) = self
                 .port
                 .write_all(&handshake_data)
             {
+                if e.kind() == std::io::ErrorKind::Interrupted {
+                    return Err(Error::Io(e));
+                }
                 trace!("Write error (ignoring): {e}");
             }
-            let _ = self
+            if let Err(e) = self
                 .port
-                .flush();
+                .flush()
+            {
+                if e.kind() == std::io::ErrorKind::Interrupted {
+                    return Err(Error::Io(e));
+                }
+            }
 
             // Small delay
-            thread::sleep(Duration::from_millis(10));
+            sleep_interruptible(Duration::from_millis(10))?;
 
             // Check for response
             let mut buf = [0u8; 256];
@@ -199,6 +267,9 @@ impl<P: Port> Ws63Flasher<P> {
                 Ok(_) => {},
                 Err(e) if e.kind() == std::io::ErrorKind::TimedOut => {},
                 Err(e) => {
+                    if e.kind() == std::io::ErrorKind::Interrupted {
+                        return Err(Error::Io(e));
+                    }
                     trace!("Read error (ignoring): {e}");
                 },
             }
@@ -212,6 +283,8 @@ impl<P: Port> Ws63Flasher<P> {
 
     /// Change the baud rate.
     fn change_baud_rate(&mut self, baud: u32) -> Result<()> {
+        check_user_interrupted()?;
+
         info!("Changing baud rate to {baud}");
 
         // Send baud rate change command
@@ -219,14 +292,14 @@ impl<P: Port> Ws63Flasher<P> {
         self.send_command(&frame)?;
 
         // Wait for command to be processed
-        thread::sleep(BAUD_CHANGE_DELAY);
+        sleep_interruptible(BAUD_CHANGE_DELAY)?;
 
         // Change local baud rate
         self.port
             .set_baud_rate(baud)?;
 
         // Clear buffers
-        thread::sleep(BAUD_CHANGE_DELAY);
+        sleep_interruptible(BAUD_CHANGE_DELAY)?;
         self.port
             .clear_buffers()?;
 
@@ -265,6 +338,8 @@ impl<P: Port> Ws63Flasher<P> {
         debug!("Waiting for SEBOOT magic...");
 
         while start.elapsed() < timeout {
+            check_user_interrupted()?;
+
             let mut buf = [0u8; 1];
             match self
                 .port
@@ -275,7 +350,7 @@ impl<P: Port> Ws63Flasher<P> {
                         match_idx += 1;
                         if match_idx == magic.len() {
                             // Found magic, drain remaining frame data
-                            thread::sleep(Duration::from_millis(50));
+                            sleep_interruptible(Duration::from_millis(50))?;
                             let mut drain = [0u8; 256];
                             let _ = self
                                 .port
@@ -290,7 +365,12 @@ impl<P: Port> Ws63Flasher<P> {
                 },
                 Ok(_) => {},
                 Err(e) if e.kind() == std::io::ErrorKind::TimedOut => {},
-                Err(e) => return Err(Error::Io(e)),
+                Err(e) => {
+                    if e.kind() == std::io::ErrorKind::Interrupted {
+                        return Err(Error::Io(e));
+                    }
+                    return Err(Error::Io(e));
+                },
             }
         }
 
@@ -307,6 +387,8 @@ impl<P: Port> Ws63Flasher<P> {
     where
         F: FnMut(&str, usize, usize),
     {
+        check_user_interrupted()?;
+
         debug!(
             "Transferring LoaderBoot {} ({} bytes) via YMODEM",
             name,
@@ -346,6 +428,8 @@ impl<P: Port> Ws63Flasher<P> {
     where
         F: FnMut(&str, usize, usize),
     {
+        check_user_interrupted()?;
+
         // Get LoaderBoot
         let loaderboot = fwpkg
             .loaderboot()
@@ -368,6 +452,8 @@ impl<P: Port> Ws63Flasher<P> {
 
         // Flash remaining partitions
         for bin in fwpkg.normal_bins() {
+            check_user_interrupted()?;
+
             // Apply filter if provided
             if let Some(names) = filter {
                 if !names
@@ -392,7 +478,7 @@ impl<P: Port> Ws63Flasher<P> {
 
             // Inter-partition delay to prevent serial data stale
             // (MCU won't respond if next command follows immediately)
-            thread::sleep(PARTITION_DELAY);
+            sleep_interruptible(PARTITION_DELAY)?;
         }
 
         info!("Flashing complete!");
@@ -411,14 +497,22 @@ impl<P: Port> Ws63Flasher<P> {
     where
         F: FnMut(&str, usize, usize),
     {
+        check_user_interrupted()?;
+
         let mut last_error = None;
 
         for attempt in 1..=MAX_DOWNLOAD_RETRIES {
+            check_user_interrupted()?;
+
             match self.try_download_binary(name, data, addr, progress) {
                 Ok(()) => {
                     return Ok(());
                 },
                 Err(e) => {
+                    if is_interrupted_error(&e) || crate::is_interrupted_requested() {
+                        return Err(e);
+                    }
+
                     if attempt < MAX_DOWNLOAD_RETRIES {
                         warn!(
                             "Download failed for {name} (attempt \
@@ -431,7 +525,7 @@ impl<P: Port> Ws63Flasher<P> {
                         let _ = self
                             .port
                             .clear_buffers();
-                        thread::sleep(CONNECT_RETRY_DELAY);
+                        sleep_interruptible(CONNECT_RETRY_DELAY)?;
                     } else {
                         return Err(e);
                     }
@@ -456,6 +550,8 @@ impl<P: Port> Ws63Flasher<P> {
     where
         F: FnMut(&str, usize, usize),
     {
+        check_user_interrupted()?;
+
         // Check for oversized data that would truncate
         let len = u32::try_from(data.len()).map_err(|_| {
             Error::Protocol(format!("Firmware too large ({} bytes > 4GB)", data.len()))
@@ -507,6 +603,8 @@ impl<P: Port> Ws63Flasher<P> {
     /// * `loaderboot` - LoaderBoot binary data (required for first-stage boot)
     /// * `bins` - List of (data, address) pairs to flash
     pub fn write_bins(&mut self, loaderboot: &[u8], bins: &[(&[u8], u32)]) -> Result<()> {
+        check_user_interrupted()?;
+
         info!("Writing LoaderBoot ({} bytes)", loaderboot.len());
 
         // Transfer LoaderBoot (no download command)
@@ -525,12 +623,14 @@ impl<P: Port> Ws63Flasher<P> {
             .iter()
             .enumerate()
         {
+            check_user_interrupted()?;
+
             let name = format!("binary_{i}");
             info!("Writing {} ({} bytes) to 0x{:08X}", name, data.len(), addr);
             self.download_binary(&name, data, *addr, &mut |_, _, _| {})?;
 
             // Inter-partition delay
-            thread::sleep(PARTITION_DELAY);
+            sleep_interruptible(PARTITION_DELAY)?;
         }
 
         Ok(())
@@ -538,13 +638,15 @@ impl<P: Port> Ws63Flasher<P> {
 
     /// Erase entire flash.
     pub fn erase_all(&mut self) -> Result<()> {
+        check_user_interrupted()?;
+
         info!("Erasing entire flash...");
 
         let frame = CommandFrame::erase_all();
         self.send_command(&frame)?;
 
         // Wait for erase to complete
-        thread::sleep(Duration::from_secs(5));
+        sleep_interruptible(Duration::from_secs(5))?;
 
         info!("Flash erased");
         Ok(())
@@ -552,6 +654,8 @@ impl<P: Port> Ws63Flasher<P> {
 
     /// Reset the device.
     pub fn reset(&mut self) -> Result<()> {
+        check_user_interrupted()?;
+
         info!("Resetting device...");
 
         let frame = CommandFrame::reset();
@@ -565,7 +669,9 @@ impl<P: Port> Ws63Flasher<P> {
 #[cfg(feature = "native")]
 mod native_impl {
     use {
-        super::{DEFAULT_BAUD, Duration, Error, Result, Ws63Flasher, debug, thread, warn},
+        super::{
+            DEFAULT_BAUD, Duration, Error, Result, Ws63Flasher, debug, sleep_interruptible, warn,
+        },
         crate::port::NativePort,
     };
 
@@ -618,7 +724,7 @@ mod native_impl {
                         last_error = Some(e);
 
                         if attempt < MAX_OPEN_PORT_ATTEMPTS {
-                            thread::sleep(OPEN_RETRY_DELAY);
+                            sleep_interruptible(OPEN_RETRY_DELAY)?;
                         }
                     },
                 }
@@ -655,7 +761,7 @@ mod native_impl {
                         last_error = Some(e);
 
                         if attempt < MAX_OPEN_PORT_ATTEMPTS {
-                            thread::sleep(OPEN_RETRY_DELAY);
+                            sleep_interruptible(OPEN_RETRY_DELAY)?;
                         }
                     },
                 }
@@ -1061,6 +1167,51 @@ mod tests {
         assert!(result.is_err());
         // Verify error is the Unsupported variant
         assert!(matches!(result, Err(crate::error::Error::Unsupported(_))));
+    }
+
+    #[test]
+    fn test_is_interrupted_error_for_io_interrupted_and_message() {
+        let e1 = Error::Io(std::io::Error::new(
+            std::io::ErrorKind::Interrupted,
+            "operation interrupted",
+        ));
+        assert!(is_interrupted_error(&e1));
+
+        let e2 = Error::Io(std::io::Error::other("Interrupted system call"));
+        assert!(is_interrupted_error(&e2));
+    }
+
+    #[test]
+    fn test_download_binary_interrupted_short_circuits_retry() {
+        crate::test_set_interrupted(true);
+
+        let port = MockPort::new("/dev/ttyUSB0");
+        let mut flasher = Ws63Flasher::new(port, 921600);
+        let mut progress_calls = 0usize;
+
+        let result = flasher.download_binary(
+            "app.bin",
+            &[0x01, 0x02, 0x03],
+            0x0023_0000,
+            &mut |_, _, _| {
+                progress_calls += 1;
+            },
+        );
+
+        assert!(matches!(
+            result,
+            Err(Error::Io(ref io)) if io.kind() == std::io::ErrorKind::Interrupted
+        ));
+        assert_eq!(progress_calls, 0);
+        assert!(
+            flasher
+                .port
+                .get_written_data()
+                .is_empty(),
+            "Interrupted download should not send frames or enter retry loop"
+        );
+
+        crate::test_set_interrupted(false);
     }
 
     // =====================================================================

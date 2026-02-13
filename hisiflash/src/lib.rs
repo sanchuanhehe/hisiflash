@@ -58,6 +58,8 @@
 #![warn(missing_docs)]
 #![warn(clippy::all)]
 
+use std::sync::{Arc, OnceLock};
+
 pub mod device;
 pub mod error;
 pub mod host;
@@ -66,6 +68,45 @@ pub mod monitor;
 pub mod port;
 pub mod protocol;
 pub mod target;
+
+static INTERRUPT_CHECKER: OnceLock<Arc<dyn Fn() -> bool + Send + Sync>> = OnceLock::new();
+
+/// Register a global interruption checker used by long-running library loops.
+///
+/// The checker should return `true` when the current operation should stop
+/// (for example after receiving Ctrl-C in CLI applications).
+pub fn set_interrupt_checker<F>(checker: F)
+where
+    F: Fn() -> bool + Send + Sync + 'static,
+{
+    let _ = INTERRUPT_CHECKER.set(Arc::new(checker));
+}
+
+/// Returns whether interruption was requested by the embedding application.
+#[must_use]
+pub fn is_interrupted_requested() -> bool {
+    INTERRUPT_CHECKER
+        .get()
+        .is_some_and(|checker| checker())
+}
+
+#[cfg(test)]
+pub(crate) fn test_set_interrupted(value: bool) {
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    static TEST_INTERRUPT_FLAG: OnceLock<Arc<AtomicBool>> = OnceLock::new();
+
+    let flag = TEST_INTERRUPT_FLAG
+        .get_or_init(|| {
+            let shared = Arc::new(AtomicBool::new(false));
+            let checker = Arc::clone(&shared);
+            set_interrupt_checker(move || checker.load(Ordering::Relaxed));
+            shared
+        })
+        .clone();
+
+    flag.store(value, Ordering::Relaxed);
+}
 
 // Re-exports for convenience
 // Native-specific re-exports
@@ -84,3 +125,23 @@ pub use {
     port::{Port, PortEnumerator, PortInfo, SerialConfig},
     protocol::seboot::{CommandType, ImageType, SebootAck, SebootFrame, contains_handshake_ack},
 };
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_interrupt_checker_default_false() {
+        test_set_interrupted(false);
+        assert!(!is_interrupted_requested());
+    }
+
+    #[test]
+    fn test_interrupt_checker_toggle_true_false() {
+        test_set_interrupted(true);
+        assert!(is_interrupted_requested());
+
+        test_set_interrupted(false);
+        assert!(!is_interrupted_requested());
+    }
+}

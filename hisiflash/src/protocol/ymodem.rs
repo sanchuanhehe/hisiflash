@@ -83,6 +83,17 @@ pub struct YmodemTransfer<'a, P: Read + Write> {
 }
 
 impl<'a, P: Read + Write> YmodemTransfer<'a, P> {
+    fn check_interrupted() -> Result<()> {
+        if crate::is_interrupted_requested() {
+            return Err(Error::Io(std::io::Error::new(
+                std::io::ErrorKind::Interrupted,
+                "operation interrupted",
+            )));
+        }
+
+        Ok(())
+    }
+
     /// Create a new YMODEM transfer handler.
     pub fn new(port: &'a mut P) -> Self {
         Self {
@@ -124,6 +135,8 @@ impl<'a, P: Read + Write> YmodemTransfer<'a, P> {
                 .config
                 .c_timeout
         {
+            Self::check_interrupted()?;
+
             match self.read_byte(
                 self.config
                     .char_timeout,
@@ -181,6 +194,7 @@ impl<'a, P: Read + Write> YmodemTransfer<'a, P> {
             .config
             .max_retries
         {
+            Self::check_interrupted()?;
             trace!("Sending block (attempt {})", retry + 1);
 
             self.port
@@ -248,6 +262,8 @@ impl<'a, P: Read + Write> YmodemTransfer<'a, P> {
             .config
             .max_retries
         {
+            Self::check_interrupted()?;
+
             self.port
                 .write_all(&[control::EOT])?;
             self.port
@@ -293,6 +309,8 @@ impl<'a, P: Read + Write> YmodemTransfer<'a, P> {
     where
         F: FnMut(usize, usize),
     {
+        Self::check_interrupted()?;
+
         debug!(
             "Starting YMODEM transfer: {} ({} bytes)",
             filename,
@@ -314,6 +332,8 @@ impl<'a, P: Read + Write> YmodemTransfer<'a, P> {
         let total = data.len();
 
         while offset < total {
+            Self::check_interrupted()?;
+
             let chunk_end = (offset + STX_BLOCK_SIZE).min(total);
             let chunk = &data[offset..chunk_end];
 
@@ -577,5 +597,55 @@ mod tests {
             progress_calls, num_blocks,
             "Progress should be called once per block"
         );
+    }
+
+    #[test]
+    fn test_wait_for_c_interrupted_immediate() {
+        crate::test_set_interrupted(true);
+
+        let mut port = MockSerial::new(&[]);
+        let config = YmodemConfig {
+            char_timeout: Duration::from_millis(50),
+            c_timeout: Duration::from_millis(100),
+            max_retries: 1,
+            verbose: 0,
+        };
+
+        let mut ymodem = YmodemTransfer::with_config(&mut port, config);
+        let result = ymodem.wait_for_c();
+
+        assert!(matches!(
+            result,
+            Err(Error::Io(ref io)) if io.kind() == std::io::ErrorKind::Interrupted
+        ));
+
+        crate::test_set_interrupted(false);
+    }
+
+    #[test]
+    fn test_transfer_interrupted_before_start() {
+        crate::test_set_interrupted(true);
+
+        let mut port = MockSerial::new(&[]);
+        let config = YmodemConfig {
+            char_timeout: Duration::from_millis(50),
+            c_timeout: Duration::from_millis(100),
+            max_retries: 1,
+            verbose: 0,
+        };
+
+        let mut ymodem = YmodemTransfer::with_config(&mut port, config);
+        let result = ymodem.transfer("app.bin", &[0x11, 0x22], |_, _| {});
+
+        assert!(matches!(
+            result,
+            Err(Error::Io(ref io)) if io.kind() == std::io::ErrorKind::Interrupted
+        ));
+        assert!(
+            port.write_buf.is_empty(),
+            "Interrupted transfer should not write any YMODEM data"
+        );
+
+        crate::test_set_interrupted(false);
     }
 }
