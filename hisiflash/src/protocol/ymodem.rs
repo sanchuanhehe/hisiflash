@@ -642,7 +642,8 @@ mod tests {
             Err(Error::Io(ref io)) if io.kind() == std::io::ErrorKind::Interrupted
         ));
         assert!(
-            port.write_buf.is_empty(),
+            port.write_buf
+                .is_empty(),
             "Interrupted transfer should not write any YMODEM data"
         );
 
