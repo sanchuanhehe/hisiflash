@@ -62,7 +62,10 @@ fn list_ports_json_returns_valid_json() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     // Parse should succeed - this validates JSON machinery works
     if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&stdout) {
-        assert!(parsed.is_array() || parsed.is_null(), "should be JSON array or null");
+        assert!(
+            parsed.is_array() || parsed.is_null(),
+            "should be JSON array or null"
+        );
     }
     // Even if parse fails, the test validates command runs without crash
 }
@@ -103,24 +106,15 @@ fn non_interactive_flash_with_multiple_firmwares_fails_fast() {
 fn exit_code_zero_on_success() {
     // --help exits 0
     let mut cmd = cli_cmd();
-    cmd.arg("--help")
-        .assert()
-        .success()
-        .code(0);
+    cmd.arg("--help").assert().success().code(0);
 
     // --version exits 0
     let mut cmd = cli_cmd();
-    cmd.arg("--version")
-        .assert()
-        .success()
-        .code(0);
+    cmd.arg("--version").assert().success().code(0);
 
     // completions bash exits 0 (doesn't require hardware)
     let mut cmd = cli_cmd();
-    cmd.args(["completions", "bash"])
-        .assert()
-        .success()
-        .code(0);
+    cmd.args(["completions", "bash"]).assert().success().code(0);
 }
 
 /// Exit code 2: usage error (unknown command, invalid arguments)
@@ -137,10 +131,7 @@ fn exit_code_two_for_usage_error_unknown_command() {
 #[test]
 fn exit_code_two_for_usage_error_invalid_flag() {
     let mut cmd = cli_cmd();
-    cmd.arg("--invalid-flag-xyz")
-        .assert()
-        .failure()
-        .code(2);
+    cmd.arg("--invalid-flag-xyz").assert().failure().code(2);
 }
 
 #[test]
@@ -171,7 +162,10 @@ fn exit_code_three_for_config_error_invalid_file() {
         .output()
         .expect("command should execute");
     // Should succeed but warn about config
-    assert!(output.status.success(), "command should succeed despite config warning");
+    assert!(
+        output.status.success(),
+        "command should succeed despite config warning"
+    );
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("TOML"), "should warn about invalid TOML");
 }
@@ -210,9 +204,7 @@ fn exit_code_130_for_cancelled_operation() {
     // Here we verify the test exists and document the contract
     // The actual Ctrl+C test requires signal handling which is hard to simulate
     let mut cmd = cli_cmd();
-    cmd.arg("--help")
-        .assert()
-        .code(0); // Sanity check - help is NOT cancelled
+    cmd.arg("--help").assert().code(0); // Sanity check - help is NOT cancelled
 }
 
 /// Exit code 1: generic error fallback
@@ -220,10 +212,13 @@ fn exit_code_130_for_cancelled_operation() {
 fn exit_code_one_for_unexpected_error() {
     // info with non-existent file should fail with error
     let mut cmd = cli_cmd();
-    cmd.args(["info", "/tmp/this_file_definitely_does_not_exist_12345.fwpkg"])
-        .assert()
-        .failure()
-        .code(1);
+    cmd.args([
+        "info",
+        "/tmp/this_file_definitely_does_not_exist_12345.fwpkg",
+    ])
+    .assert()
+    .failure()
+    .code(1);
 }
 
 // ============================================================================
@@ -296,10 +291,8 @@ fn info_command_with_valid_file_writes_to_stdout() {
     // and not fail with "file not found" type error
     let valid_header: Vec<u8> = vec![
         // FWPKG magic "HFWP"
-        0x48, 0x46, 0x57, 0x50,
-        // Version (1.0.0)
-        0x01, 0x00, 0x00,
-        // Entry count = 0
+        0x48, 0x46, 0x57, 0x50, // Version (1.0.0)
+        0x01, 0x00, 0x00, // Entry count = 0
         0x00, 0x00, 0x00, 0x00,
     ];
     fs::write(&fwpkg, valid_header).expect("write test fwpkg");
@@ -406,7 +399,10 @@ fn json_output_is_valid_json_without_extra_lines() {
     // For successful commands with JSON flag, stderr should be empty
     let status = output.status;
     if status.success() {
-        assert!(stderr.is_empty(), "JSON output should not have stderr: got {stderr}");
+        assert!(
+            stderr.is_empty(),
+            "JSON output should not have stderr: got {stderr}"
+        );
     }
 }
 
@@ -431,12 +427,7 @@ fn colors_disabled_when_not_tty() {
     // When stdout is not a TTY, colors should be disabled
     // This is tested by running in non-TTY mode (like in tests)
     let mut cmd = cli_cmd();
-    let output = cmd
-        .arg("--help")
-        .assert()
-        .success()
-        .get_output()
-        .clone();
+    let output = cmd.arg("--help").assert().success().get_output().clone();
 
     let stdout = String::from_utf8(output.stdout).expect("stdout should be utf-8");
     // ANSI color codes should NOT appear in non-TTY output
