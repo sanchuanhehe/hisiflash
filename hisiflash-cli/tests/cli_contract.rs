@@ -104,7 +104,8 @@ fn non_interactive_flash_with_multiple_firmwares_fails_fast() {
         .arg("flash")
         .assert()
         .failure()
-        .stderr(predicate::str::contains("multiple").or(predicate::str::contains("多个")));
+        // Case-insensitive match for "Multiple" vs "multiple"
+        .stderr(predicate::str::contains("multiple").or(predicate::str::contains("Multiple")).or(predicate::str::contains("多个")));
 }
 
 // ============================================================================
@@ -502,6 +503,7 @@ fn help_includes_usage_examples() {
     cmd.arg("--help")
         .assert()
         .success()
-        // Help may be localized (Chinese "用法", English "Usage")
-        .stdout(predicate::str::contains("用法").or(predicate::str::contains("Usage")));
+        // Help may be localized (Chinese "用法", English "USAGE")
+        // Use case-insensitive matching since output may be "USAGE" or "Usage"
+        .stdout(predicate::str::contains("用法").or(predicate::str::contains("USAGE")).or(predicate::str::contains("Usage")));
 }
