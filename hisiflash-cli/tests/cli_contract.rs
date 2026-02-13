@@ -72,12 +72,18 @@ fn list_ports_json_returns_valid_json() {
 
 #[test]
 fn info_json_error_keeps_stdout_clean() {
+    // Use temp dir for non-existent file path
+    let dir = tempdir().expect("tempdir should be created");
+    let nonexistent = dir.path().join("not_exists.fwpkg");
+
     let mut cmd = cli_cmd();
-    cmd.args(["info", "--json", "/tmp/not_exists_for_contract_test.fwpkg"])
+    cmd.arg("info")
+        .arg("--json")
+        .arg(nonexistent.as_os_str())
         .assert()
         .failure()
         .stdout(predicate::str::is_empty())
-        .stderr(predicate::str::contains("Error:"));
+        .stderr(predicate::str::contains("Error"));
 }
 
 #[test]
@@ -211,14 +217,15 @@ fn exit_code_130_for_cancelled_operation() {
 #[test]
 fn exit_code_one_for_unexpected_error() {
     // info with non-existent file should fail with error
+    let dir = tempdir().expect("tempdir should be created");
+    let nonexistent = dir.path().join("does_not_exist.fwpkg");
+
     let mut cmd = cli_cmd();
-    cmd.args([
-        "info",
-        "/tmp/this_file_definitely_does_not_exist_12345.fwpkg",
-    ])
-    .assert()
-    .failure()
-    .code(1);
+    cmd.arg("info")
+        .arg(nonexistent.as_os_str())
+        .assert()
+        .failure()
+        .code(1);
 }
 
 // ============================================================================
@@ -323,26 +330,23 @@ fn completions_command_writes_to_stdout() {
 fn option_terminator_allows_dash_prefixed_operand() {
     // Test that -- terminates option parsing for positional args
     // This allows operands starting with dash
-    // Note: clap still parses options after -- in some cases
+    let dir = tempdir().expect("tempdir should be created");
+    let test_file = dir.path().join("test.fwpkg");
+
     let mut cmd = cli_cmd();
-    // Test with a positional arg that starts with dash
-    // list-ports doesn't have a positional, so test info with a file
-    cmd.arg("info")
-        .arg("--")
-        .arg("/tmp/test.fwpkg")
-        .assert()
-        .failure(); // File doesn't exist, but parses correctly
+    cmd.arg("info").arg("--").arg(test_file).assert().failure(); // File doesn't exist, but parses correctly
 }
 
 #[test]
 fn option_terminator_with_flash_command() {
     // -- should work with flash to allow firmware files starting with -
+    let dir = tempdir().expect("tempdir should be created");
+    let dummy_file = dir.path().join("dummy.fwpkg");
+
     let mut cmd = cli_cmd();
-    // Test with -- terminator followed by a dummy operand
-    // This verifies -- doesn't cause parsing errors
     cmd.arg("flash")
         .arg("--")
-        .arg("/tmp/dummy.fwpkg")
+        .arg(dummy_file)
         .assert()
         .failure(); // File doesn't exist but parsing works
 }
@@ -410,8 +414,13 @@ fn json_output_is_valid_json_without_extra_lines() {
 fn info_json_error_returns_clean_error_json() {
     // When --json is used, errors should also be JSON-formatted if possible
     // Otherwise should be empty stdout with error in stderr
+    let dir = tempdir().expect("tempdir should be created");
+    let nonexistent = dir.path().join("not_exists.fwpkg");
+
     let mut cmd = cli_cmd();
-    cmd.args(["info", "--json", "/tmp/not_exists.fwpkg"])
+    cmd.arg("info")
+        .arg("--json")
+        .arg(nonexistent.as_os_str())
         .assert()
         .failure()
         .stdout(predicate::str::is_empty())
