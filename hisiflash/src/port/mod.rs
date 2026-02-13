@@ -209,10 +209,10 @@ pub trait Port: Read + Write + Send {
     fn set_rts(&mut self, level: bool) -> Result<()>;
 
     /// Read CTS (Clear To Send) pin state.
-    fn read_cts(&self) -> Result<bool>;
+    fn read_cts(&mut self) -> Result<bool>;
 
     /// Read DSR (Data Set Ready) pin state.
-    fn read_dsr(&self) -> Result<bool>;
+    fn read_dsr(&mut self) -> Result<bool>;
 
     /// Close the port and release resources.
     ///

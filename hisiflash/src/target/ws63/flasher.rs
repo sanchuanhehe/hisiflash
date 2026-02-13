@@ -825,11 +825,11 @@ mod tests {
             Ok(())
         }
 
-        fn read_cts(&self) -> Result<bool> {
+        fn read_cts(&mut self) -> Result<bool> {
             Ok(true) // Assume CTS is asserted
         }
 
-        fn read_dsr(&self) -> Result<bool> {
+        fn read_dsr(&mut self) -> Result<bool> {
             Ok(true) // Assume DSR is asserted
         }
 

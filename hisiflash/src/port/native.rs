@@ -122,15 +122,28 @@ impl Port for NativePort {
         Ok(())
     }
 
-    fn read_cts(&self) -> Result<bool> {
-        // Note: serialport requires &mut self for this, but our trait uses &self
-        // This is a limitation we accept for now
-        Ok(false)
+    fn read_cts(&mut self) -> Result<bool> {
+        if let Some(ref mut p) = self.port {
+            p.read_clear_to_send()
+                .map_err(Error::Serial)
+        } else {
+            Err(Error::Serial(serialport::Error::new(
+                serialport::ErrorKind::NoDevice,
+                "Port is closed",
+            )))
+        }
     }
 
-    fn read_dsr(&self) -> Result<bool> {
-        // Same limitation as read_cts
-        Ok(false)
+    fn read_dsr(&mut self) -> Result<bool> {
+        if let Some(ref mut p) = self.port {
+            p.read_data_set_ready()
+                .map_err(Error::Serial)
+        } else {
+            Err(Error::Serial(serialport::Error::new(
+                serialport::ErrorKind::NoDevice,
+                "Port is closed",
+            )))
+        }
     }
 
     fn close(&mut self) -> Result<()> {

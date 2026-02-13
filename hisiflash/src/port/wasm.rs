@@ -136,14 +136,14 @@ impl Port for WebSerialPort {
         ))
     }
 
-    fn read_cts(&self) -> Result<bool> {
+    fn read_cts(&mut self) -> Result<bool> {
         // Web Serial API supports getSignals for CTS
         Err(Error::Unsupported(
             "CTS reading not yet implemented for Web Serial.".to_string(),
         ))
     }
 
-    fn read_dsr(&self) -> Result<bool> {
+    fn read_dsr(&mut self) -> Result<bool> {
         // Web Serial API supports getSignals for DSR
         Err(Error::Unsupported(
             "DSR reading not yet implemented for Web Serial.".to_string(),
