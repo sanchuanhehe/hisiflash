@@ -56,6 +56,10 @@ pub enum Error {
     /// Configuration error.
     #[error("Configuration error: {0}")]
     Config(String),
+
+    /// Device disconnected during operation.
+    #[error("Device disconnected: {0}")]
+    DeviceDisconnected(String),
 }
 
 #[cfg(test)]

@@ -6,6 +6,7 @@ use {
     console::style,
     hisiflash::{ChipFamily, Fwpkg},
     indicatif::{ProgressBar, ProgressStyle},
+    log::debug,
     rust_i18n::t,
     std::path::PathBuf,
 };
@@ -177,9 +178,13 @@ pub(crate) fn cmd_flash(
     if !cli.quiet {
         eprintln!("{} {}", style("🔄").cyan(), t!("common.resetting"));
     }
-    if let Err(err) = flasher.reset() {
-        flasher.close();
-        return Err(err.into());
+
+    // After successful flashing, the target typically boots into normal app mode.
+    // Reconnecting in download mode here can hang on application logs.
+    if let Err(err) = flasher.reset_and_reconnect(false) {
+        // Even if reconnect fails, the reset command was sent
+        // This is expected behavior for normal reset
+        debug!("Reset completed with result (reconnect=false): {err}");
     }
 
     // Close the flasher to release the serial port
@@ -294,9 +299,8 @@ pub(crate) fn cmd_write(
         return Err(err);
     }
 
-    if let Err(err) = flasher.reset() {
-        flasher.close();
-        return Err(err.into());
+    if let Err(err) = flasher.reset_and_reconnect(false) {
+        debug!("Reset completed with result (reconnect=false): {err}");
     }
     flasher.close();
 

@@ -257,8 +257,29 @@ impl ResponseFrame {
 
 /// Check if data contains the handshake ACK pattern.
 pub fn contains_handshake_ack(data: &[u8]) -> bool {
-    data.windows(HANDSHAKE_ACK.len())
+    if data.len() < HANDSHAKE_ACK.len() {
+        return false;
+    }
+
+    // Fast path: exact known ACK bytes.
+    if data
+        .windows(HANDSHAKE_ACK.len())
         .any(|w| w == HANDSHAKE_ACK)
+    {
+        return true;
+    }
+
+    // Robust path: parse SEBOOT response frames and accept handshake ACK frames
+    // where first response data byte is ACK (0x5A), even if trailing bytes vary.
+    for start in 0..data.len() {
+        if let Some(frame) = ResponseFrame::parse(&data[start..]) {
+            if frame.is_handshake_ack() {
+                return true;
+            }
+        }
+    }
+
+    false
 }
 
 #[cfg(test)]
@@ -320,6 +341,22 @@ mod tests {
 
         // Should not find ACK in random data
         assert!(!contains_handshake_ack(&[0x00; 20]));
+    }
+
+    #[test]
+    fn test_contains_handshake_ack_with_nonzero_status_byte() {
+        // Some devices may return ACK frame with non-zero second status byte.
+        let mut buf = Vec::new();
+        buf.extend_from_slice(&FRAME_MAGIC.to_le_bytes());
+        buf.extend_from_slice(&12u16.to_le_bytes());
+        buf.push(0xE1);
+        buf.push(0x1E);
+        buf.push(0x5A);
+        buf.push(0x01); // non-zero status/details byte
+        let crc = crate::protocol::crc::crc16_xmodem(&buf);
+        buf.extend_from_slice(&crc.to_le_bytes());
+
+        assert!(contains_handshake_ack(&buf));
     }
 
     #[test]

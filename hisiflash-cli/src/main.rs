@@ -414,6 +414,7 @@ fn main() {
 fn run() -> Result<()> {
     install_signal_handler()?;
     clear_interrupted_flag();
+    hisiflash::set_interrupt_checker(was_interrupted);
 
     let raw_args: Vec<String> = env::args().collect();
     let result = run_with_args(&raw_args);
@@ -764,6 +765,15 @@ fn map_exit_code(err: &anyhow::Error) -> i32 {
     // Keep this mapping conservative to avoid breaking automation expectations.
     if let Some(lib_err) = err.downcast_ref::<LibError>() {
         return match lib_err {
+            LibError::Io(io) if io.kind() == std::io::ErrorKind::Interrupted => 130,
+            LibError::Serial(serial)
+                if matches!(
+                    serial.kind(),
+                    serialport::ErrorKind::Io(std::io::ErrorKind::Interrupted)
+                ) =>
+            {
+                130
+            },
             LibError::DeviceNotFound => 4,
             LibError::Config(_) => 3,
             LibError::Unsupported(_) => 5,
@@ -1372,6 +1382,24 @@ mod cli_tests {
     #[test]
     fn test_map_exit_code_cancelled_is_130() {
         let err = anyhow::Error::new(CliError::Cancelled("cancelled".to_string()));
+        assert_eq!(map_exit_code(&err), 130);
+    }
+
+    #[test]
+    fn test_map_exit_code_lib_io_interrupted_is_130() {
+        let err = anyhow::Error::new(LibError::Io(std::io::Error::new(
+            std::io::ErrorKind::Interrupted,
+            "interrupted",
+        )));
+        assert_eq!(map_exit_code(&err), 130);
+    }
+
+    #[test]
+    fn test_map_exit_code_lib_serial_interrupted_is_130() {
+        let err = anyhow::Error::new(LibError::Serial(serialport::Error::new(
+            serialport::ErrorKind::Io(std::io::ErrorKind::Interrupted),
+            "serial interrupted",
+        )));
         assert_eq!(map_exit_code(&err), 130);
     }
 

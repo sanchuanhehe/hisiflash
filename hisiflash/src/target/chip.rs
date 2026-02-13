@@ -192,6 +192,13 @@ pub trait Flasher {
     /// Reset the device.
     fn reset(&mut self) -> Result<()>;
 
+    /// Reset the device and wait for reconnection in download mode.
+    ///
+    /// This is useful when you need to reset and continue flashing.
+    /// The `reconnect` parameter controls whether to wait for the device
+    /// to reappear and reconnect.
+    fn reset_and_reconnect(&mut self, reconnect: bool) -> Result<()>;
+
     /// Get the connection baud rate.
     fn connection_baud(&self) -> u32;
 

@@ -58,6 +58,8 @@
 #![warn(missing_docs)]
 #![warn(clippy::all)]
 
+use std::sync::{Mutex, OnceLock};
+
 pub mod device;
 pub mod error;
 pub mod host;
@@ -66,6 +68,36 @@ pub mod monitor;
 pub mod port;
 pub mod protocol;
 pub mod target;
+
+type InterruptChecker = fn() -> bool;
+
+static INTERRUPT_CHECKER: OnceLock<Mutex<Option<InterruptChecker>>> = OnceLock::new();
+
+/// Register a process-level interruption checker (e.g. Ctrl-C flag reader).
+///
+/// The library polls this callback in long-running loops so operations can be
+/// cancelled promptly instead of waiting for timeouts.
+pub fn set_interrupt_checker(checker: InterruptChecker) {
+    let slot = INTERRUPT_CHECKER.get_or_init(|| Mutex::new(None));
+    if let Ok(mut guard) = slot.lock() {
+        *guard = Some(checker);
+    }
+}
+
+/// Returns whether an external interruption has been requested.
+pub fn is_interrupted_requested() -> bool {
+    let Some(slot) = INTERRUPT_CHECKER.get() else {
+        return false;
+    };
+
+    match slot.lock() {
+        Ok(guard) => match *guard {
+            Some(checker) => checker(),
+            None => false,
+        },
+        Err(_) => false,
+    }
+}
 
 // Re-exports for convenience
 // Native-specific re-exports
