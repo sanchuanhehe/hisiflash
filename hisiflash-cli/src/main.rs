@@ -437,10 +437,23 @@ fn run() -> Result<()> {
     }
 }
 
+/// Early argument parsing for locale-dependent features.
+///
+/// This function handles locale-related arguments BEFORE clap parsing because:
+/// 1. Help text needs to be displayed in the correct language
+/// 2. Clap's `#[arg(env = "...")]` only takes effect AFTER argument parsing
+/// 3. We want `HISIFLASH_LANG` env var to work for `--help` output
+///
+/// Priority (highest to lowest):
+/// - `--lang` command line argument
+/// - `HISIFLASH_LANG` environment variable
+/// - System locale detection (via sys_locale)
 fn run_with_args(raw_args: &[String]) -> Result<()> {
-    // Inspect raw args early to support localized --help handling and early --lang
-    // Extract --lang if provided early so help text is localized
-    let mut early_lang: Option<String> = None;
+    // Read locale from environment variable FIRST (clap can't do this early enough)
+    // This ensures `--help` shows localized text
+    let mut early_lang: Option<String> = std::env::var("HISIFLASH_LANG").ok();
+
+    // Then check for explicit --lang argument (overrides env var)
     for (i, arg) in raw_args
         .iter()
         .enumerate()
