@@ -57,7 +57,7 @@ fn install_signal_handler() -> Result<()> {
     ctrlc::set_handler(|| {
         INTERRUPTED.store(true, std::sync::atomic::Ordering::Relaxed);
         // Also set the global interrupt flag in the library
-        let _ = hisiflash::set_interrupt_flag();
+        hisiflash::set_interrupt_flag();
     })
     .map_err(|e| anyhow::anyhow!("failed to install Ctrl-C handler: {e}"))?;
 
