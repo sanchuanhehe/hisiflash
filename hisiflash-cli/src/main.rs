@@ -437,123 +437,62 @@ fn run() -> Result<()> {
     }
 }
 
-/// Early argument parsing for locale-dependent features.
+/// Parse arguments and handle help/version manually.
 ///
-/// This function handles locale-related arguments BEFORE clap parsing because:
-/// 1. Help text needs to be displayed in the correct language
-/// 2. Clap's `#[arg(env = "...")]` only takes effect AFTER argument parsing
-/// 3. We want `HISIFLASH_LANG` env var to work for `--help` output
-///
-/// Priority (highest to lowest):
-/// - `--lang` command line argument
-/// - `HISIFLASH_LANG` environment variable
-/// - System locale detection (via sys_locale)
+/// This approach allows clap's `#[arg(env = "...")]` to work normally,
+/// while still supporting localized help text.
 fn run_with_args(raw_args: &[String]) -> Result<()> {
-    // Read locale from environment variable FIRST (clap can't do this early enough)
-    // This ensures `--help` shows localized text
-    let mut early_lang: Option<String> = std::env::var("HISIFLASH_LANG").ok();
-
-    // Then check for explicit --lang argument (overrides env var)
-    for (i, arg) in raw_args
-        .iter()
-        .enumerate()
-    {
-        if let Some(val) = arg.strip_prefix("--lang=") {
-            early_lang = Some(val.to_string());
-        } else if arg == "--lang" && i + 1 < raw_args.len() {
-            early_lang = Some(raw_args[i + 1].clone());
-        }
-    }
-
-    let locale = early_lang
+    // First, set locale from env var (for help output before parsing)
+    let locale_from_env = std::env::var("HISIFLASH_LANG").ok();
+    let locale = locale_from_env
         .clone()
         .unwrap_or_else(detect_locale);
     rust_i18n::set_locale(&locale);
+
+    // Try to parse arguments (clap will read HISIFLASH_LANG from env automatically)
+    let matches = match Cli::command().try_get_matches_from(raw_args.to_owned()) {
+        Ok(m) => m,
+        Err(err) => {
+            match err.kind() {
+                // Handle version explicitly for i18n
+                ErrorKind::DisplayVersion => {
+                    println!("hisiflash {}", env!("CARGO_PKG_VERSION"));
+                    return Ok(());
+                },
+                // Handle help or no subcommand - show localized help
+                ErrorKind::DisplayHelp
+                | ErrorKind::MissingSubcommand
+                | ErrorKind::DisplayHelpOnMissingArgumentOrSubcommand => {
+                    let mut app = build_localized_command();
+                    let _ = app.print_help();
+                    return Ok(());
+                },
+                _ => return Err(CliError::Usage(err.to_string()).into()),
+            }
+        },
+    };
+
+    // Parse CLI struct from matches
+    let mut cli = Cli::from_arg_matches(&matches).map_err(|e| CliError::Usage(e.to_string()))?;
+
+    // Note: help/version are handled automatically by clap's ArgAction::Help/ArgAction::Version
+    // which trigger localized help via build_localized_command() in error handling
 
     // --- NO_COLOR and TTY detection (clig.dev best practice) ---
     let stderr_is_tty = console::Term::stderr().is_term();
     STDERR_IS_TTY.store(stderr_is_tty, std::sync::atomic::Ordering::Relaxed);
 
     if env::var("NO_COLOR").is_ok() || !stderr_is_tty {
-        // Disable all color output
         console::set_colors_enabled(false);
         console::set_colors_enabled_stderr(false);
     }
 
-    debug!("Using locale: {locale}");
-
-    // If user asked for help (-h/--help) or provided no arguments at all,
-    // print localized help via clap with translated section headings.
-    // This intercepts before clap's auto-help so we can apply help_template
-    // with i18n strings.
-    let wants_short_help = raw_args
-        .iter()
-        .any(|a| a == "-h");
-    let wants_long_help = raw_args
-        .iter()
-        .any(|a| a == "--help");
-    let wants_help = wants_short_help || wants_long_help;
-    let has_help_subcmd = raw_args
-        .iter()
-        .skip(1)
-        .any(|a| a == "help");
-    let no_args = raw_args.len() <= 1;
-
-    if wants_help || no_args || has_help_subcmd {
-        let mut app = build_localized_command();
-        let use_long = wants_long_help || has_help_subcmd;
-
-        // Collect real subcommand names (exclude our synthetic "help" entry)
-        let subcmd_names: Vec<String> = app
-            .get_subcommands()
-            .filter(|s| s.get_name() != "help")
-            .map(|s| {
-                s.get_name()
-                    .to_string()
-            })
-            .collect();
-        let found = raw_args
-            .iter()
-            .skip(1)
-            .find(|token| {
-                subcmd_names
-                    .iter()
-                    .any(|n| n == token.as_str())
-            });
-
-        if let Some(cmd_name) = found {
-            // Build the parent command to propagate global args to subcommands
-            app.build();
-            if let Some(sub) = app
-                .get_subcommands_mut()
-                .find(|s| s.get_name() == cmd_name.as_str())
-            {
-                if use_long {
-                    let _ = sub.print_long_help();
-                } else {
-                    let _ = sub.print_help();
-                }
-            }
-        } else if use_long {
-            let _ = app.print_long_help();
-        } else {
-            let _ = app.print_help();
-        }
-        return Ok(());
-    }
-
-    let app = Cli::command();
-    let matches = match app.try_get_matches_from(raw_args.to_owned()) {
-        Ok(matches) => matches,
-        Err(err) => match err.kind() {
-            ErrorKind::DisplayHelp | ErrorKind::DisplayVersion => {
-                err.print()?;
-                return Ok(());
-            },
-            _ => return Err(CliError::Usage(err.to_string()).into()),
-        },
-    };
-    let mut cli = Cli::from_arg_matches(&matches).map_err(|e| CliError::Usage(e.to_string()))?;
+    debug!(
+        "Using locale: {}",
+        cli.lang
+            .as_deref()
+            .unwrap_or("en")
+    );
 
     // Setup logging based on verbosity
     let log_level = if cli.quiet {
@@ -1351,7 +1290,8 @@ mod cli_tests {
     fn test_run_no_args_returns_ok() {
         let args = vec!["hisiflash".to_string()];
         let result = run_with_args(&args);
-        assert!(result.is_ok());
+        // Help output is printed but function should return Ok
+        assert!(result.is_ok(), "Expected Ok but got: {result:?}");
     }
 
     #[test]
