@@ -19,7 +19,7 @@ use {
     clap_complete::Shell,
     console::style,
     env_logger::Env,
-    hisiflash::{ChipFamily, Error as LibError, set_interrupt_checker},
+    hisiflash::{ChipFamily, Error as LibError, clear_interrupt_flag},
     log::debug,
     rust_i18n::t,
     std::{env, path::PathBuf, sync::OnceLock},
@@ -56,6 +56,8 @@ fn install_signal_handler() -> Result<()> {
 
     ctrlc::set_handler(|| {
         INTERRUPTED.store(true, std::sync::atomic::Ordering::Relaxed);
+        // Also set the global interrupt flag in the library
+        let _ = hisiflash::set_interrupt_flag();
     })
     .map_err(|e| anyhow::anyhow!("failed to install Ctrl-C handler: {e}"))?;
 
@@ -414,7 +416,7 @@ fn main() {
 fn run() -> Result<()> {
     install_signal_handler()?;
     clear_interrupted_flag();
-    set_interrupt_checker(was_interrupted);
+    clear_interrupt_flag();
 
     let raw_args: Vec<String> = env::args().collect();
     let result = run_with_args(&raw_args);

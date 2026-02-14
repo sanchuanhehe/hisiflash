@@ -85,14 +85,115 @@ hisiflash 支持通过 USB VID/PID 自动检测开发板串口:
 
 ## 中断传播与取消模型
 
-为保证 `Ctrl-C` 在长时操作中的可预期行为，项目采用“CLI 信号 → 库级检查器 → 协议循环”的中断传播模型：
+hisiflash 采用“显式取消上下文 + 全局原子标志”的中断传播模型：
 
-1. CLI 层捕获 `SIGINT` 并更新原子中断标志。
-2. 启动阶段将中断检查回调注册到 `hisiflash` 库（全局检查器）。
-3. 库内长循环（WS63 握手、等待 Magic、YMODEM 等）周期性查询中断状态。
-4. 一旦命中中断，返回 `Interrupted` 错误并短路后续重试。
+### 架构演进
 
-该模型的设计目标：
+| 阶段 | 模型 | 特点 |
+|------|------|------|
+| v0.1.x | 全局 OnceLock | `INTERRUPT_CHECKER` 全局变量，隐式依赖 |
+| v0.2.0+ | 原子标志 | `CancelContext` 参数化依赖，可组合可测试 |
+
+### 核心 API
+
+```rust
+// hisiflash/src/lib.rs
+
+/// 取消上下文 - 用于检查操作是否被用户中断
+pub struct CancelContext {
+    checker: Option<Arc<dyn Fn() -> bool + Send + Sync>>,
+}
+
+impl CancelContext {
+    /// 创建新的取消上下文（自定义检查器）
+    pub fn new<F>(checker: F) -> Self
+    where
+        F: Fn() -> bool + Send + Sync + 'static;
+
+    /// 创建无操作的取消上下文（不响应中断）
+    pub fn none() -> Self;
+
+    /// 检查是否已中断，若是则返回错误
+    pub fn check(&self) -> Result<()>;
+}
+
+/// 从全局中断检查器创建取消上下文（向后兼容）
+pub fn cancel_context_from_global() -> CancelContext;
+```
+
+### 使用模式
+
+**1. 库内部（原子标志）**
+
+```rust
+// hisiflash/src/target/ws63/flasher.rs
+
+pub struct Ws63Flasher<P: Port> {
+    port: P,
+    cancel: CancelContext,  // 持有取消上下文
+}
+
+impl<P: Port> Ws63Flasher<P> {
+    pub fn new_with_cancel(port: P, target_baud: u32, cancel: CancelContext) -> Self;
+}
+```
+
+**2. 原生实现（全局桥接）**
+
+```rust
+// hisiflash/src/target/ws63/flasher.rs - native_impl
+
+impl Ws63Flasher<NativePort> {
+    pub fn open(port_name: &str, target_baud: u32) -> Result<Self> {
+        // 使用全局桥接，自动接入 CLI 设置的中断标志
+        Self::with_cancel(
+            port,
+            target_baud,
+            crate::cancel_context_from_global(),
+        )
+    }
+}
+```
+
+**3. CLI 端（全局注册）**
+
+```rust
+// hisiflash-cli/src/main.rs
+
+fn main() {
+    // 注册全局中断检查器
+    hisiflash::set_interrupt_flag();
+
+    // ... 执行命令
+}
+```
+
+### 设计优势
+
+| 方面 | 说明 |
+|------|------|
+| **可测试性** | 可注入自定义取消检查器，无需修改全局状态 |
+| **可组合性** | 多个 Flasher 实例可使用不同的取消策略 |
+| **清晰依赖** | 取消语义从隐式变为显式，易于理解和维护 |
+| **向后兼容** | `cancel_context_from_global()` 保留全局行为 |
+
+### 中断传播流程
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  CLI 捕获 SIGINT                                                │
+│       ↓                                                        │
+│  设置原子标志 INTERRUPT_FLAG = true                             │
+│       ↓                                                        │
+│  库内循环调用 cancel.check()                                     │
+│       ↓                                                        │
+│  返回 Error::Io(ErrorKind::Interrupted)                        │
+│       ↓                                                        │
+│  短路后续重试，快速返回                                         │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+该模型确保：
 
 - **一致性**：不同命令/阶段共享同一取消语义。
 - **快速响应**：避免“已按 Ctrl-C 但仍要等待整个超时/重试轮次”。

@@ -261,11 +261,34 @@ impl ChipFamily {
         late_baud: bool,
         verbose: u8,
     ) -> Result<Box<dyn Flasher>> {
+        self.create_flasher_with_port_and_cancel(
+            port,
+            target_baud,
+            late_baud,
+            verbose,
+            crate::CancelContext::none(),
+        )
+    }
+
+    /// Create a flasher with an existing port and explicit cancel context.
+    ///
+    /// This is the recommended way to create a flasher when you want to
+    /// support cancellation (Ctrl-C) from the embedding application.
+    #[cfg(feature = "native")]
+    pub fn create_flasher_with_port_and_cancel<P: Port + 'static>(
+        &self,
+        port: P,
+        target_baud: u32,
+        late_baud: bool,
+        verbose: u8,
+        cancel: crate::CancelContext,
+    ) -> Result<Box<dyn Flasher>> {
         match self {
             Self::Ws63 => {
-                let flasher = super::ws63::flasher::Ws63Flasher::new(port, target_baud)
-                    .with_late_baud(late_baud)
-                    .with_verbose(verbose);
+                let flasher =
+                    super::ws63::flasher::Ws63Flasher::with_cancel(port, target_baud, cancel)
+                        .with_late_baud(late_baud)
+                        .with_verbose(verbose);
                 Ok(Box::new(flasher))
             },
             _ => Err(Error::Unsupported(format!(

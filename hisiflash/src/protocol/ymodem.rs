@@ -18,6 +18,7 @@
 
 use {
     crate::{
+        CancelContext,
         error::{Error, Result},
         protocol::crc::crc16_xmodem,
     },
@@ -80,31 +81,31 @@ impl Default for YmodemConfig {
 pub struct YmodemTransfer<'a, P: Read + Write> {
     port: &'a mut P,
     config: YmodemConfig,
+    cancel: &'a CancelContext,
 }
 
 impl<'a, P: Read + Write> YmodemTransfer<'a, P> {
-    fn check_interrupted() -> Result<()> {
-        if crate::is_interrupted_requested() {
-            return Err(Error::Io(std::io::Error::new(
-                std::io::ErrorKind::Interrupted,
-                "operation interrupted",
-            )));
-        }
-
-        Ok(())
+    fn check_interrupted(&self) -> Result<()> {
+        self.cancel
+            .check()
     }
 
     /// Create a new YMODEM transfer handler.
-    pub fn new(port: &'a mut P) -> Self {
+    pub fn new(port: &'a mut P, cancel: &'a CancelContext) -> Self {
         Self {
             port,
             config: YmodemConfig::default(),
+            cancel,
         }
     }
 
     /// Create a new YMODEM transfer handler with custom configuration.
-    pub fn with_config(port: &'a mut P, config: YmodemConfig) -> Self {
-        Self { port, config }
+    pub fn with_config(port: &'a mut P, config: YmodemConfig, cancel: &'a CancelContext) -> Self {
+        Self {
+            port,
+            config,
+            cancel,
+        }
     }
 
     /// Read a single byte with timeout.
@@ -135,7 +136,7 @@ impl<'a, P: Read + Write> YmodemTransfer<'a, P> {
                 .config
                 .c_timeout
         {
-            Self::check_interrupted()?;
+            self.check_interrupted()?;
 
             match self.read_byte(
                 self.config
@@ -194,7 +195,7 @@ impl<'a, P: Read + Write> YmodemTransfer<'a, P> {
             .config
             .max_retries
         {
-            Self::check_interrupted()?;
+            self.check_interrupted()?;
             trace!("Sending block (attempt {})", retry + 1);
 
             self.port
@@ -262,7 +263,7 @@ impl<'a, P: Read + Write> YmodemTransfer<'a, P> {
             .config
             .max_retries
         {
-            Self::check_interrupted()?;
+            self.check_interrupted()?;
 
             self.port
                 .write_all(&[control::EOT])?;
@@ -309,7 +310,7 @@ impl<'a, P: Read + Write> YmodemTransfer<'a, P> {
     where
         F: FnMut(usize, usize),
     {
-        Self::check_interrupted()?;
+        self.check_interrupted()?;
 
         debug!(
             "Starting YMODEM transfer: {} ({} bytes)",
@@ -332,7 +333,7 @@ impl<'a, P: Read + Write> YmodemTransfer<'a, P> {
         let total = data.len();
 
         while offset < total {
-            Self::check_interrupted()?;
+            self.check_interrupted()?;
 
             let chunk_end = (offset + STX_BLOCK_SIZE).min(total);
             let chunk = &data[offset..chunk_end];
@@ -479,7 +480,8 @@ mod tests {
             verbose: 0,
         };
 
-        let mut ymodem = YmodemTransfer::with_config(&mut port, config);
+        let cancel = crate::cancel_context_from_global();
+        let mut ymodem = YmodemTransfer::with_config(&mut port, config, &cancel);
         let test_data = vec![0x42; 100]; // Small test payload
         let result = ymodem.transfer("test.bin", &test_data, |_, _| {});
 
@@ -516,7 +518,8 @@ mod tests {
             verbose: 0,
         };
 
-        let mut ymodem = YmodemTransfer::with_config(&mut port, config);
+        let cancel = crate::cancel_context_from_global();
+        let mut ymodem = YmodemTransfer::with_config(&mut port, config, &cancel);
         let test_data = vec![0x55; 50];
         let result = ymodem.transfer("test.bin", &test_data, |_, _| {});
 
@@ -547,7 +550,8 @@ mod tests {
             verbose: 0,
         };
 
-        let mut ymodem = YmodemTransfer::with_config(&mut port, config);
+        let cancel = crate::cancel_context_from_global();
+        let mut ymodem = YmodemTransfer::with_config(&mut port, config, &cancel);
         let test_data = vec![0xCC; STX_BLOCK_SIZE]; // Exactly 1024 bytes
         let result = ymodem.transfer("exact_block.bin", &test_data, |_, _| {});
 
@@ -578,7 +582,8 @@ mod tests {
             verbose: 0,
         };
 
-        let mut ymodem = YmodemTransfer::with_config(&mut port, config);
+        let cancel = crate::cancel_context_from_global();
+        let mut ymodem = YmodemTransfer::with_config(&mut port, config, &cancel);
         // 3 full blocks = 3072 bytes
         let test_data = vec![0xDD; STX_BLOCK_SIZE * num_blocks];
         let mut progress_calls = 0;
@@ -611,7 +616,8 @@ mod tests {
             verbose: 0,
         };
 
-        let mut ymodem = YmodemTransfer::with_config(&mut port, config);
+        let cancel = crate::cancel_context_from_global();
+        let mut ymodem = YmodemTransfer::with_config(&mut port, config, &cancel);
         let result = ymodem.wait_for_c();
 
         assert!(matches!(
@@ -634,7 +640,8 @@ mod tests {
             verbose: 0,
         };
 
-        let mut ymodem = YmodemTransfer::with_config(&mut port, config);
+        let cancel = crate::cancel_context_from_global();
+        let mut ymodem = YmodemTransfer::with_config(&mut port, config, &cancel);
         let result = ymodem.transfer("app.bin", &[0x11, 0x22], |_, _| {});
 
         assert!(matches!(

@@ -34,6 +34,7 @@
 
 use {
     crate::{
+        CancelContext,
         error::{Error, Result},
         image::fwpkg::Fwpkg,
         port::Port,
@@ -94,22 +95,12 @@ fn is_interrupted_error(e: &Error) -> bool {
     }
 }
 
-fn check_user_interrupted() -> Result<()> {
-    if crate::is_interrupted_requested() {
-        return Err(Error::Io(std::io::Error::new(
-            std::io::ErrorKind::Interrupted,
-            "operation interrupted",
-        )));
-    }
-    Ok(())
-}
-
-fn sleep_interruptible(total: Duration) -> Result<()> {
+fn sleep_interruptible(cancel: &CancelContext, total: Duration) -> Result<()> {
     const CHUNK: Duration = Duration::from_millis(20);
 
     let start = Instant::now();
     while start.elapsed() < total {
-        check_user_interrupted()?;
+        cancel.check()?;
         let elapsed = start.elapsed();
         let remain = total.saturating_sub(elapsed);
         thread::sleep(remain.min(CHUNK));
@@ -127,22 +118,57 @@ pub struct Ws63Flasher<P: Port> {
     target_baud: u32,
     late_baud: bool,
     verbose: u8,
+    cancel: CancelContext,
 }
 
 // Implementation for any Port type
 impl<P: Port> Ws63Flasher<P> {
     /// Create a new WS63 flasher with an existing port.
     ///
+    /// This flasher will NOT respond to Ctrl-C interrupts.
+    /// For interruptible flasher, use [`with_cancel`](Self::with_cancel).
+    ///
     /// # Arguments
     ///
     /// * `port` - An opened serial port implementing the `Port` trait
     /// * `target_baud` - Target baud rate for data transfer
+    #[allow(dead_code)]
     pub fn new(port: P, target_baud: u32) -> Self {
         Self {
             port,
             target_baud,
             late_baud: false,
             verbose: 0,
+            cancel: CancelContext::none(),
+        }
+    }
+
+    /// Create a new WS63 flasher with custom cancel context.
+    ///
+    /// Use this when you need custom cancellation behavior (e.g., Ctrl-C support).
+    ///
+    /// # Arguments
+    ///
+    /// * `port` - An opened serial port implementing the `Port` trait
+    /// * `target_baud` - Target baud rate for data transfer
+    /// * `cancel` - Cancellation context for interruptible operations
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// use hisiflash::CancelContext;
+    ///
+    /// // Create with global interrupt support
+    /// let cancel = hisiflash::cancel_context_from_global();
+    /// let flasher = Ws63Flasher::with_cancel(port, 921600, cancel);
+    /// ```
+    pub fn with_cancel(port: P, target_baud: u32, cancel: CancelContext) -> Self {
+        Self {
+            port,
+            target_baud,
+            late_baud: false,
+            verbose: 0,
+            cancel,
         }
     }
 
@@ -176,7 +202,8 @@ impl<P: Port> Ws63Flasher<P> {
         info!("Please reset the device to enter download mode.");
 
         for attempt in 1..=MAX_CONNECT_ATTEMPTS {
-            check_user_interrupted()?;
+            self.cancel
+                .check()?;
 
             if attempt > 1 {
                 info!("Connection attempt {attempt}/{MAX_CONNECT_ATTEMPTS}");
@@ -193,7 +220,7 @@ impl<P: Port> Ws63Flasher<P> {
 
                     if attempt < MAX_CONNECT_ATTEMPTS {
                         warn!("Connection failed (attempt {attempt}/{MAX_CONNECT_ATTEMPTS}): {e}");
-                        sleep_interruptible(CONNECT_RETRY_DELAY)?;
+                        sleep_interruptible(&self.cancel, CONNECT_RETRY_DELAY)?;
                         self.port
                             .clear_buffers()?;
                     } else {
@@ -210,7 +237,8 @@ impl<P: Port> Ws63Flasher<P> {
 
     /// Single connection attempt.
     fn try_connect(&mut self) -> Result<()> {
-        check_user_interrupted()?;
+        self.cancel
+            .check()?;
 
         self.port
             .clear_buffers()?;
@@ -221,7 +249,8 @@ impl<P: Port> Ws63Flasher<P> {
 
         // Send handshake frames repeatedly until we get a response
         while start.elapsed() < HANDSHAKE_TIMEOUT {
-            check_user_interrupted()?;
+            self.cancel
+                .check()?;
 
             // Send handshake
             if let Err(e) = self
@@ -243,7 +272,7 @@ impl<P: Port> Ws63Flasher<P> {
             }
 
             // Small delay
-            sleep_interruptible(Duration::from_millis(10))?;
+            sleep_interruptible(&self.cancel, Duration::from_millis(10))?;
 
             // Check for response
             let mut buf = [0u8; 256];
@@ -283,7 +312,8 @@ impl<P: Port> Ws63Flasher<P> {
 
     /// Change the baud rate.
     fn change_baud_rate(&mut self, baud: u32) -> Result<()> {
-        check_user_interrupted()?;
+        self.cancel
+            .check()?;
 
         info!("Changing baud rate to {baud}");
 
@@ -292,14 +322,14 @@ impl<P: Port> Ws63Flasher<P> {
         self.send_command(&frame)?;
 
         // Wait for command to be processed
-        sleep_interruptible(BAUD_CHANGE_DELAY)?;
+        sleep_interruptible(&self.cancel, BAUD_CHANGE_DELAY)?;
 
         // Change local baud rate
         self.port
             .set_baud_rate(baud)?;
 
         // Clear buffers
-        sleep_interruptible(BAUD_CHANGE_DELAY)?;
+        sleep_interruptible(&self.cancel, BAUD_CHANGE_DELAY)?;
         self.port
             .clear_buffers()?;
 
@@ -338,7 +368,8 @@ impl<P: Port> Ws63Flasher<P> {
         debug!("Waiting for SEBOOT magic...");
 
         while start.elapsed() < timeout {
-            check_user_interrupted()?;
+            self.cancel
+                .check()?;
 
             let mut buf = [0u8; 1];
             match self
@@ -350,7 +381,7 @@ impl<P: Port> Ws63Flasher<P> {
                         match_idx += 1;
                         if match_idx == magic.len() {
                             // Found magic, drain remaining frame data
-                            sleep_interruptible(Duration::from_millis(50))?;
+                            sleep_interruptible(&self.cancel, Duration::from_millis(50))?;
                             let mut drain = [0u8; 256];
                             let _ = self
                                 .port
@@ -387,7 +418,8 @@ impl<P: Port> Ws63Flasher<P> {
     where
         F: FnMut(&str, usize, usize),
     {
-        check_user_interrupted()?;
+        self.cancel
+            .check()?;
 
         debug!(
             "Transferring LoaderBoot {} ({} bytes) via YMODEM",
@@ -402,7 +434,7 @@ impl<P: Port> Ws63Flasher<P> {
             verbose: self.verbose,
         };
 
-        let mut ymodem = YmodemTransfer::with_config(&mut self.port, config);
+        let mut ymodem = YmodemTransfer::with_config(&mut self.port, config, &self.cancel);
         ymodem.transfer(name, data, |current, total| {
             progress(name, current, total);
         })?;
@@ -428,7 +460,8 @@ impl<P: Port> Ws63Flasher<P> {
     where
         F: FnMut(&str, usize, usize),
     {
-        check_user_interrupted()?;
+        self.cancel
+            .check()?;
 
         // Get LoaderBoot
         let loaderboot = fwpkg
@@ -452,7 +485,8 @@ impl<P: Port> Ws63Flasher<P> {
 
         // Flash remaining partitions
         for bin in fwpkg.normal_bins() {
-            check_user_interrupted()?;
+            self.cancel
+                .check()?;
 
             // Apply filter if provided
             if let Some(names) = filter {
@@ -478,7 +512,7 @@ impl<P: Port> Ws63Flasher<P> {
 
             // Inter-partition delay to prevent serial data stale
             // (MCU won't respond if next command follows immediately)
-            sleep_interruptible(PARTITION_DELAY)?;
+            sleep_interruptible(&self.cancel, PARTITION_DELAY)?;
         }
 
         info!("Flashing complete!");
@@ -497,12 +531,14 @@ impl<P: Port> Ws63Flasher<P> {
     where
         F: FnMut(&str, usize, usize),
     {
-        check_user_interrupted()?;
+        self.cancel
+            .check()?;
 
         let mut last_error = None;
 
         for attempt in 1..=MAX_DOWNLOAD_RETRIES {
-            check_user_interrupted()?;
+            self.cancel
+                .check()?;
 
             match self.try_download_binary(name, data, addr, progress) {
                 Ok(()) => {
@@ -525,7 +561,7 @@ impl<P: Port> Ws63Flasher<P> {
                         let _ = self
                             .port
                             .clear_buffers();
-                        sleep_interruptible(CONNECT_RETRY_DELAY)?;
+                        sleep_interruptible(&self.cancel, CONNECT_RETRY_DELAY)?;
                     } else {
                         return Err(e);
                     }
@@ -550,7 +586,8 @@ impl<P: Port> Ws63Flasher<P> {
     where
         F: FnMut(&str, usize, usize),
     {
-        check_user_interrupted()?;
+        self.cancel
+            .check()?;
 
         // Check for oversized data that would truncate
         let len = u32::try_from(data.len()).map_err(|_| {
@@ -587,7 +624,7 @@ impl<P: Port> Ws63Flasher<P> {
             verbose: self.verbose,
         };
 
-        let mut ymodem = YmodemTransfer::with_config(&mut self.port, config);
+        let mut ymodem = YmodemTransfer::with_config(&mut self.port, config, &self.cancel);
         ymodem.transfer(name, data, |current, total| {
             progress(name, current, total);
         })?;
@@ -603,7 +640,8 @@ impl<P: Port> Ws63Flasher<P> {
     /// * `loaderboot` - LoaderBoot binary data (required for first-stage boot)
     /// * `bins` - List of (data, address) pairs to flash
     pub fn write_bins(&mut self, loaderboot: &[u8], bins: &[(&[u8], u32)]) -> Result<()> {
-        check_user_interrupted()?;
+        self.cancel
+            .check()?;
 
         info!("Writing LoaderBoot ({} bytes)", loaderboot.len());
 
@@ -623,14 +661,15 @@ impl<P: Port> Ws63Flasher<P> {
             .iter()
             .enumerate()
         {
-            check_user_interrupted()?;
+            self.cancel
+                .check()?;
 
             let name = format!("binary_{i}");
             info!("Writing {} ({} bytes) to 0x{:08X}", name, data.len(), addr);
             self.download_binary(&name, data, *addr, &mut |_, _, _| {})?;
 
             // Inter-partition delay
-            sleep_interruptible(PARTITION_DELAY)?;
+            sleep_interruptible(&self.cancel, PARTITION_DELAY)?;
         }
 
         Ok(())
@@ -638,7 +677,8 @@ impl<P: Port> Ws63Flasher<P> {
 
     /// Erase entire flash.
     pub fn erase_all(&mut self) -> Result<()> {
-        check_user_interrupted()?;
+        self.cancel
+            .check()?;
 
         info!("Erasing entire flash...");
 
@@ -646,7 +686,7 @@ impl<P: Port> Ws63Flasher<P> {
         self.send_command(&frame)?;
 
         // Wait for erase to complete
-        sleep_interruptible(Duration::from_secs(5))?;
+        sleep_interruptible(&self.cancel, Duration::from_secs(5))?;
 
         info!("Flash erased");
         Ok(())
@@ -654,7 +694,8 @@ impl<P: Port> Ws63Flasher<P> {
 
     /// Reset the device.
     pub fn reset(&mut self) -> Result<()> {
-        check_user_interrupted()?;
+        self.cancel
+            .check()?;
 
         info!("Resetting device...");
 
@@ -714,7 +755,11 @@ mod native_impl {
                         if attempt > 1 {
                             debug!("Port opened on attempt {attempt}");
                         }
-                        return Ok(Self::new(port, config.baud_rate));
+                        return Ok(Self::with_cancel(
+                            port,
+                            config.baud_rate,
+                            crate::cancel_context_from_global(),
+                        ));
                     },
                     Err(e) => {
                         warn!(
@@ -724,7 +769,10 @@ mod native_impl {
                         last_error = Some(e);
 
                         if attempt < MAX_OPEN_PORT_ATTEMPTS {
-                            sleep_interruptible(OPEN_RETRY_DELAY)?;
+                            sleep_interruptible(
+                                &crate::cancel_context_from_global(),
+                                OPEN_RETRY_DELAY,
+                            )?;
                         }
                     },
                 }
@@ -751,7 +799,11 @@ mod native_impl {
                         if attempt > 1 {
                             debug!("Port opened on attempt {attempt}");
                         }
-                        return Ok(Self::new(port, target_baud));
+                        return Ok(Self::with_cancel(
+                            port,
+                            target_baud,
+                            crate::cancel_context_from_global(),
+                        ));
                     },
                     Err(e) => {
                         warn!(
@@ -761,7 +813,10 @@ mod native_impl {
                         last_error = Some(e);
 
                         if attempt < MAX_OPEN_PORT_ATTEMPTS {
-                            sleep_interruptible(OPEN_RETRY_DELAY)?;
+                            sleep_interruptible(
+                                &crate::cancel_context_from_global(),
+                                OPEN_RETRY_DELAY,
+                            )?;
                         }
                     },
                 }
@@ -986,7 +1041,7 @@ mod tests {
     #[test]
     fn test_flasher_new_with_mock_port() {
         let port = MockPort::new("/dev/ttyUSB0");
-        let flasher = Ws63Flasher::new(port, 921600);
+        let flasher = Ws63Flasher::with_cancel(port, 921600, CancelContext::none());
 
         assert_eq!(flasher.target_baud, 921600);
         assert!(!flasher.late_baud);
@@ -997,7 +1052,7 @@ mod tests {
     #[test]
     fn test_flasher_builder_methods() {
         let port = MockPort::new("/dev/ttyUSB0");
-        let flasher = Ws63Flasher::new(port, 921600)
+        let flasher = Ws63Flasher::with_cancel(port, 921600, CancelContext::none())
             .with_late_baud(true)
             .with_verbose(2);
 
@@ -1129,7 +1184,11 @@ mod tests {
         use crate::target::Flasher;
 
         let port = MockPort::new("/dev/ttyUSB0");
-        let flasher: Box<dyn Flasher> = Box::new(Ws63Flasher::new(port, 921600));
+        let flasher: Box<dyn Flasher> = Box::new(Ws63Flasher::with_cancel(
+            port,
+            921600,
+            CancelContext::none(),
+        ));
 
         assert_eq!(flasher.connection_baud(), 115200);
         assert_eq!(flasher.target_baud(), Some(921600));
@@ -1186,7 +1245,8 @@ mod tests {
         crate::test_set_interrupted(true);
 
         let port = MockPort::new("/dev/ttyUSB0");
-        let mut flasher = Ws63Flasher::new(port, 921600);
+        let cancel = crate::cancel_context_from_global();
+        let mut flasher = Ws63Flasher::with_cancel(port, 921600, cancel);
         let mut progress_calls = 0usize;
 
         let result = flasher.download_binary(
@@ -1263,7 +1323,7 @@ mod tests {
         response.extend_from_slice(&[0x0C, 0x00, 0xE1, 0x1E, 0x5A, 0x00, 0x00, 0x00]); // frame
         port.add_read_data(&response);
 
-        let mut flasher = Ws63Flasher::new(port, 921600);
+        let mut flasher = Ws63Flasher::with_cancel(port, 921600, CancelContext::none());
         let result = flasher.wait_for_magic(Duration::from_millis(500));
         assert!(
             result.is_ok(),
@@ -1276,7 +1336,7 @@ mod tests {
     fn test_wait_for_magic_timeout_no_magic() {
         let port = MockPort::new("/dev/ttyUSB0");
         // No data in buffer -> should timeout
-        let mut flasher = Ws63Flasher::new(port, 921600);
+        let mut flasher = Ws63Flasher::with_cancel(port, 921600, CancelContext::none());
         let result = flasher.wait_for_magic(Duration::from_millis(100));
         assert!(
             result.is_err(),
@@ -1300,7 +1360,7 @@ mod tests {
         response.extend_from_slice(&[0x0C, 0x00, 0xE1, 0x1E, 0x5A, 0x00]); // frame tail
         port.add_read_data(&response);
 
-        let mut flasher = Ws63Flasher::new(port, 921600);
+        let mut flasher = Ws63Flasher::with_cancel(port, 921600, CancelContext::none());
         let result = flasher.wait_for_magic(Duration::from_millis(500));
         assert!(
             result.is_ok(),
@@ -1332,7 +1392,7 @@ mod tests {
         ];
         port.add_read_data(&response);
 
-        let mut flasher = Ws63Flasher::new(port, 921600);
+        let mut flasher = Ws63Flasher::with_cancel(port, 921600, CancelContext::none());
         let result = flasher.transfer_loaderboot("test.bin", &[0xAA], &mut |_, _, _| {});
 
         // Transfer should succeed (or fail on mock port details, but NOT send 0xD2)
@@ -1395,7 +1455,7 @@ mod tests {
         // hardware.
         port.add_read_data(&response);
 
-        let mut flasher = Ws63Flasher::new(port, 921600);
+        let mut flasher = Ws63Flasher::with_cancel(port, 921600, CancelContext::none());
         let test_data = vec![0xBB; 100];
         // The transfer will fail because 'C' and ACKs were drained by wait_for_magic,
         // but we only care about verifying the download command was sent.
