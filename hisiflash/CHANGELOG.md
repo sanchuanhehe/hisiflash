@@ -18,11 +18,15 @@ and this crate follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html
   - `drain_utf8_lossy`
   - `clean_monitor_text`
   - `format_monitor_output`
+- Explicit cancellation context with interrupt propagation mechanism:
+  - `set_interrupt_flag` / `clear_interrupt_flag` / `was_interrupted`
+  - Support for Ctrl+C interruption during long-running operations
 
 ### Changed
 - `format_monitor_output` now normalizes standalone `\r`/`\n` line endings more consistently.
 - Non-timestamp formatting path now keeps `at_line_start` state aligned with emitted output.
 - Monitor text-processing flow was hardened for mixed UTF-8/invalid-byte streams in long-running sessions.
+- `Port` trait's `read_cts` and `read_dsr` methods now accept mutable reference to satisfy `serialport` crate requirements.
 
 ### Compatibility
 - Changes are additive with behavior refinements in monitor text formatting/output helpers.

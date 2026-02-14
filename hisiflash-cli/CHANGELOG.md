@@ -9,11 +9,13 @@ with pre-release tags.
 ## [Unreleased]
 
 ### Added
+- Added `HISIFLASH_LANG` environment variable support to control help text language (e.g., `HISIFLASH_LANG=en hisiflash --help` shows English).
 - `monitor` interactive command now supports timestamp display, log file writing, and shortcut keys (`Ctrl+C`, `Ctrl+R`, `Ctrl+T`).
 - `flash` supports interactive firmware auto-discovery/selection when firmware path is omitted.
 - Project-level testing/validation docs were added and linked in README (`docs/testing/*`).
 
 ### Changed
+- Refactored CLI argument parsing to use `disable_help_flag` and manual parameter definition for localized help text.
 - CLI now reports invalid `flash.chip` values in config explicitly instead of silently falling back.
 - Interactive serial selection hints are written to `stderr` for better script compatibility.
 - Multi-port serial selection behavior was tightened for non-interactive mode and clearer fallback errors.
@@ -28,12 +30,14 @@ with pre-release tags.
 - `monitor` stream contract is now split in non-TTY mode (`stdout` for serial data, `stderr` for status), while TTY mode remains merged for alignment.
 
 ### Fixed
+- Fixed `hisiflash --help` behavior when no subcommand is provided - now shows help instead of error.
+- Fixed `HISIFLASH_LANG` environment variable not taking effect before help output - locale is now set before argument parsing.
 - Cancellation now uses a dedicated `Cancelled:` style output instead of generic error wording.
 - Flow-control wiring hint is no longer printed after confirmed reset evidence; it now appears only for weak/unconfirmed reset evidence or reset-signal failure.
 
 ### Compatibility
 - User-visible CLI behavior changed (default log verbosity and some error outputs).
-- Recommended next release tag: `v1.0.0-alpha.10`.
+- Recommended next release tag: `v1.0.0-alpha.11`.
 
 ## Historical Notes
 
