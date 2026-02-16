@@ -24,7 +24,7 @@ jobs:
       version: ${{ steps.get_version.outputs.version }}
       cli_version: ${{ steps.get_version.outputs.cli_version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Get version from tag
         id: get_version
@@ -104,7 +104,7 @@ jobs:
             archive: zip
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -176,7 +176,7 @@ jobs:
     # Only publish stable releases (no pre-release suffix)
     if: ${{ !contains(needs.create-release.outputs.cli_version, '-') }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: dtolnay/rust-toolchain@stable
 
