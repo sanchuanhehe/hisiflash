@@ -205,6 +205,12 @@ pub(crate) enum CliError {
     Cancelled(String),
 }
 
+#[derive(Debug, Error)]
+#[error("json error response emitted")]
+struct JsonErrorResponseEmitted {
+    exit_code: i32,
+}
+
 impl CliError {
     fn exit_code(&self) -> i32 {
         match self {
@@ -393,6 +399,9 @@ fn main() {
         Ok(()) => {},
         Err(err) => {
             let code = map_exit_code(&err);
+            if err.downcast_ref::<JsonErrorResponseEmitted>().is_some() {
+                std::process::exit(code);
+            }
             if code == 130 {
                 eprintln!(
                     "{} {err}",
@@ -589,10 +598,26 @@ fn run_with_args(raw_args: &[String]) -> Result<()> {
             cmd_erase(&cli, &mut config, *all)?;
         },
         Commands::Info { firmware, json } => {
-            cmd_info(firmware, *json)?;
+            if *json {
+                if let Err(err) = cmd_info(firmware, true) {
+                    let code = map_exit_code(&err);
+                    emit_structured_json_error("info", code, &err)?;
+                    return Err(JsonErrorResponseEmitted { exit_code: code }.into());
+                }
+            } else {
+                cmd_info(firmware, false)?;
+            }
         },
         Commands::ListPorts { json } => {
-            cmd_list_ports(*json);
+            if *json {
+                if let Err(err) = cmd_list_ports(true) {
+                    let code = map_exit_code(&err);
+                    emit_structured_json_error("list-ports", code, &err)?;
+                    return Err(JsonErrorResponseEmitted { exit_code: code }.into());
+                }
+            } else {
+                cmd_list_ports(false)?;
+            }
         },
         Commands::Monitor {
             monitor_port,
@@ -710,6 +735,10 @@ fn apply_config_defaults(cli: &mut Cli, matches: &clap::ArgMatches, config: &Con
 }
 
 fn map_exit_code(err: &anyhow::Error) -> i32 {
+    if let Some(json_err) = err.downcast_ref::<JsonErrorResponseEmitted>() {
+        return json_err.exit_code;
+    }
+
     // Priority 1: explicit CLI domain errors (stable contract for scripts).
     if let Some(cli_err) = err.downcast_ref::<CliError>() {
         return cli_err.exit_code();
@@ -728,6 +757,19 @@ fn map_exit_code(err: &anyhow::Error) -> i32 {
 
     // Fallback: unexpected/unclassified failure.
     1
+}
+
+fn emit_structured_json_error(command: &str, exit_code: i32, err: &anyhow::Error) -> Result<()> {
+    let body = serde_json::json!({
+        "ok": false,
+        "error": {
+            "command": command,
+            "exit_code": exit_code,
+            "message": err.to_string(),
+        }
+    });
+    println!("{}", serde_json::to_string_pretty(&body)?);
+    Ok(())
 }
 
 /// Get serial port from CLI args or interactive selection.

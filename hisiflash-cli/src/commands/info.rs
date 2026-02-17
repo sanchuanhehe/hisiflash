@@ -9,7 +9,7 @@ use {
 };
 
 /// List ports command implementation.
-pub(crate) fn cmd_list_ports(json: bool) {
+pub(crate) fn cmd_list_ports(json: bool) -> Result<()> {
     let detected = discover_ports();
 
     if json {
@@ -28,11 +28,17 @@ pub(crate) fn cmd_list_ports(json: bool) {
                 })
             })
             .collect();
+        let output = serde_json::json!({
+            "ok": true,
+            "data": {
+                "ports": ports,
+            }
+        });
         println!(
             "{}",
-            serde_json::to_string_pretty(&ports).unwrap_or_default()
+            serde_json::to_string_pretty(&output)?
         );
-        return;
+        return Ok(());
     }
 
     eprintln!(
@@ -103,6 +109,8 @@ pub(crate) fn cmd_list_ports(json: bool) {
             );
         }
     }
+
+    Ok(())
 }
 
 /// Info command implementation.
@@ -259,18 +267,21 @@ fn cmd_info_json(firmware: &PathBuf) -> Result<()> {
         .collect();
 
     let info = serde_json::json!({
-        "format": version_str,
-        "package_name": fwpkg.package_name(),
-        "partition_count": fwpkg.partition_count(),
-        "total_size": fwpkg.header.len,
-        "crc": format!("0x{:04X}", fwpkg.header.crc),
-        "crc_valid": crc_valid,
-        "partitions": partitions,
+        "ok": true,
+        "data": {
+            "format": version_str,
+            "package_name": fwpkg.package_name(),
+            "partition_count": fwpkg.partition_count(),
+            "total_size": fwpkg.header.len,
+            "crc": format!("0x{:04X}", fwpkg.header.crc),
+            "crc_valid": crc_valid,
+            "partitions": partitions,
+        }
     });
 
     println!(
         "{}",
-        serde_json::to_string_pretty(&info).unwrap_or_default()
+        serde_json::to_string_pretty(&info)?
     );
     Ok(())
 }

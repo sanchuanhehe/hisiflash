@@ -12,7 +12,7 @@ use {
     anyhow::Result,
     console::style,
     dialoguer::{Confirm, Error as DialoguerError, Select, theme::ColorfulTheme},
-    hisiflash::{DetectedPort, TransportKind, UsbDevice, discover_ports},
+    hisiflash::{DetectedPort, Error as LibError, TransportKind, UsbDevice, discover_ports},
     log::{debug, error, info},
     rust_i18n::t,
     std::{cmp::Ordering, io::IsTerminal},
@@ -76,7 +76,8 @@ fn select_non_interactive_port(
 pub fn select_serial_port(options: &SerialOptions, config: &Config) -> Result<SelectedPort> {
     // If port explicitly specified, use it
     if let Some(port_name) = &options.port {
-        return Ok(find_port_by_name(port_name));
+        return find_port_by_name(port_name)
+            .ok_or_else(|| LibError::DeviceNotFound.into());
     }
 
     // If port in config, use it
@@ -86,7 +87,23 @@ pub fn select_serial_port(options: &SerialOptions, config: &Config) -> Result<Se
         .serial
     {
         debug!("Using port from config: {port_name}");
-        return Ok(find_port_by_name(port_name));
+        if let Some(selected) = find_port_by_name(port_name) {
+            return Ok(selected);
+        }
+
+        return Ok(SelectedPort {
+            port: DetectedPort {
+                name: port_name.to_string(),
+                transport: TransportKind::Serial,
+                device: UsbDevice::Unknown,
+                vid: None,
+                pid: None,
+                manufacturer: None,
+                product: None,
+                serial: None,
+            },
+            is_known: false,
+        });
     }
 
     // Detect available ports
@@ -169,7 +186,7 @@ fn map_prompt_error(err: DialoguerError) -> anyhow::Error {
 }
 
 /// Find a port by name.
-fn find_port_by_name(name: &str) -> SelectedPort {
+fn find_port_by_name(name: &str) -> Option<SelectedPort> {
     let ports = discover_ports();
 
     // Try exact match first
@@ -177,12 +194,12 @@ fn find_port_by_name(name: &str) -> SelectedPort {
         .iter()
         .find(|p| p.name == name)
     {
-        return SelectedPort {
+        return Some(SelectedPort {
             port: port.clone(),
             is_known: port
                 .device
                 .is_known(),
-        };
+        });
     }
 
     // Try case-insensitive match (Windows)
@@ -193,29 +210,15 @@ fn find_port_by_name(name: &str) -> SelectedPort {
                 .eq_ignore_ascii_case(name)
         })
     {
-        return SelectedPort {
+        return Some(SelectedPort {
             port: port.clone(),
             is_known: port
                 .device
                 .is_known(),
-        };
+        });
     }
 
-    // Port not found in detected list, but user explicitly specified it
-    // Create a placeholder port info
-    SelectedPort {
-        port: DetectedPort {
-            name: name.to_string(),
-            transport: TransportKind::Serial,
-            device: UsbDevice::Unknown,
-            vid: None,
-            pid: None,
-            manufacturer: None,
-            product: None,
-            serial: None,
-        },
-        is_known: false,
-    }
+    None
 }
 
 /// Check if a port matches a known device (from config or built-in list).

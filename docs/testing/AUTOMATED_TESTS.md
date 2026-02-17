@@ -44,6 +44,12 @@ cargo test
 - 中断后的资源回收（端口释放）
 - 烧录后 monitor 联动体验
 
+## CLI 兼容性矩阵
+
+CLI 行为固化（flags / exit code / stdout-stderr / JSON / i18n）与测试映射详见：
+
+- `docs/testing/CLI_COMPATIBILITY_MATRIX.md`
+
 ## 失败排查建议
 
 - 如果 `clippy` 失败：优先修复 warning，再跑全套。

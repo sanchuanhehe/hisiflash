@@ -48,24 +48,52 @@ fn short_version_exits_zero_and_writes_stdout_only() {
 
 #[test]
 fn list_ports_json_returns_valid_json() {
-    // Test that --json flag produces valid JSON output
-    // In environments without serial ports, this still tests JSON parsing
     let mut cmd = cli_cmd();
     let output = cmd
         .args(["list-ports", "--json"])
+        .assert()
+        .success()
+        .stderr(predicate::str::is_empty())
+        .get_output()
+        .clone();
+
+    let stdout = String::from_utf8(output.stdout).expect("stdout should be utf-8");
+    let parsed: serde_json::Value =
+        serde_json::from_str(&stdout).expect("list-ports --json must be valid JSON");
+    assert_eq!(parsed["ok"], serde_json::Value::Bool(true));
+    assert!(parsed["data"]["ports"].is_array());
+}
+
+#[test]
+fn info_json_success_returns_structured_json() {
+    let dir = tempdir().expect("tempdir should be created");
+    let fwpkg = dir.path().join("ok.fwpkg");
+    let valid_header: Vec<u8> = vec![
+        0xDF, 0xAD, 0xBE, 0xEF, // magic (FWPKG V1, little-endian 0xEFBEADDF)
+        0x00, 0x00, // crc (not validated as hard error by info --json)
+        0x00, 0x00, // cnt = 0
+        0x0C, 0x00, 0x00, 0x00, // len = 12 bytes total
+    ];
+    fs::write(&fwpkg, valid_header).expect("write fwpkg");
+
+    let mut cmd = cli_cmd();
+    let output = cmd
+        .arg("info")
+        .arg("--json")
+        .arg(fwpkg)
         .output()
         .expect("command should execute");
 
-    // Just verify we got JSON output (array or empty array)
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    // Parse should succeed - this validates JSON machinery works
-    if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&stdout) {
-        assert!(
-            parsed.is_array() || parsed.is_null(),
-            "should be JSON array or null"
-        );
-    }
-    // Even if parse fails, the test validates command runs without crash
+    assert!(output.status.success());
+    let stderr = String::from_utf8(output.stderr).expect("stderr should be utf-8");
+    assert!(stderr.is_empty(), "json success should not write stderr");
+
+    let stdout = String::from_utf8(output.stdout).expect("stdout should be utf-8");
+    let parsed: serde_json::Value =
+        serde_json::from_str(&stdout).expect("info --json success must be valid JSON");
+    assert_eq!(parsed["ok"], serde_json::Value::Bool(true));
+    assert!(parsed["data"].is_object());
+    assert!(parsed["data"]["partitions"].is_array());
 }
 
 #[test]
@@ -77,13 +105,22 @@ fn info_json_error_keeps_stdout_clean() {
         .join("not_exists.fwpkg");
 
     let mut cmd = cli_cmd();
-    cmd.arg("info")
+    let output = cmd
+        .arg("info")
         .arg("--json")
         .arg(nonexistent.as_os_str())
-        .assert()
-        .failure()
-        .stdout(predicate::str::is_empty())
-        .stderr(predicate::str::contains("Error"));
+        .output()
+        .expect("command should execute");
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8(output.stderr).expect("stderr should be utf-8");
+    assert!(stderr.is_empty(), "json error should not write stderr");
+    let stdout = String::from_utf8(output.stdout).expect("stdout should be utf-8");
+    let parsed: serde_json::Value =
+        serde_json::from_str(&stdout).expect("info --json failure must be valid JSON");
+    assert_eq!(parsed["ok"], serde_json::Value::Bool(false));
+    assert!(parsed["error"]["message"].is_string());
+    assert!(parsed["error"]["exit_code"].is_number());
 }
 
 #[test]
@@ -205,32 +242,28 @@ fn exit_code_three_for_config_error_invalid_file() {
 /// Exit code 4: device not found (library error)
 #[test]
 fn exit_code_four_for_device_not_found() {
-    // Test that the exit code mapping exists for device not found
-    // We test by checking flash with an invalid port name
-    // Use platform-independent invalid port path
+    // Explicit invalid port must map to DeviceNotFound => exit code 4.
     let dir = tempdir().expect("tempdir should be created");
-    let fwpkg = dir
+    let loaderboot = dir
         .path()
-        .join("test.fwpkg");
-    fs::write(&fwpkg, b"HFWP").expect("write dummy firmware");
+        .join("loaderboot.bin");
+    let app = dir
+        .path()
+        .join("app.bin");
+    fs::write(&loaderboot, b"lb").expect("write loaderboot");
+    fs::write(&app, b"app").expect("write app bin");
 
     let mut cmd = cli_cmd();
-    let output = cmd
-        .arg("-p")
+    cmd.arg("-p")
         .arg("INVALID_PORT_NAME_XYZ")
-        .arg("flash")
-        .arg(&fwpkg)
-        .output()
-        .expect("command should execute");
-
-    // Device not found should exit non-zero, but may be 4, 1, or other
-    // Just verify it's not 0 (success)
-    assert!(
-        !output
-            .status
-            .success(),
-        "device not found should not succeed"
-    );
+        .arg("write")
+        .arg("--loaderboot")
+        .arg(&loaderboot)
+        .arg("--bin")
+        .arg(format!("{}:0x00800000", app.display()))
+        .assert()
+        .failure()
+        .code(4);
 }
 
 /// Exit code 130: cancelled (Ctrl+C)
@@ -437,14 +470,10 @@ fn json_output_is_valid_json_without_extra_lines() {
     let stdout = String::from_utf8(output.stdout).expect("stdout should be utf-8");
     let stderr = String::from_utf8(output.stderr).expect("stderr should be utf-8");
 
-    // Try to parse as JSON - in CI without ports, may get empty array or error
-    let parsed: Result<serde_json::Value, _> = serde_json::from_str(&stdout);
-    // If parsing succeeds, should be an array
-    if let Ok(val) = parsed {
-        assert!(val.is_array(), "list-ports --json should return an array");
-    }
-    // Even if parse fails, command should not crash
-    // For successful commands with JSON flag, stderr should be empty
+    let parsed: serde_json::Value =
+        serde_json::from_str(&stdout).expect("list-ports --json must be valid JSON");
+    assert_eq!(parsed["ok"], serde_json::Value::Bool(true));
+    assert!(parsed["data"]["ports"].is_array());
     let status = output.status;
     if status.success() {
         assert!(
@@ -464,13 +493,23 @@ fn info_json_error_returns_clean_error_json() {
         .join("not_exists.fwpkg");
 
     let mut cmd = cli_cmd();
-    cmd.arg("info")
+    let output = cmd
+        .arg("info")
         .arg("--json")
         .arg(nonexistent.as_os_str())
-        .assert()
-        .failure()
-        .stdout(predicate::str::is_empty())
-        .stderr(predicate::str::contains("Error"));
+        .output()
+        .expect("command should execute");
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8(output.stderr).expect("stderr should be utf-8");
+    assert!(stderr.is_empty(), "json error should not write stderr");
+    let stdout = String::from_utf8(output.stdout).expect("stdout should be utf-8");
+    let parsed: serde_json::Value =
+        serde_json::from_str(&stdout).expect("info --json failure must be valid JSON");
+    assert_eq!(parsed["ok"], serde_json::Value::Bool(false));
+    assert_eq!(parsed["error"]["command"], serde_json::Value::String("info".to_string()));
+    assert!(parsed["error"]["message"].is_string());
+    assert_eq!(parsed["error"]["exit_code"], serde_json::Value::Number(1u64.into()));
 }
 
 // ============================================================================
