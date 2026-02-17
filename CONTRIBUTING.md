@@ -38,13 +38,34 @@ Git hooks are **automatically configured** on first `cargo build` (via `build.rs
 The pre-push hook checks before each `git push`:
 
 1. **Code formatting** — `cargo fmt --check`
-2. **Clippy lints** — `cargo clippy` with `-D warnings`
+2. **Clippy lints** — `cargo clippy --all-targets --all-features -- -D warnings`
 3. **Tag-version consistency** — if pushing a `cli-v*` or `lib-v*` tag, verifies the version matches the corresponding `Cargo.toml`
+
+Additional pre-push behavior:
+
+- The hook requires a **clean working tree and index** (no unstaged/staged-uncommitted changes), so checks always match the commit being pushed.
+- In non-interactive environments (e.g. VS Code Git output), hook messages are printed without ANSI color codes for readability.
 
 To skip hooks in an emergency:
 
 ```bash
 HISIFLASH_SKIP_HOOKS=1 git push ...
+```
+
+Troubleshooting common pre-push errors:
+
+```bash
+# Check why push is blocked
+git status --porcelain
+
+# Option A: commit current staged changes, then push
+git commit -m "your message"
+git push
+
+# Option B: temporarily stash local edits, push, then restore
+git stash push -u
+git push
+git stash pop
 ```
 
 ## Development Workflow
@@ -92,7 +113,7 @@ docs: update SEBOOT protocol specification
 3. Make your changes
 4. Ensure all tests pass: `cargo test`
 5. Ensure code is formatted: `cargo fmt --all`
-6. Ensure no clippy warnings: `cargo clippy --all-targets -- -D warnings`
+6. Ensure no clippy warnings: `cargo clippy --all-targets --all-features -- -D warnings`
 7. Submit a pull request
 
 ### Code Review
