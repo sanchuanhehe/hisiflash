@@ -67,7 +67,9 @@ fn list_ports_json_returns_valid_json() {
 #[test]
 fn info_json_success_returns_structured_json() {
     let dir = tempdir().expect("tempdir should be created");
-    let fwpkg = dir.path().join("ok.fwpkg");
+    let fwpkg = dir
+        .path()
+        .join("ok.fwpkg");
     let valid_header: Vec<u8> = vec![
         0xDF, 0xAD, 0xBE, 0xEF, // magic (FWPKG V1, little-endian 0xEFBEADDF)
         0x00, 0x00, // crc (not validated as hard error by info --json)
@@ -84,7 +86,11 @@ fn info_json_success_returns_structured_json() {
         .output()
         .expect("command should execute");
 
-    assert!(output.status.success());
+    assert!(
+        output
+            .status
+            .success()
+    );
     let stderr = String::from_utf8(output.stderr).expect("stderr should be utf-8");
     assert!(stderr.is_empty(), "json success should not write stderr");
 
@@ -112,7 +118,11 @@ fn info_json_error_keeps_stdout_clean() {
         .output()
         .expect("command should execute");
 
-    assert!(!output.status.success());
+    assert!(
+        !output
+            .status
+            .success()
+    );
     let stderr = String::from_utf8(output.stderr).expect("stderr should be utf-8");
     assert!(stderr.is_empty(), "json error should not write stderr");
     let stdout = String::from_utf8(output.stdout).expect("stdout should be utf-8");
@@ -500,16 +510,26 @@ fn info_json_error_returns_clean_error_json() {
         .output()
         .expect("command should execute");
 
-    assert!(!output.status.success());
+    assert!(
+        !output
+            .status
+            .success()
+    );
     let stderr = String::from_utf8(output.stderr).expect("stderr should be utf-8");
     assert!(stderr.is_empty(), "json error should not write stderr");
     let stdout = String::from_utf8(output.stdout).expect("stdout should be utf-8");
     let parsed: serde_json::Value =
         serde_json::from_str(&stdout).expect("info --json failure must be valid JSON");
     assert_eq!(parsed["ok"], serde_json::Value::Bool(false));
-    assert_eq!(parsed["error"]["command"], serde_json::Value::String("info".to_string()));
+    assert_eq!(
+        parsed["error"]["command"],
+        serde_json::Value::String("info".to_string())
+    );
     assert!(parsed["error"]["message"].is_string());
-    assert_eq!(parsed["error"]["exit_code"], serde_json::Value::Number(1u64.into()));
+    assert_eq!(
+        parsed["error"]["exit_code"],
+        serde_json::Value::Number(1u64.into())
+    );
 }
 
 // ============================================================================

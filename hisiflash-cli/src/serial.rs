@@ -76,8 +76,7 @@ fn select_non_interactive_port(
 pub fn select_serial_port(options: &SerialOptions, config: &Config) -> Result<SelectedPort> {
     // If port explicitly specified, use it
     if let Some(port_name) = &options.port {
-        return find_port_by_name(port_name)
-            .ok_or_else(|| LibError::DeviceNotFound.into());
+        return find_port_by_name(port_name).ok_or_else(|| LibError::DeviceNotFound.into());
     }
 
     // If port in config, use it

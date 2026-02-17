@@ -399,7 +399,10 @@ fn main() {
         Ok(()) => {},
         Err(err) => {
             let code = map_exit_code(&err);
-            if err.downcast_ref::<JsonErrorResponseEmitted>().is_some() {
+            if err
+                .downcast_ref::<JsonErrorResponseEmitted>()
+                .is_some()
+            {
                 std::process::exit(code);
             }
             if code == 130 {

@@ -34,10 +34,7 @@ pub(crate) fn cmd_list_ports(json: bool) -> Result<()> {
                 "ports": ports,
             }
         });
-        println!(
-            "{}",
-            serde_json::to_string_pretty(&output)?
-        );
+        println!("{}", serde_json::to_string_pretty(&output)?);
         return Ok(());
     }
 
@@ -279,10 +276,7 @@ fn cmd_info_json(firmware: &PathBuf) -> Result<()> {
         }
     });
 
-    println!(
-        "{}",
-        serde_json::to_string_pretty(&info)?
-    );
+    println!("{}", serde_json::to_string_pretty(&info)?);
     Ok(())
 }
 
