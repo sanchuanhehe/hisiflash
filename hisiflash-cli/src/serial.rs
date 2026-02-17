@@ -92,7 +92,7 @@ pub fn select_serial_port(options: &SerialOptions, config: &Config) -> Result<Se
 
         return Ok(SelectedPort {
             port: DetectedPort {
-                name: port_name.to_string(),
+                name: port_name.clone(),
                 transport: TransportKind::Serial,
                 device: UsbDevice::Unknown,
                 vid: None,
