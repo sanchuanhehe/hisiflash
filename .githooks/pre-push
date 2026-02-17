@@ -16,14 +16,21 @@
 
 set -euo pipefail
 
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[0;33m'
-NC='\033[0m' # No Color
+if [ -t 1 ] && [ -z "${NO_COLOR:-}" ] && [ "${TERM:-}" != "dumb" ]; then
+    RED='\033[0;31m'
+    GREEN='\033[0;32m'
+    YELLOW='\033[0;33m'
+    NC='\033[0m' # No Color
+else
+    RED=''
+    GREEN=''
+    YELLOW=''
+    NC=''
+fi
 
-info()  { echo -e "${GREEN}[pre-push]${NC} $*"; }
-warn()  { echo -e "${YELLOW}[pre-push]${NC} $*"; }
-error() { echo -e "${RED}[pre-push]${NC} $*"; }
+info()  { printf '%b\n' "${GREEN}[pre-push]${NC} $*"; }
+warn()  { printf '%b\n' "${YELLOW}[pre-push]${NC} $*"; }
+error() { printf '%b\n' "${RED}[pre-push]${NC} $*" >&2; }
 
 info "Starting pre-push checks..."
 warn "Emergency bypass: HISIFLASH_SKIP_HOOKS=1 git push ...  (or: git push --no-verify)"
@@ -56,8 +63,9 @@ ERRORS=0
 # 1. Check formatting
 # ──────────────────────────────────────────────
 info "Checking code formatting (cargo fmt --check)..."
-if ! cargo fmt --all -- --check 2>/dev/null; then
+if ! fmt_output=$(cargo fmt --all -- --check 2>&1); then
     error "Code is not formatted! Run 'cargo fmt --all' before pushing."
+    echo "$fmt_output" >&2
     ERRORS=$((ERRORS + 1))
 else
     info "Formatting check passed ✓"
@@ -67,8 +75,9 @@ fi
 # 2. Check clippy
 # ──────────────────────────────────────────────
 info "Running clippy..."
-if ! cargo clippy --all-targets --all-features -- -D warnings 2>/dev/null; then
+if ! clippy_output=$(cargo clippy --all-targets --all-features -- -D warnings 2>&1); then
     error "Clippy found warnings! Fix them before pushing."
+    echo "$clippy_output" >&2
     ERRORS=$((ERRORS + 1))
 else
     info "Clippy check passed ✓"
