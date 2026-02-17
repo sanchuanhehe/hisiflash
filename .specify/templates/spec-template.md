@@ -90,6 +90,13 @@
 - **FR-004**: System MUST [data requirement, e.g., "persist user preferences"]
 - **FR-005**: System MUST [behavior, e.g., "log all security events"]
 
+### Current Baseline Review *(mandatory)*
+
+- **BL-001**: Document current behavior from existing implementation (code paths, CLI behavior, and/or data flow) relevant to this feature.
+- **BL-002**: Document existing automated tests that already cover the same area.
+- **BL-003**: Declare behavior delta explicitly: **Retained / Changed / Deprecated**.
+- **BL-004**: If behavior is changed, specify compatibility impact scope (flags, exit codes, stdout/stderr, JSON contracts, i18n) and migration notes if needed.
+
 ### Quality & Compatibility Requirements *(mandatory)*
 
 - **QC-001**: Change MUST preserve code-quality gates (formatting, linting, and tests) with no unmanaged exceptions.

@@ -1,15 +1,10 @@
 <!--
 Sync Impact Report
-- Version change: 0.0.0-template → 1.0.0
+- Version change: 1.0.0 → 1.1.0
 - Modified principles:
-	- PRINCIPLE_1_NAME → I. Code Quality Is Non-Negotiable
-	- PRINCIPLE_2_NAME → II. Testing Defines Compatibility
-	- PRINCIPLE_3_NAME → III. UX & CLI Contract Consistency
-	- PRINCIPLE_4_NAME → IV. Performance Budgets Are Required
-	- PRINCIPLE_5_NAME → V. Simplicity and Maintainability
+	- II. Testing Defines Compatibility → II. Testing & Baseline-Driven Compatibility
 - Added sections:
-	- Quality Gates and Release Criteria
-	- Development Workflow and Review Standards
+	- None
 - Removed sections:
 	- None
 - Templates requiring updates:
@@ -34,8 +29,10 @@ All production code MUST pass `cargo fmt --all`, `cargo clippy --all-targets --a
 
 Rationale: hisiflash is a hardware-facing tool where small defects can cause firmware flashing failures. Strict quality gates reduce regression risk.
 
-### II. Testing Defines Compatibility
+### II. Testing & Baseline-Driven Compatibility
 Behavioral compatibility is defined by tests, not by assumption. Any user-visible change to flags, defaults, exit codes, JSON output, stdout/stderr routing, or i18n text structure MUST include updated or new tests in `hisiflash-cli/tests/` and relevant unit tests. Bug fixes MUST include a regression test that fails before the fix and passes after.
+
+Before a new feature spec is finalized, authors MUST review current code and existing tests to identify the real baseline behavior. The spec MUST explicitly document what behavior is retained, changed, or deprecated relative to that baseline.
 
 Rationale: the CLI is consumed by both humans and automation; compatibility must remain verifiable and explicit.
 
@@ -64,6 +61,7 @@ Rationale: maintainable systems evolve faster and safer than over-engineered sys
 ## Development Workflow and Review Standards
 
 - Feature work MUST flow through `spec -> plan -> tasks` with constitution checks in planning.
+- Spec drafting MUST include an explicit baseline review against existing code paths and test contracts.
 - Reviews MUST verify compatibility impact on: flags, exit codes, stdout/stderr, JSON contracts, and i18n behavior.
 - Performance-sensitive work MUST include before/after measurement notes or clear justification if measurement is not feasible.
 - Merges that violate P0 compatibility guarantees are prohibited unless accompanied by an explicit breaking-change plan.
@@ -87,5 +85,5 @@ Compliance review expectations:
 - Every pull request review MUST check constitutional compliance and test evidence.
 - Exceptions MUST be explicit, time-bound, and documented in the related plan/PR.
 
-**Version**: 1.0.0 | **Ratified**: 2026-02-18 | **Last Amended**: 2026-02-18
+**Version**: 1.1.0 | **Ratified**: 2026-02-18 | **Last Amended**: 2026-02-18
 

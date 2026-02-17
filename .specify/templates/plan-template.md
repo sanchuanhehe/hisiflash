@@ -33,6 +33,7 @@
 
 - **Code Quality Gate**: Plan includes how formatting, clippy (`-D warnings`), and tests will be satisfied.
 - **Testing & Compatibility Gate**: User-visible CLI changes (flags/exit/stdout-stderr/json/i18n) identify required test updates.
+- **Baseline Review Gate**: Plan references completed baseline review from spec (existing code paths + existing tests + declared behavior delta).
 - **UX Consistency Gate**: Plan states how command behavior remains consistent in interactive and non-interactive flows.
 - **Performance Gate**: Plan defines measurable performance target(s) and constraints for impacted paths.
 - **Simplicity Gate**: Any added abstraction/dependency includes explicit justification and rejected simpler alternative.

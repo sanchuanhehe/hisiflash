@@ -74,6 +74,7 @@ Examples of foundational tasks (adjust based on your project):
 ### Constitution-Driven Mandatory Foundations
 
 - [ ] T0A1 Define CLI compatibility impact scope (flags/exit/stdout-stderr/json/i18n)
+- [ ] T0A1B Complete baseline review: existing code paths, existing tests, and behavior delta declaration
 - [ ] T0A2 Define test strategy updates for compatibility-impacting behavior
 - [ ] T0A3 Define measurable performance target(s) and regression budget
 - [ ] T0A4 Define UX consistency checks for interactive/non-interactive flows
