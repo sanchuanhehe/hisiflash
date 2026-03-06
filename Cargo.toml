@@ -63,7 +63,7 @@ clap_complete = "4.5"
 
 # Interactive prompts
 dialoguer = "0.11"
-ctrlc = "3.4"
+ctrlc = "3.5"
 
 # Terminal raw mode & input
 crossterm = "0.28"
