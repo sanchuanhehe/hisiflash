@@ -59,17 +59,17 @@ toml = "0.8"
 
 # CLI
 clap = { version = "4.5", features = ["derive", "env"] }
-clap_complete = "4.5"
+clap_complete = "4.6"
 
 # Interactive prompts
 dialoguer = "0.11"
-ctrlc = "3.4"
+ctrlc = "3.5"
 
 # Terminal raw mode & input
 crossterm = "0.28"
 
 # Serial port
-serialport = "4.5"
+serialport = "4.9"
 
 # Error handling
 thiserror = "2"
