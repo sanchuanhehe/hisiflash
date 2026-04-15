@@ -18,11 +18,17 @@ use {
     },
     clap_complete::Shell,
     console::style,
+    dialoguer::{Error as DialoguerError, Select, theme::ColorfulTheme},
     env_logger::Env,
     hisiflash::{ChipFamily, Error as LibError, clear_interrupt_flag},
     log::debug,
     rust_i18n::t,
-    std::{env, path::PathBuf, sync::OnceLock},
+    std::{
+        env,
+        io::IsTerminal,
+        path::{Path, PathBuf},
+        sync::OnceLock,
+    },
     thiserror::Error,
 };
 
@@ -116,14 +122,8 @@ pub(crate) struct Cli {
     pub(crate) baud: u32,
 
     /// Target chip type.
-    #[arg(
-        short,
-        long,
-        global = true,
-        default_value = "ws63",
-        env = "HISIFLASH_CHIP"
-    )]
-    pub(crate) chip: Chip,
+    #[arg(short, long, global = true, env = "HISIFLASH_CHIP")]
+    pub(crate) chip: Option<Chip>,
 
     /// Language/locale for messages (e.g., en, zh-CN).
     #[arg(long, global = true, env = "HISIFLASH_LANG")]
@@ -158,13 +158,13 @@ pub(crate) struct Cli {
 }
 
 /// Supported chip types.
-#[derive(Clone, Copy, Debug, ValueEnum)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
 pub(crate) enum Chip {
-    /// WS63 chip (WiFi + BLE, default).
+    /// WS63 chip (WiFi + BLE).
     Ws63,
-    /// BS2X series (BS21, BLE only) — planned, not yet supported.
+    /// BS2X series (BS21, BLE only) via shared SEBOOT serial path.
     Bs2x,
-    /// BS25 (BLE with enhanced features) — planned, not yet supported.
+    /// BS25 (BLE with enhanced features) via shared SEBOOT serial path.
     Bs25,
 }
 
@@ -179,6 +179,14 @@ impl From<Chip> for ChipFamily {
 }
 
 impl Chip {
+    fn as_cli_name(self) -> &'static str {
+        match self {
+            Self::Ws63 => "ws63",
+            Self::Bs2x => "bs2x",
+            Self::Bs25 => "bs25",
+        }
+    }
+
     fn from_config_name(name: &str) -> Option<Self> {
         match ChipFamily::from_name(name)? {
             ChipFamily::Ws63 => Some(Self::Ws63),
@@ -187,6 +195,121 @@ impl Chip {
             _ => None,
         }
     }
+}
+
+fn guess_chip_from_firmware_path(path: &Path) -> Option<Chip> {
+    let name = path
+        .file_name()
+        .and_then(|file_name| file_name.to_str())
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    let full_path = path
+        .to_string_lossy()
+        .to_ascii_lowercase();
+
+    let haystacks = [name.as_str(), full_path.as_str()];
+
+    if haystacks
+        .iter()
+        .any(|text| text.contains("bs25"))
+    {
+        return Some(Chip::Bs25);
+    }
+
+    if haystacks
+        .iter()
+        .any(|text| {
+            ["bs2x", "bs21", "bs21e", "bs20", "bs22"]
+                .iter()
+                .any(|needle| text.contains(needle))
+        })
+    {
+        return Some(Chip::Bs2x);
+    }
+
+    if haystacks
+        .iter()
+        .any(|text| text.contains("ws63"))
+    {
+        return Some(Chip::Ws63);
+    }
+
+    None
+}
+
+fn ensure_chip_prompt_tty() -> Result<()> {
+    if std::io::stdin().is_terminal() && std::io::stderr().is_terminal() {
+        Ok(())
+    } else {
+        Err(CliError::Usage(t!("chip.interactive_requires_tty").to_string()).into())
+    }
+}
+
+fn map_chip_prompt_error(err: DialoguerError) -> anyhow::Error {
+    match err {
+        DialoguerError::IO(io_err) => {
+            if io_err.kind() == std::io::ErrorKind::Interrupted {
+                CliError::Cancelled(t!("chip.selection_cancelled").to_string()).into()
+            } else {
+                CliError::Usage(t!("chip.prompt_failed").to_string()).into()
+            }
+        },
+    }
+}
+
+fn prompt_for_chip() -> Result<Chip> {
+    const CHIPS: [Chip; 3] = [Chip::Ws63, Chip::Bs2x, Chip::Bs25];
+
+    let labels: Vec<&str> = CHIPS
+        .iter()
+        .map(|chip| chip.as_cli_name())
+        .collect();
+    let selection = Select::with_theme(&ColorfulTheme::default())
+        .with_prompt(t!("chip.select_prompt").to_string())
+        .items(&labels)
+        .default(0)
+        .interact_opt()
+        .map_err(map_chip_prompt_error)?;
+
+    selection
+        .map(|index| CHIPS[index])
+        .ok_or_else(|| CliError::Cancelled(t!("chip.selection_cancelled").to_string()).into())
+}
+
+fn resolve_effective_chip(cli: &Cli, firmware: Option<&Path>) -> Result<Chip> {
+    if let Some(chip) = cli.chip {
+        return Ok(chip);
+    }
+
+    if let Some(path) = firmware {
+        if let Some(chip) = guess_chip_from_firmware_path(path) {
+            if !cli.quiet {
+                eprintln!(
+                    "{} {}",
+                    style("🔎").blue(),
+                    t!("chip.inferred_from_firmware", chip = chip.as_cli_name())
+                );
+            }
+            return Ok(chip);
+        }
+    }
+
+    if cli.non_interactive {
+        let message = if firmware.is_some() {
+            t!("chip.inference_failed_non_interactive").to_string()
+        } else {
+            t!("chip.required_non_interactive").to_string()
+        };
+        return Err(CliError::Usage(message).into());
+    }
+
+    ensure_chip_prompt_tty()?;
+
+    if firmware.is_some() && !cli.quiet {
+        eprintln!("{} {}", style("ℹ").blue(), t!("chip.could_not_infer"));
+    }
+
+    prompt_for_chip()
 }
 
 #[derive(Debug, Error)]
@@ -554,6 +677,7 @@ fn run_with_args(raw_args: &[String]) -> Result<()> {
             monitor_raw,
         } => {
             let firmware = resolve_firmware(firmware.as_ref(), cli.non_interactive, cli.quiet)?;
+            let chip = resolve_effective_chip(&cli, Some(&firmware))?;
             cmd_flash(
                 &cli,
                 &mut config,
@@ -561,6 +685,7 @@ fn run_with_args(raw_args: &[String]) -> Result<()> {
                 filter.as_ref(),
                 *late_baud,
                 *skip_verify,
+                chip.into(),
             )?;
             if *monitor {
                 eprintln!();
@@ -580,7 +705,8 @@ fn run_with_args(raw_args: &[String]) -> Result<()> {
             bins,
             late_baud,
         } => {
-            cmd_write(&cli, &mut config, loaderboot, bins, *late_baud)?;
+            let chip = resolve_effective_chip(&cli, None)?;
+            cmd_write(&cli, &mut config, loaderboot, bins, *late_baud, chip.into())?;
         },
         Commands::WriteProgram {
             loaderboot,
@@ -588,6 +714,7 @@ fn run_with_args(raw_args: &[String]) -> Result<()> {
             address,
             late_baud,
         } => {
+            let chip = resolve_effective_chip(&cli, None)?;
             cmd_write_program(
                 &cli,
                 &mut config,
@@ -595,10 +722,12 @@ fn run_with_args(raw_args: &[String]) -> Result<()> {
                 program.clone(),
                 *address,
                 *late_baud,
+                chip.into(),
             )?;
         },
         Commands::Erase { all } => {
-            cmd_erase(&cli, &mut config, *all)?;
+            let chip = resolve_effective_chip(&cli, None)?;
+            cmd_erase(&cli, &mut config, *all, chip.into())?;
         },
         Commands::Info { firmware, json } => {
             if *json {
@@ -672,7 +801,10 @@ fn apply_config_defaults(cli: &mut Cli, matches: &clap::ArgMatches, config: &Con
     }
 
     // Apply default chip from config if not set on command line
-    if matches.value_source("chip") == Some(ValueSource::DefaultValue) {
+    if matches
+        .value_source("chip")
+        .is_none()
+    {
         if let Some(config_chip_name) = config
             .flash
             .chip
@@ -688,7 +820,7 @@ fn apply_config_defaults(cli: &mut Cli, matches: &clap::ArgMatches, config: &Con
                     .to_string(),
                 )
             })?;
-            cli.chip = config_chip;
+            cli.chip = Some(config_chip);
         }
     }
 
@@ -1179,7 +1311,10 @@ mod cli_tests {
     fn test_cli_default_values() {
         let cli = Cli::try_parse_from(["hisiflash", "list-ports"]).unwrap();
         assert_eq!(cli.baud, 921600);
-        assert!(matches!(cli.chip, Chip::Ws63));
+        assert!(
+            cli.chip
+                .is_none()
+        );
         assert!(!cli.quiet);
         assert!(!cli.non_interactive);
         assert!(!cli.confirm_port);
@@ -1227,7 +1362,7 @@ mod cli_tests {
             Some("COM3")
         );
         assert_eq!(cli.baud, 115200);
-        assert!(matches!(cli.chip, Chip::Bs2x));
+        assert_eq!(cli.chip, Some(Chip::Bs2x));
         assert_eq!(
             cli.lang
                 .as_deref(),
@@ -1266,7 +1401,7 @@ mod cli_tests {
         apply_config_defaults(&mut cli, &matches, &config).unwrap();
 
         assert_eq!(cli.baud, 460800);
-        assert!(matches!(cli.chip, Chip::Bs2x));
+        assert_eq!(cli.chip, Some(Chip::Bs2x));
 
         if let Commands::Flash {
             late_baud,
@@ -1316,7 +1451,7 @@ mod cli_tests {
         apply_config_defaults(&mut cli, &matches, &config).unwrap();
 
         assert_eq!(cli.baud, 115200);
-        assert!(matches!(cli.chip, Chip::Ws63));
+        assert_eq!(cli.chip, Some(Chip::Ws63));
 
         if let Commands::Flash {
             late_baud,
@@ -1367,6 +1502,41 @@ mod cli_tests {
         let mut cli = Cli::from_arg_matches(&matches).unwrap();
 
         let result = apply_config_defaults(&mut cli, &matches, &config);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_guess_chip_from_firmware_path_bs21e() {
+        let chip = guess_chip_from_firmware_path(Path::new(
+            "output/bs21e/fwpkg/standard-bs21e-1100e/bs21e_all_in_one.fwpkg",
+        ));
+        assert_eq!(chip, Some(Chip::Bs2x));
+    }
+
+    #[test]
+    fn test_guess_chip_from_firmware_path_bs25() {
+        let chip = guess_chip_from_firmware_path(Path::new("firmware/bs25_release.fwpkg"));
+        assert_eq!(chip, Some(Chip::Bs25));
+    }
+
+    #[test]
+    fn test_guess_chip_from_firmware_path_unknown() {
+        let chip = guess_chip_from_firmware_path(Path::new("firmware/all_in_one.fwpkg"));
+        assert_eq!(chip, None);
+    }
+
+    #[test]
+    fn test_resolve_effective_chip_from_firmware_name() {
+        let cli = Cli::try_parse_from(["hisiflash", "flash", "bs21e_all_in_one.fwpkg"]).unwrap();
+        let chip = resolve_effective_chip(&cli, Some(Path::new("bs21e_all_in_one.fwpkg"))).unwrap();
+        assert_eq!(chip, Chip::Bs2x);
+    }
+
+    #[test]
+    fn test_resolve_effective_chip_non_interactive_unknown_fails() {
+        let cli = Cli::try_parse_from(["hisiflash", "--non-interactive", "flash", "unknown.fwpkg"])
+            .unwrap();
+        let result = resolve_effective_chip(&cli, Some(Path::new("unknown.fwpkg")));
         assert!(result.is_err());
     }
 

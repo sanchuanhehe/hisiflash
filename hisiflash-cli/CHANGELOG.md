@@ -15,6 +15,8 @@ with pre-release tags.
 - Project-level testing/validation docs were added and linked in README (`docs/testing/*`).
 
 ### Changed
+- Target chip selection no longer falls back silently to ws63; the CLI now infers the chip from the firmware path first and prompts only in interactive TTY sessions.
+- Help text and localized messages now describe the shared serial path for BS2X and BS25 targets.
 - Refactored CLI argument parsing to use `disable_help_flag` and manual parameter definition for localized help text.
 - CLI now reports invalid `flash.chip` values in config explicitly instead of silently falling back.
 - Interactive serial selection hints are written to `stderr` for better script compatibility.
@@ -30,6 +32,7 @@ with pre-release tags.
 - `monitor` stream contract is now split in non-TTY mode (`stdout` for serial data, `stderr` for status), while TTY mode remains merged for alignment.
 
 ### Fixed
+- Fixed non-interactive flashing flows to fail fast when the chip cannot be inferred instead of proceeding with an incorrect default target.
 - Fixed `hisiflash --help` behavior when no subcommand is provided - now shows help instead of error.
 - Fixed `HISIFLASH_LANG` environment variable not taking effect before help output - locale is now set before argument parsing.
 - Cancellation now uses a dedicated `Cancelled:` style output instead of generic error wording.

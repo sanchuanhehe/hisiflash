@@ -266,6 +266,8 @@ fn exit_code_four_for_device_not_found() {
     let mut cmd = cli_cmd();
     cmd.arg("-p")
         .arg("INVALID_PORT_NAME_XYZ")
+        .arg("--chip")
+        .arg("ws63")
         .arg("write")
         .arg("--loaderboot")
         .arg(&loaderboot)

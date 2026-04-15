@@ -26,6 +26,7 @@ pub(crate) fn cmd_flash(
     filter: Option<&String>,
     late_baud: bool,
     skip_verify: bool,
+    chip: ChipFamily,
 ) -> Result<()> {
     if !cli.quiet {
         eprintln!(
@@ -89,10 +90,6 @@ pub(crate) fn cmd_flash(
         );
     }
 
-    // Create flasher using chip abstraction
-    let chip: ChipFamily = cli
-        .chip
-        .into();
     let mut flasher = chip.create_flasher(&port, cli.baud, late_baud, cli.verbose)?;
     if let Err(err) = ensure_not_interrupted() {
         flasher.close();
@@ -205,6 +202,7 @@ pub(crate) fn cmd_write(
     loaderboot: &PathBuf,
     bins: &[(PathBuf, u32)],
     late_baud: bool,
+    chip: ChipFamily,
 ) -> Result<()> {
     if !cli.quiet {
         eprintln!(
@@ -256,9 +254,6 @@ pub(crate) fn cmd_write(
         );
     }
 
-    let chip: ChipFamily = cli
-        .chip
-        .into();
     let mut flasher = chip.create_flasher(&port, cli.baud, late_baud, cli.verbose)?;
     if let Err(err) = ensure_not_interrupted() {
         flasher.close();
@@ -321,12 +316,20 @@ pub(crate) fn cmd_write_program(
     program: PathBuf,
     address: u32,
     late_baud: bool,
+    chip: ChipFamily,
 ) -> Result<()> {
-    cmd_write(cli, config, loaderboot, &[(program, address)], late_baud)
+    cmd_write(
+        cli,
+        config,
+        loaderboot,
+        &[(program, address)],
+        late_baud,
+        chip,
+    )
 }
 
 /// Erase command implementation.
-pub(crate) fn cmd_erase(cli: &Cli, config: &mut Config, all: bool) -> Result<()> {
+pub(crate) fn cmd_erase(cli: &Cli, config: &mut Config, all: bool, chip: ChipFamily) -> Result<()> {
     if !all {
         if !cli.quiet {
             eprintln!("{} {}", style("⚠").yellow(), t!("erase.use_all_flag"));
@@ -343,9 +346,6 @@ pub(crate) fn cmd_erase(cli: &Cli, config: &mut Config, all: bool) -> Result<()>
         );
     }
 
-    let chip: ChipFamily = cli
-        .chip
-        .into();
     let mut flasher = chip.create_flasher(&port, cli.baud, false, cli.verbose)?;
     if let Err(err) = ensure_not_interrupted() {
         flasher.close();
