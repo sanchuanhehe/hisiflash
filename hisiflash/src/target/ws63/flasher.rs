@@ -60,6 +60,11 @@ const PARTITION_DELAY: Duration = Duration::from_millis(100);
 /// Timeout for waiting for SEBOOT magic response.
 const MAGIC_TIMEOUT: Duration = Duration::from_secs(10);
 
+/// BurnTool uses a longer common timeout after each YMODEM transfer completes,
+/// because the target may spend noticeable time finalizing the flashed image
+/// before emitting the next SEBOOT ACK.
+const POST_TRANSFER_MAGIC_TIMEOUT: Duration = Duration::from_secs(15);
+
 /// Delay between connection retry attempts.
 const CONNECT_RETRY_DELAY: Duration = Duration::from_millis(500);
 
@@ -117,6 +122,9 @@ pub struct Ws63Flasher<P: Port> {
     port: P,
     target_baud: u32,
     late_baud: bool,
+    finish_without_c: bool,
+    prefetched_magic_bytes: Vec<u8>,
+    prefetched_ymodem_bytes: Vec<u8>,
     verbose: u8,
     cancel: CancelContext,
 }
@@ -138,6 +146,9 @@ impl<P: Port> Ws63Flasher<P> {
             port,
             target_baud,
             late_baud: false,
+            finish_without_c: true,
+            prefetched_magic_bytes: Vec::new(),
+            prefetched_ymodem_bytes: Vec::new(),
             verbose: 0,
             cancel: CancelContext::none(),
         }
@@ -167,6 +178,9 @@ impl<P: Port> Ws63Flasher<P> {
             port,
             target_baud,
             late_baud: false,
+            finish_without_c: true,
+            prefetched_magic_bytes: Vec::new(),
+            prefetched_ymodem_bytes: Vec::new(),
             verbose: 0,
             cancel,
         }
@@ -179,6 +193,14 @@ impl<P: Port> Ws63Flasher<P> {
     #[must_use]
     pub fn with_late_baud(mut self, late_baud: bool) -> Self {
         self.late_baud = late_baud;
+        self
+    }
+
+    /// Control whether YMODEM should send the finish block when EOT is ACKed
+    /// without a trailing 'C'.
+    #[must_use]
+    pub fn with_finish_without_c(mut self, finish_without_c: bool) -> Self {
+        self.finish_without_c = finish_without_c;
         self
     }
 
@@ -363,7 +385,7 @@ impl<P: Port> Ws63Flasher<P> {
     fn wait_for_magic(&mut self, timeout: Duration) -> Result<()> {
         let magic: [u8; 4] = [0xEF, 0xBE, 0xAD, 0xDE]; // Little-endian DEADBEEF
         let start = Instant::now();
-        let mut match_idx = 0;
+        let mut collected = std::mem::take(&mut self.prefetched_magic_bytes);
 
         debug!("Waiting for SEBOOT magic...");
 
@@ -371,27 +393,38 @@ impl<P: Port> Ws63Flasher<P> {
             self.cancel
                 .check()?;
 
-            let mut buf = [0u8; 1];
+            if let Some(pos) = collected
+                .windows(magic.len())
+                .position(|window| window == magic)
+            {
+                if collected.len() >= pos + 6 {
+                    let len = u16::from_le_bytes([collected[pos + 4], collected[pos + 5]]) as usize;
+                    if collected.len() >= pos + len {
+                        let remainder = collected[pos + len..].to_vec();
+                        if !remainder.is_empty() {
+                            trace!("wait_for_magic remainder: {remainder:02X?}");
+                            self.prefetched_ymodem_bytes
+                                .extend(remainder);
+                        }
+                        debug!("Received SEBOOT magic response");
+                        return Ok(());
+                    }
+                }
+            }
+
+            let mut buf = [0u8; 64];
             match self
                 .port
                 .read(&mut buf)
             {
-                Ok(1) => {
-                    if buf[0] == magic[match_idx] {
-                        match_idx += 1;
-                        if match_idx == magic.len() {
-                            // Found magic, drain remaining frame data
-                            sleep_interruptible(&self.cancel, Duration::from_millis(50))?;
-                            let mut drain = [0u8; 256];
-                            let _ = self
-                                .port
-                                .read(&mut drain);
-                            debug!("Received SEBOOT magic response");
-                            return Ok(());
-                        }
-                    } else {
-                        // Reset match, check if current byte starts a new match
-                        match_idx = usize::from(buf[0] == magic[0]);
+                Ok(n) if n > 0 => {
+                    trace!("wait_for_magic chunk: {:02X?}", &buf[..n]);
+                    collected.extend_from_slice(&buf[..n]);
+                    if collected.len() > 512 {
+                        let keep_from = collected
+                            .len()
+                            .saturating_sub(64);
+                        collected.drain(..keep_from);
                     }
                 },
                 Ok(_) => {},
@@ -431,13 +464,17 @@ impl<P: Port> Ws63Flasher<P> {
             char_timeout: Duration::from_millis(1000),
             c_timeout: Duration::from_secs(30),
             max_retries: 10,
+            finish_without_c: self.finish_without_c,
             verbose: self.verbose,
         };
 
-        let mut ymodem = YmodemTransfer::with_config(&mut self.port, config, &self.cancel);
+        let prefetched_input = std::mem::take(&mut self.prefetched_ymodem_bytes);
+        let mut ymodem = YmodemTransfer::with_config(&mut self.port, config, &self.cancel)
+            .with_prefetched_input(prefetched_input);
         ymodem.transfer(name, data, |current, total| {
             progress(name, current, total);
         })?;
+        self.prefetched_magic_bytes = ymodem.take_trailing_data();
 
         debug!("LoaderBoot transfer complete");
         Ok(())
@@ -476,7 +513,7 @@ impl<P: Port> Ws63Flasher<P> {
         self.transfer_loaderboot(&loaderboot.name, lb_data, &mut progress)?;
 
         // Wait for LoaderBoot to initialize (device sends SEBOOT magic when ready)
-        self.wait_for_magic(MAGIC_TIMEOUT)?;
+        self.wait_for_magic(POST_TRANSFER_MAGIC_TIMEOUT)?;
 
         // Change baud rate if in late mode
         if self.late_baud && self.target_baud != DEFAULT_BAUD {
@@ -612,7 +649,7 @@ impl<P: Port> Ws63Flasher<P> {
         // Wait for ACK frame (SEBOOT magic response) from device
         // The device responds with a SEBOOT frame after processing the download
         // command. ws63flash calls uart_read_until_magic() here.
-        self.wait_for_magic(MAGIC_TIMEOUT)?;
+        self.wait_for_magic(POST_TRANSFER_MAGIC_TIMEOUT)?;
 
         // Transfer using YMODEM
         // Note: ymodem.transfer() internally calls wait_for_c(), so we don't need
@@ -621,13 +658,21 @@ impl<P: Port> Ws63Flasher<P> {
             char_timeout: Duration::from_millis(1000),
             c_timeout: Duration::from_secs(30),
             max_retries: 10,
+            finish_without_c: self.finish_without_c,
             verbose: self.verbose,
         };
 
-        let mut ymodem = YmodemTransfer::with_config(&mut self.port, config, &self.cancel);
+        let prefetched_input = std::mem::take(&mut self.prefetched_ymodem_bytes);
+        let mut ymodem = YmodemTransfer::with_config(&mut self.port, config, &self.cancel)
+            .with_prefetched_input(prefetched_input);
         ymodem.transfer(name, data, |current, total| {
             progress(name, current, total);
         })?;
+        self.prefetched_magic_bytes = ymodem.take_trailing_data();
+
+        // BurnTool waits for a SEBOOT ACK after each partition transfer before
+        // issuing the next download command. BS2X requires the same sequencing.
+        self.wait_for_magic(POST_TRANSFER_MAGIC_TIMEOUT)?;
 
         debug!("{name} transfer complete");
         Ok(())
@@ -896,6 +941,7 @@ mod tests {
         name: String,
         baud_rate: u32,
         timeout: Duration,
+        max_read_size: usize,
         read_buffer: Arc<Mutex<Vec<u8>>>,
         write_buffer: Arc<Mutex<Vec<u8>>>,
         dtr: bool,
@@ -908,6 +954,7 @@ mod tests {
                 name: name.to_string(),
                 baud_rate: 115200,
                 timeout: Duration::from_millis(1000),
+                max_read_size: 1,
                 read_buffer: Arc::new(Mutex::new(Vec::new())),
                 write_buffer: Arc::new(Mutex::new(Vec::new())),
                 dtr: false,
@@ -1015,7 +1062,7 @@ mod tests {
                 ));
             }
 
-            let to_read = std::cmp::min(buf.len(), read_buf.len());
+            let to_read = std::cmp::min(buf.len(), read_buf.len()).min(self.max_read_size);
             buf[..to_read].copy_from_slice(&read_buf[..to_read]);
             read_buf.drain(..to_read);
             Ok(to_read)
@@ -1215,13 +1262,29 @@ mod tests {
         assert_eq!(flasher2.target_baud(), Some(115200));
     }
 
-    /// Test unsupported chip family returns error for create_flasher_with_port.
+    /// Test shared SEBOOT chip families can reuse the generic serial flasher.
+    #[test]
+    fn test_create_flasher_with_port_shared_seboot_chips() {
+        use crate::target::ChipFamily;
+
+        let port = MockPort::new("/dev/ttyUSB0");
+        let result = ChipFamily::Bs2x.create_flasher_with_port(port, 115200, false, 0);
+
+        assert!(result.is_ok());
+
+        let port = MockPort::new("/dev/ttyUSB1");
+        let result = ChipFamily::Bs25.create_flasher_with_port(port, 115200, false, 0);
+
+        assert!(result.is_ok());
+    }
+
+    /// Test unsupported chip family still returns an error for generic ports.
     #[test]
     fn test_create_flasher_with_port_unsupported_chip() {
         use crate::target::ChipFamily;
 
         let port = MockPort::new("/dev/ttyUSB0");
-        let result = ChipFamily::Bs2x.create_flasher_with_port(port, 115200, false, 0);
+        let result = ChipFamily::Generic.create_flasher_with_port(port, 115200, false, 0);
 
         assert!(result.is_err());
         // Verify error is the Unsupported variant
@@ -1357,7 +1420,7 @@ mod tests {
         let mut response = Vec::new();
         response.extend_from_slice(&[0xEF, 0xBE, 0x00]); // partial match then break
         response.extend_from_slice(&[0xEF, 0xBE, 0xAD, 0xDE]); // real magic
-        response.extend_from_slice(&[0x0C, 0x00, 0xE1, 0x1E, 0x5A, 0x00]); // frame tail
+        response.extend_from_slice(&[0x0C, 0x00, 0xE1, 0x1E, 0x5A, 0x00, 0x00, 0x00]); // complete frame tail
         port.add_read_data(&response);
 
         let mut flasher = Ws63Flasher::with_cancel(port, 921600, CancelContext::none());

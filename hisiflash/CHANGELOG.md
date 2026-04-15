@@ -7,6 +7,17 @@ and this crate follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+### Added
+- Experimental shared-serial flashing support for BS2X and BS25 targets via the common SEBOOT transport.
+
+### Changed
+- SEBOOT stage transitions now preserve prefetched serial bytes across LoaderBoot and partition downloads.
+- Post-transfer device readiness handling now waits for the next SEBOOT ACK before continuing on BS2X-style flows.
+
+### Fixed
+- Fixed BS21E flashing failures caused by mixed ACK and C responses during YMODEM session shutdown.
+- Fixed loss of trailing SEBOOT response bytes when the finish-block ACK and next frame arrived in the same serial read.
+
 ## [0.3.0] - 2026-03-06
 
 ### Added

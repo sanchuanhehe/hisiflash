@@ -230,15 +230,15 @@ impl ChipFamily {
         verbose: u8,
     ) -> Result<Box<dyn Flasher>> {
         match self {
-            Self::Ws63 => {
-                // Ws63Flasher struct implements the Flasher trait
+            Self::Ws63 | Self::Bs2x | Self::Bs25 => {
+                // WS63/BS2X/BS25 currently share the same serial SEBOOT/YMODEM
+                // transport implementation. Chip-specific quirks are handled in
+                // the shared protocol layer.
                 let flasher = super::ws63::flasher::Ws63Flasher::open(port_name, target_baud)?
                     .with_late_baud(late_baud)
+                    .with_finish_without_c(!matches!(self, Self::Bs2x | Self::Bs25))
                     .with_verbose(verbose);
                 Ok(Box::new(flasher))
-            },
-            Self::Bs2x | Self::Bs25 => {
-                Err(Error::Unsupported("BS2X series support coming soon".into()))
             },
             Self::Ws53 | Self::Sw39 => Err(Error::Unsupported(format!(
                 "{self} series support coming soon"
@@ -284,10 +284,11 @@ impl ChipFamily {
         cancel: crate::CancelContext,
     ) -> Result<Box<dyn Flasher>> {
         match self {
-            Self::Ws63 => {
+            Self::Ws63 | Self::Bs2x | Self::Bs25 => {
                 let flasher =
                     super::ws63::flasher::Ws63Flasher::with_cancel(port, target_baud, cancel)
                         .with_late_baud(late_baud)
+                        .with_finish_without_c(!matches!(self, Self::Bs2x | Self::Bs25))
                         .with_verbose(verbose);
                 Ok(Box::new(flasher))
             },
@@ -319,14 +320,12 @@ impl ChipFamily {
         verbose: u8,
     ) -> Result<Box<dyn Flasher>> {
         match self {
-            Self::Ws63 => {
+            Self::Ws63 | Self::Bs2x | Self::Bs25 => {
                 let flasher = super::ws63::flasher::Ws63Flasher::open_with_config(config)?
                     .with_late_baud(late_baud)
+                    .with_finish_without_c(!matches!(self, Self::Bs2x | Self::Bs25))
                     .with_verbose(verbose);
                 Ok(Box::new(flasher))
-            },
-            Self::Bs2x | Self::Bs25 => {
-                Err(Error::Unsupported("BS2X series support coming soon".into()))
             },
             Self::Ws53 | Self::Sw39 => Err(Error::Unsupported(format!(
                 "{self} series support coming soon"
@@ -529,11 +528,17 @@ mod tests {
 
     #[cfg(feature = "native")]
     #[test]
-    fn test_create_flasher_unsupported_chip() {
-        // BS2X, Generic etc. should return Unsupported
+    fn test_create_flasher_supported_shared_seboot_chips() {
         let result = ChipFamily::Bs2x.create_flasher("/dev/null", 115200, false, 0);
-        assert!(result.is_err());
+        assert!(!matches!(result, Err(Error::Unsupported(_))));
 
+        let result = ChipFamily::Bs25.create_flasher("/dev/null", 115200, false, 0);
+        assert!(!matches!(result, Err(Error::Unsupported(_))));
+    }
+
+    #[cfg(feature = "native")]
+    #[test]
+    fn test_create_flasher_unsupported_chip() {
         let result = ChipFamily::Generic.create_flasher("/dev/null", 115200, false, 0);
         assert!(result.is_err());
     }
