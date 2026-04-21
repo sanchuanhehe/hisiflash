@@ -112,14 +112,8 @@ pub(crate) struct Cli {
     pub(crate) port: Option<String>,
 
     /// Baud rate for data transfer.
-    #[arg(
-        short,
-        long,
-        global = true,
-        default_value = "921600",
-        env = "HISIFLASH_BAUD"
-    )]
-    pub(crate) baud: u32,
+    #[arg(short, long, global = true, env = "HISIFLASH_BAUD")]
+    pub(crate) baud: Option<u32>,
 
     /// Target chip type.
     #[arg(short, long, global = true, env = "HISIFLASH_CHIP")]
@@ -310,6 +304,16 @@ fn resolve_effective_chip(cli: &Cli, firmware: Option<&Path>) -> Result<Chip> {
     }
 
     prompt_for_chip()
+}
+
+/// Resolve the effective baud rate to use for flashing.
+///
+/// If the user explicitly specified `--baud`, that value is used unconditionally.
+/// Otherwise, the chip-specific recommended rate is used:
+/// - BS2X/BS25 → 460800 (CH340/CH341 adapters are unreliable at 921600)
+/// - WS63 and others → 921600 (maximum throughput)
+pub(crate) fn resolve_effective_baud(cli_baud: Option<u32>, chip: ChipFamily) -> u32 {
+    cli_baud.unwrap_or_else(|| chip.recommended_flash_baud())
 }
 
 #[derive(Debug, Error)]
@@ -790,13 +794,16 @@ fn run_with_args(raw_args: &[String]) -> Result<()> {
 
 fn apply_config_defaults(cli: &mut Cli, matches: &clap::ArgMatches, config: &Config) -> Result<()> {
     // Apply default baud from config if not set on command line
-    if matches.value_source("baud") == Some(ValueSource::DefaultValue) {
+    if cli
+        .baud
+        .is_none()
+    {
         if let Some(config_baud) = config
             .port
             .connection
             .baud
         {
-            cli.baud = config_baud;
+            cli.baud = Some(config_baud);
         }
     }
 
@@ -1084,8 +1091,7 @@ mod cli_tests {
                 .as_deref(),
             Some("/dev/ttyUSB0")
         );
-        assert_eq!(cli.baud, 460800);
-        assert!(matches!(cli.command, Commands::Flash { .. }));
+        assert_eq!(cli.baud, Some(460800));
     }
 
     #[test]
@@ -1310,7 +1316,7 @@ mod cli_tests {
     #[test]
     fn test_cli_default_values() {
         let cli = Cli::try_parse_from(["hisiflash", "list-ports"]).unwrap();
-        assert_eq!(cli.baud, 921600);
+        assert_eq!(cli.baud, None);
         assert!(
             cli.chip
                 .is_none()
@@ -1361,8 +1367,7 @@ mod cli_tests {
                 .as_deref(),
             Some("COM3")
         );
-        assert_eq!(cli.baud, 115200);
-        assert_eq!(cli.chip, Some(Chip::Bs2x));
+        assert_eq!(cli.baud, Some(115200));
         assert_eq!(
             cli.lang
                 .as_deref(),
@@ -1400,8 +1405,7 @@ mod cli_tests {
 
         apply_config_defaults(&mut cli, &matches, &config).unwrap();
 
-        assert_eq!(cli.baud, 460800);
-        assert_eq!(cli.chip, Some(Chip::Bs2x));
+        assert_eq!(cli.baud, Some(460800));
 
         if let Commands::Flash {
             late_baud,
@@ -1450,7 +1454,7 @@ mod cli_tests {
 
         apply_config_defaults(&mut cli, &matches, &config).unwrap();
 
-        assert_eq!(cli.baud, 115200);
+        assert_eq!(cli.baud, Some(115200));
         assert_eq!(cli.chip, Some(Chip::Ws63));
 
         if let Commands::Flash {

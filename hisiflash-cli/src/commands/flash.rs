@@ -82,15 +82,16 @@ pub(crate) fn cmd_flash(
 
     // Get port
     let port = get_port(cli, config)?;
+    let effective_baud = crate::resolve_effective_baud(cli.baud, chip);
     if !cli.quiet {
         eprintln!(
             "{} {}",
             style("🔌").cyan(),
-            t!("common.using_port", port = port, baud = cli.baud)
+            t!("common.using_port", port = port, baud = effective_baud)
         );
     }
 
-    let mut flasher = chip.create_flasher(&port, cli.baud, late_baud, cli.verbose)?;
+    let mut flasher = chip.create_flasher(&port, effective_baud, late_baud, cli.verbose)?;
     if let Err(err) = ensure_not_interrupted() {
         flasher.close();
         return Err(err);
@@ -246,15 +247,16 @@ pub(crate) fn cmd_write(
     }
 
     let port = get_port(cli, config)?;
+    let effective_baud = crate::resolve_effective_baud(cli.baud, chip);
     if !cli.quiet {
         eprintln!(
             "{} {}",
             style("🔌").cyan(),
-            t!("common.using_port", port = port, baud = cli.baud)
+            t!("common.using_port", port = port, baud = effective_baud)
         );
     }
 
-    let mut flasher = chip.create_flasher(&port, cli.baud, late_baud, cli.verbose)?;
+    let mut flasher = chip.create_flasher(&port, effective_baud, late_baud, cli.verbose)?;
     if let Err(err) = ensure_not_interrupted() {
         flasher.close();
         return Err(err);
@@ -338,15 +340,16 @@ pub(crate) fn cmd_erase(cli: &Cli, config: &mut Config, all: bool, chip: ChipFam
     }
 
     let port = get_port(cli, config)?;
+    let effective_baud = crate::resolve_effective_baud(cli.baud, chip);
     if !cli.quiet {
         eprintln!(
             "{} {}",
             style("🔌").cyan(),
-            t!("common.using_port", port = port, baud = cli.baud)
+            t!("common.using_port", port = port, baud = effective_baud)
         );
     }
 
-    let mut flasher = chip.create_flasher(&port, cli.baud, false, cli.verbose)?;
+    let mut flasher = chip.create_flasher(&port, effective_baud, false, cli.verbose)?;
     if let Err(err) = ensure_not_interrupted() {
         flasher.close();
         return Err(err);

@@ -47,6 +47,20 @@ impl ChipFamily {
         }
     }
 
+    /// Get recommended flash baud rate for this chip family.
+    ///
+    /// BS2X/BS25 chips use 460800 as the recommended rate because CH340/CH341
+    /// USB-serial adapters (commonly used with these chips) are unreliable at
+    /// 921600 baud, causing YMODEM transfer failures around the 2KB mark.
+    /// WS63 and other chips use 921600 for maximum throughput.
+    #[must_use]
+    pub fn recommended_flash_baud(&self) -> u32 {
+        match self {
+            Self::Bs2x | Self::Bs25 => 460_800,
+            _ => 921_600,
+        }
+    }
+
     /// Get supported baud rates for this chip family.
     #[must_use]
     pub fn supported_bauds(&self) -> &'static [u32] {

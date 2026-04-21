@@ -52,7 +52,10 @@ use {
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Delay after changing baud rate.
-const BAUD_CHANGE_DELAY: Duration = Duration::from_millis(100);
+///
+/// Increased to 300ms to give CH340/CH341 adapters enough time to stabilize
+/// after a baud rate switch before YMODEM transfers begin.
+const BAUD_CHANGE_DELAY: Duration = Duration::from_millis(300);
 
 /// Delay between partition transfers to prevent serial data stale.
 const PARTITION_DELAY: Duration = Duration::from_millis(100);
