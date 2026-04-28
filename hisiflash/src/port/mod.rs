@@ -84,7 +84,7 @@ impl Default for SerialConfig {
         Self {
             port_name: String::new(),
             baud_rate: 115200,
-            timeout: Duration::from_millis(1000),
+            timeout: Duration::from_secs(1),
             data_bits: DataBits::Eight,
             parity: Parity::None,
             stop_bits: StopBits::One,
@@ -231,7 +231,7 @@ pub trait Port: Read + Write + Send {
     /// Implementations that own a real platform serial handle should override
     /// this to enable seamless `flash → monitor` transitions without losing
     /// the early bootlog after a chip reset. The default implementation
-    /// returns [`Error::Unsupported`].
+    /// returns [`crate::error::Error::Unsupported`].
     ///
     /// Only available with the `native` feature, since `MonitorSession` is a
     /// native-only abstraction.
@@ -294,7 +294,7 @@ mod tests {
                 .is_empty()
         );
         assert_eq!(config.baud_rate, 115200);
-        assert_eq!(config.timeout, Duration::from_millis(1000));
+        assert_eq!(config.timeout, Duration::from_secs(1));
     }
 
     #[test]

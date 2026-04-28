@@ -85,7 +85,7 @@ pub struct YmodemConfig {
 impl Default for YmodemConfig {
     fn default() -> Self {
         Self {
-            char_timeout: Duration::from_millis(1000),
+            char_timeout: Duration::from_secs(1),
             c_timeout: Duration::from_secs(60),
             max_retries: 10,
             finish_without_c: true,

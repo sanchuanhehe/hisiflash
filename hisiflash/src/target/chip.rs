@@ -219,7 +219,7 @@ pub trait Flasher {
     /// After calling this method, the flasher cannot be used.
     fn close(&mut self);
 
-    /// Hand off the underlying serial port to a [`MonitorSession`].
+    /// Hand off the underlying serial port to a [`crate::monitor::MonitorSession`].
     ///
     /// Consumes the flasher and re-purposes its open serial handle for the
     /// monitor without going through close/reopen, which would otherwise

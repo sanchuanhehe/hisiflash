@@ -464,7 +464,7 @@ impl<P: Port> Ws63Flasher<P> {
         );
 
         let config = YmodemConfig {
-            char_timeout: Duration::from_millis(1000),
+            char_timeout: Duration::from_secs(1),
             c_timeout: Duration::from_secs(30),
             max_retries: 10,
             finish_without_c: self.finish_without_c,
@@ -658,7 +658,7 @@ impl<P: Port> Ws63Flasher<P> {
         // Note: ymodem.transfer() internally calls wait_for_c(), so we don't need
         // to call it here. The device sends 'C' after the ACK frame.
         let config = YmodemConfig {
-            char_timeout: Duration::from_millis(1000),
+            char_timeout: Duration::from_secs(1),
             c_timeout: Duration::from_secs(30),
             max_retries: 10,
             finish_without_c: self.finish_without_c,
@@ -961,7 +961,7 @@ mod tests {
             Self {
                 name: name.to_string(),
                 baud_rate: 115200,
-                timeout: Duration::from_millis(1000),
+                timeout: Duration::from_secs(1),
                 max_read_size: 1,
                 read_buffer: Arc::new(Mutex::new(Vec::new())),
                 write_buffer: Arc::new(Mutex::new(Vec::new())),
@@ -1194,7 +1194,7 @@ mod tests {
         let mut port = MockPort::new("/dev/ttyUSB0");
 
         assert_eq!(port.baud_rate(), 115200);
-        assert_eq!(port.timeout(), Duration::from_millis(1000));
+        assert_eq!(port.timeout(), Duration::from_secs(1));
 
         port.set_baud_rate(921600)
             .unwrap();
