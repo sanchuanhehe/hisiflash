@@ -922,6 +922,11 @@ impl<P: Port> crate::target::Flasher for Ws63Flasher<P> {
             .port
             .close();
     }
+
+    fn into_monitor(self: Box<Self>, baud_rate: u32) -> Result<crate::monitor::MonitorSession> {
+        let Self { port, .. } = *self;
+        port.into_monitor_session(baud_rate)
+    }
 }
 
 #[cfg(test)]

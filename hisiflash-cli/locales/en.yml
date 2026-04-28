@@ -48,6 +48,7 @@ list_ports.auto_detected: "Auto-detected: %{port}"
 
 # Monitor command
 monitor.opening: "Opening monitor on %{port} @ %{baud} baud"
+monitor.reusing: "Reusing flash port for monitor on %{port} @ %{baud} baud"
 monitor.exit_hint: "Ctrl+C exit | Ctrl+R reset device | Ctrl+T toggle timestamps"
 monitor.resetting: "Resetting device (DTR/RTS toggle)..."
 monitor.reset_signal_sent: "Reset signal sent."

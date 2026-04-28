@@ -82,7 +82,7 @@ use {
         firmware::resolve_firmware,
         flash::{cmd_erase, cmd_flash, cmd_write, cmd_write_program},
         info::{cmd_info, cmd_list_ports},
-        monitor::cmd_monitor,
+        monitor::{cmd_monitor, cmd_monitor_with_session},
     },
     config::Config,
     help::{build_localized_command, detect_locale},
@@ -682,7 +682,15 @@ fn run_with_args(raw_args: &[String]) -> Result<()> {
         } => {
             let firmware = resolve_firmware(firmware.as_ref(), cli.non_interactive, cli.quiet)?;
             let chip = resolve_effective_chip(&cli, Some(&firmware))?;
-            cmd_flash(
+            // When `--monitor` is requested without an explicit
+            // `--monitor-port`, hand the flasher's still-open serial handle
+            // straight over to the monitor. This both avoids a second
+            // interactive port picker and preserves the early bootlog the
+            // chip emits right after reset (a close/reopen cycle would
+            // otherwise drop those bytes). When `--monitor-port` pins a
+            // different port, fall back to the regular open path.
+            let want_handoff = *monitor && monitor_port.is_none();
+            let outcome = cmd_flash(
                 &cli,
                 &mut config,
                 &firmware,
@@ -690,18 +698,59 @@ fn run_with_args(raw_args: &[String]) -> Result<()> {
                 *late_baud,
                 *skip_verify,
                 chip.into(),
+                want_handoff,
             )?;
             if *monitor {
                 eprintln!();
-                cmd_monitor(
-                    &cli,
-                    &mut config,
-                    monitor_port.as_deref(),
-                    *monitor_baud,
-                    false,
-                    *monitor_clean_output && !*monitor_raw,
-                    None,
-                )?;
+                let clean_output = *monitor_clean_output && !*monitor_raw;
+                if want_handoff {
+                    let flasher = outcome
+                        .flasher
+                        .expect("cmd_flash must return a live flasher when keep_open is set");
+                    match flasher.into_monitor(*monitor_baud) {
+                        Ok(session) => {
+                            cmd_monitor_with_session(
+                                session,
+                                &outcome.port,
+                                *monitor_baud,
+                                false,
+                                clean_output,
+                                None,
+                                true,
+                            )?;
+                        },
+                        Err(err) => {
+                            // Handoff failed — close any lingering state and
+                            // fall back to opening the port fresh, still
+                            // reusing the same port name to avoid a second
+                            // picker prompt.
+                            log::warn!("Monitor handoff failed, falling back to reopen: {err}");
+                            cmd_monitor(
+                                &cli,
+                                &mut config,
+                                Some(
+                                    outcome
+                                        .port
+                                        .as_str(),
+                                ),
+                                *monitor_baud,
+                                false,
+                                clean_output,
+                                None,
+                            )?;
+                        },
+                    }
+                } else {
+                    cmd_monitor(
+                        &cli,
+                        &mut config,
+                        monitor_port.as_deref(),
+                        *monitor_baud,
+                        false,
+                        clean_output,
+                        None,
+                    )?;
+                }
             }
         },
         Commands::Write {

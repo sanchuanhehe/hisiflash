@@ -152,6 +152,14 @@ impl Port for NativePort {
             .take();
         Ok(())
     }
+
+    fn into_monitor_session(mut self, baud_rate: u32) -> Result<crate::monitor::MonitorSession> {
+        let port = self
+            .port
+            .take()
+            .ok_or_else(|| Error::Config("Port already closed".into()))?;
+        crate::monitor::MonitorSession::from_serialport(port, baud_rate)
+    }
 }
 
 impl Read for NativePort {

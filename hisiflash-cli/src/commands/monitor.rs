@@ -43,6 +43,43 @@ pub(crate) fn cmd_monitor(
     clean_output: bool,
     log_file: Option<&PathBuf>,
 ) -> Result<()> {
+    let port_name = if let Some(port) = monitor_port_override {
+        port.to_string()
+    } else {
+        get_port(cli, config)?
+    };
+
+    // Open serial port
+    let session = MonitorSession::open(&port_name, monitor_baud)
+        .with_context(|| t!("error.open_port", port = port_name.clone()))?;
+
+    cmd_monitor_with_session(
+        session,
+        &port_name,
+        monitor_baud,
+        timestamp,
+        clean_output,
+        log_file,
+        false,
+    )
+}
+
+/// Run the serial monitor against an already-open [`MonitorSession`].
+///
+/// Used by the `flash --monitor` handoff path so that the flasher's
+/// already-open serial handle is reused (preserving the early bootlog the
+/// chip emits right after reset, which would otherwise be lost in the
+/// close → reopen window). When `handed_over` is true, the opening status
+/// line clarifies that the existing handle is being reused.
+pub(crate) fn cmd_monitor_with_session(
+    session: MonitorSession,
+    port_name: &str,
+    monitor_baud: u32,
+    timestamp: bool,
+    clean_output: bool,
+    log_file: Option<&PathBuf>,
+    handed_over: bool,
+) -> Result<()> {
     use {
         crossterm::{
             event::{self, Event, KeyCode, KeyEvent, KeyModifiers},
@@ -88,11 +125,6 @@ pub(crate) fn cmd_monitor(
         }
     }
 
-    let port_name = if let Some(port) = monitor_port_override {
-        port.to_string()
-    } else {
-        get_port(cli, config)?
-    };
     let tty_mode = io::stdout().is_terminal() && io::stderr().is_terminal();
     // Design trade-off (explicit):
     // - TTY mode: prioritize alignment/readability by coalescing monitor data and
@@ -107,8 +139,12 @@ pub(crate) fn cmd_monitor(
             "{} {}",
             style("📡").cyan(),
             t!(
-                "monitor.opening",
-                port = style(&port_name)
+                if handed_over {
+                    "monitor.reusing"
+                } else {
+                    "monitor.opening"
+                },
+                port = style(port_name)
                     .green()
                     .to_string(),
                 baud = monitor_baud
@@ -124,15 +160,11 @@ pub(crate) fn cmd_monitor(
         tty_mode,
     );
 
-    // Open serial port
-    let serial = MonitorSession::open(&port_name, monitor_baud)
-        .with_context(|| t!("error.open_port", port = port_name.clone()))?;
-
     // Clone for the reader thread
-    let mut serial_reader = serial
+    let mut serial_reader = session
         .try_clone_reader()
         .context(t!("error.serial_error").to_string())?;
-    let mut serial_writer = serial;
+    let mut serial_writer = session;
 
     // Shared state
     let running = Arc::new(AtomicBool::new(true));

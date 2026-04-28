@@ -48,6 +48,7 @@ list_ports.auto_detected: "自动检测: %{port}"
 
 # 监视器命令
 monitor.opening: "在 %{port} 打开监视器 @ %{baud} 波特率"
+monitor.reusing: "复用烧录串口进入监视器: %{port} @ %{baud} 波特率"
 monitor.exit_hint: "Ctrl+C 退出 | Ctrl+R 重启设备 | Ctrl+T 切换时间戳"
 monitor.resetting: "正在重启设备 (DTR/RTS 切换)..."
 monitor.reset_signal_sent: "复位信号已发送。"

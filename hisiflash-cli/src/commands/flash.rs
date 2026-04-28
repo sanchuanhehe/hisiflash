@@ -4,7 +4,7 @@ use {
     crate::{Cli, CliError, config::Config, get_port, use_fancy_output, was_interrupted},
     anyhow::{Context, Result},
     console::style,
-    hisiflash::{ChipFamily, Fwpkg},
+    hisiflash::{ChipFamily, Flasher, Fwpkg},
     indicatif::{ProgressBar, ProgressStyle},
     rust_i18n::t,
     std::path::PathBuf,
@@ -18,7 +18,25 @@ fn ensure_not_interrupted() -> Result<()> {
     }
 }
 
+/// Outcome of a flash operation.
+///
+/// `port` is always the serial port name that was actually used. When
+/// [`cmd_flash`] is invoked with `keep_open = true`, `flasher` carries the
+/// live, post-reset flasher so the caller can hand its serial handle off to
+/// the monitor without going through close/reopen (which would otherwise
+/// drop the early bootlog).
+pub(crate) struct FlashOutcome {
+    pub port: String,
+    pub flasher: Option<Box<dyn Flasher>>,
+}
+
 /// Flash command implementation.
+///
+/// When `keep_open` is true, the flasher is reset and returned alive (its
+/// underlying serial port stays open) so a subsequent `--monitor` step can
+/// inherit the handle. Otherwise the flasher is reset and closed before
+/// returning, matching the previous behaviour.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn cmd_flash(
     cli: &Cli,
     config: &mut Config,
@@ -27,7 +45,8 @@ pub(crate) fn cmd_flash(
     late_baud: bool,
     skip_verify: bool,
     chip: ChipFamily,
-) -> Result<()> {
+    keep_open: bool,
+) -> Result<FlashOutcome> {
     if !cli.quiet {
         eprintln!(
             "{} {}",
@@ -180,9 +199,6 @@ pub(crate) fn cmd_flash(
         return Err(err.into());
     }
 
-    // Close the flasher to release the serial port
-    flasher.close();
-
     if !cli.quiet {
         eprintln!(
             "\n{} {}",
@@ -193,7 +209,22 @@ pub(crate) fn cmd_flash(
         );
     }
 
-    Ok(())
+    if keep_open {
+        // Hand over the live flasher (port still open, reset already issued)
+        // to the caller. The caller is responsible for either invoking
+        // `Flasher::into_monitor` or `Flasher::close` to release the handle.
+        Ok(FlashOutcome {
+            port,
+            flasher: Some(flasher),
+        })
+    } else {
+        // Close the underlying serial port to release resources.
+        flasher.close();
+        Ok(FlashOutcome {
+            port,
+            flasher: None,
+        })
+    }
 }
 
 /// Write command implementation.

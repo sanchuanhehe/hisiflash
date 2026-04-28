@@ -218,6 +218,27 @@ pub trait Flasher {
     /// It is safe to call even if the connection is not active.
     /// After calling this method, the flasher cannot be used.
     fn close(&mut self);
+
+    /// Hand off the underlying serial port to a [`MonitorSession`].
+    ///
+    /// Consumes the flasher and re-purposes its open serial handle for the
+    /// monitor without going through close/reopen, which would otherwise
+    /// drop the early bootlog the chip emits right after [`Self::reset`].
+    ///
+    /// `baud_rate` is the operating-mode baud rate (typically 115200) the
+    /// device will speak after reboot, and it will be applied to the handle
+    /// before returning.
+    ///
+    /// The default implementation returns [`Error::Unsupported`]. Concrete
+    /// flashers backed by a real serial port should override.
+    ///
+    /// Only available with the `native` feature.
+    #[cfg(feature = "native")]
+    fn into_monitor(self: Box<Self>, _baud_rate: u32) -> Result<crate::monitor::MonitorSession> {
+        Err(crate::error::Error::Unsupported(
+            "Flasher does not support monitor handoff".into(),
+        ))
+    }
 }
 
 impl ChipFamily {

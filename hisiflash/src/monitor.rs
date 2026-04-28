@@ -19,6 +19,27 @@ impl MonitorSession {
         Ok(Self { port })
     }
 
+    /// Build a monitor session from an already-open serial port handle.
+    ///
+    /// This enables seamless `flash → monitor` handoff: the flasher's serial
+    /// handle is reused so no bytes are lost during a close/reopen window
+    /// (which is critical for capturing the early bootlog the chip emits
+    /// right after a SEBOOT reset).
+    ///
+    /// The handle's baud rate is updated to `baud_rate`, the read timeout is
+    /// set to 50ms (matching [`MonitorSession::open`]), and pending RX/TX
+    /// bytes from the previous transfer are flushed.
+    pub fn from_serialport(
+        mut port: Box<dyn serialport::SerialPort>,
+        baud_rate: u32,
+    ) -> crate::Result<Self> {
+        port.set_baud_rate(baud_rate)?;
+        port.set_timeout(std::time::Duration::from_millis(50))?;
+        // Best-effort buffer flush; some platforms may not support it.
+        let _ = port.clear(serialport::ClearBuffer::All);
+        Ok(Self { port })
+    }
+
     /// Create a cloned reader handle for a background read loop.
     pub fn try_clone_reader(&self) -> crate::Result<Box<dyn serialport::SerialPort>> {
         Ok(self

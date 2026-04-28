@@ -225,6 +225,25 @@ pub trait Port: Read + Write + Send {
         std::io::Write::flush(self)?;
         Ok(())
     }
+
+    /// Hand off the underlying transport to a serial monitor session.
+    ///
+    /// Implementations that own a real platform serial handle should override
+    /// this to enable seamless `flash → monitor` transitions without losing
+    /// the early bootlog after a chip reset. The default implementation
+    /// returns [`Error::Unsupported`].
+    ///
+    /// Only available with the `native` feature, since `MonitorSession` is a
+    /// native-only abstraction.
+    #[cfg(feature = "native")]
+    fn into_monitor_session(self, _baud_rate: u32) -> Result<crate::monitor::MonitorSession>
+    where
+        Self: Sized,
+    {
+        Err(crate::error::Error::Unsupported(
+            "Port does not support monitor handoff".into(),
+        ))
+    }
 }
 
 /// Trait for listing available serial ports.
