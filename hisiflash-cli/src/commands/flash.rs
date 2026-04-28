@@ -167,8 +167,8 @@ pub(crate) fn cmd_flash(
                 current_partition = name.to_string();
                 pb.set_message(t!("flash.flashing", name = name).to_string());
             }
-            if total > 0 {
-                pb.set_position((current * 100 / total) as u64);
+            if let Some(pct) = (current * 100).checked_div(total) {
+                pb.set_position(pct as u64);
             }
         },
     );

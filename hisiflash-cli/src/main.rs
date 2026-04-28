@@ -907,17 +907,17 @@ fn apply_config_defaults(cli: &mut Cli, matches: &clap::ArgMatches, config: &Con
                     .skip_verify;
             }
         },
-        Commands::Write { late_baud, .. } | Commands::WriteProgram { late_baud, .. } => {
+        Commands::Write { late_baud, .. } | Commands::WriteProgram { late_baud, .. }
             if !matches!(
                 matches
                     .subcommand()
                     .and_then(|(_, m)| m.value_source("late_baud")),
                 Some(ValueSource::CommandLine)
-            ) {
-                *late_baud = config
-                    .flash
-                    .late_baud;
-            }
+            ) =>
+        {
+            *late_baud = config
+                .flash
+                .late_baud;
         },
         _ => {},
     }
