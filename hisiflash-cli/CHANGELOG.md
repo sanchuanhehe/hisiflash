@@ -8,11 +8,14 @@ with pre-release tags.
 
 ## [Unreleased]
 
+## [1.0.0-alpha.12] - 2026-04-28
+
 ### Added
 - Added `HISIFLASH_LANG` environment variable support to control help text language (e.g., `HISIFLASH_LANG=en hisiflash --help` shows English).
 - `monitor` interactive command now supports timestamp display, log file writing, and shortcut keys (`Ctrl+C`, `Ctrl+R`, `Ctrl+T`).
 - `flash` supports interactive firmware auto-discovery/selection when firmware path is omitted.
 - Project-level testing/validation docs were added and linked in README (`docs/testing/*`).
+- `flash --monitor` now hands off the flasher's open serial handle directly to the monitor, eliminating the close→reopen window that previously dropped the chip's early bootlog after reset. A new `monitor.reusing` status message is shown when handoff succeeds.
 
 ### Changed
 - Target chip selection no longer falls back silently to ws63; the CLI now infers the chip from the firmware path first and prompts only in interactive TTY sessions.
@@ -30,6 +33,7 @@ with pre-release tags.
 - `monitor` Ctrl+R reset validation now uses a two-layer model: reset-signal sent + reset-evidence classification (observed/weak/unconfirmed), instead of relying on generic post-output presence.
 - `monitor` status rendering now uses synchronized status-line output to improve alignment under streaming output.
 - `monitor` stream contract is now split in non-TTY mode (`stdout` for serial data, `stderr` for status), while TTY mode remains merged for alignment.
+- `flash --monitor` no longer prompts for the serial port a second time when multiple ports are present; the port resolved during flash is reused automatically.
 
 ### Fixed
 - Fixed non-interactive flashing flows to fail fast when the chip cannot be inferred instead of proceeding with an incorrect default target.
@@ -37,10 +41,11 @@ with pre-release tags.
 - Fixed `HISIFLASH_LANG` environment variable not taking effect before help output - locale is now set before argument parsing.
 - Cancellation now uses a dedicated `Cancelled:` style output instead of generic error wording.
 - Flow-control wiring hint is no longer printed after confirmed reset evidence; it now appears only for weak/unconfirmed reset evidence or reset-signal failure.
+- Fixed `flash --monitor` double serial-port prompt when multiple ports are detected.
 
 ### Compatibility
-- User-visible CLI behavior changed (default log verbosity and some error outputs).
-- Recommended next release tag: `v1.0.0-alpha.11`.
+- User-visible CLI behavior changed (default log verbosity, monitor status line, and some error outputs).
+- `flash --monitor` handoff path requires `hisiflash` library crate `0.4.0`.
 
 ## Historical Notes
 

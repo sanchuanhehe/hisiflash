@@ -7,8 +7,13 @@ and this crate follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-04-28
+
 ### Added
 - Experimental shared-serial flashing support for BS2X and BS25 targets via the common SEBOOT transport.
+- `MonitorSession::from_serialport(port, baud_rate)` — builds a monitor session from an already-open serial handle; sets baud rate, timeout, and flushes buffers.
+- `Port::into_monitor_session(self, baud_rate)` — surrenders the underlying transport to a `MonitorSession` without closing and reopening the file descriptor. `NativePort` provides a real implementation; other ports return `Err(Unsupported)` by default.
+- `Flasher::into_monitor(self: Box<Self>, baud_rate)` — consumes the flasher and yields a `MonitorSession`, enabling zero-gap `flash → monitor` transitions. `Ws63Flasher` provides a real implementation; other flashers return `Err(Unsupported)` by default.
 
 ### Changed
 - SEBOOT stage transitions now preserve prefetched serial bytes across LoaderBoot and partition downloads.
@@ -17,6 +22,9 @@ and this crate follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 ### Fixed
 - Fixed BS21E flashing failures caused by mixed ACK and C responses during YMODEM session shutdown.
 - Fixed loss of trailing SEBOOT response bytes when the finish-block ACK and next frame arrived in the same serial read.
+
+### Compatibility
+- Additive: new trait methods have default implementations; existing code compiles unchanged.
 
 ## [0.3.0] - 2026-03-06
 
