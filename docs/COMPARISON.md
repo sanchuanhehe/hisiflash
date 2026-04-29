@@ -2,6 +2,141 @@
 
 本文档对比 esptool、espflash、fbb_burntool、ws63flash 四个项目的功能，用于指导 hisiflash 的设计。
 
+## 0. fbb_burntool CLI 参数完整对比
+
+> 本节基于 fbb_burntool 源代码（`code/main.cpp`）中的实际 CLI 参数定义，与 hisiflash 当前实现进行逐一比对。
+
+### 0.1 用户关注参数对比（重点）
+
+| fbb_burntool 参数 | 格式 | 含义 | hisiflash 等价 | 状态 |
+|---|---|---|---|---|
+| `-com:<n>` | 值参数 | COM 口编号（Windows），如 `-com:3` → COM3 | `-p/--port <path>` | ✅ 已实现（跨平台路径形式）|
+| `-bin:<path>` | 值参数 | 固件包/bin 文件路径（FWPKG 或裸 bin）| `flash <firmware>` / `write --bin` | ✅ 已实现 |
+| `-chiptype:<type>` | 值参数 | 目标芯片型号（如 WS63、BS2X、BS25）| `-c/--chip <chip>` | ✅ 已实现 |
+| `-signalbaud:<rate>` | 值参数 | UART 波特率（等同于 `-baud`）| `-b/--baud <rate>` | ✅ 已实现 |
+| `-erasemode:<n>` | 值参数 | 擦除模式：`0`=按固件包参数擦除（normal）；`1`=先全片擦除再烧写；`2`=不擦除（需 flash 已为空）| `flash`（默认 normal）/ `erase --all` | ⚠️ 部分实现（无独立 erasemode 参数，仅有 `erase --all`）|
+| `-onlyeraseall` | 开关 | 仅全片擦除，不烧写任何文件 | `erase --all` | ✅ 已实现 |
+| `-onlyburn:<filter>` | 值参数 | 仅烧写指定名称的分区/文件，逗号分隔 | `flash --filter <names>` | ✅ 已实现 |
+| `-reset` | 开关 | 烧写完成后复位设备 | 默认行为（烧写后自动复位）| ✅ 已实现（默认开启，暂无禁用选项）|
+| `-switchafterloader` | 开关 | 下载 Loader 后再切换波特率（兼容 Hi3863/Hi3516）| `flash --late-baud` | ✅ 已实现 |
+| `-beforereset` | — | **源码中不存在此参数**，可能是文档误记或旧版本特性 | — | ❌ 原工具不存在 |
+| `-packagesize:<n>` | 值参数 | YMODEM 每包数据大小（字节），可选值：1024/2048/4096/8192；3x 芯片可选 4096/20480 | — | ❌ 未实现（hisiflash 固定使用 1024）|
+
+### 0.2 fbb_burntool 全量 CLI 参数清单
+
+以下参数均来自 `code/main.cpp` 源代码，分组整理：
+
+#### 连接参数
+
+| 参数 | 格式 | 含义 |
+|---|---|---|
+| `-com:<n>` | 值 | COM 口编号（整数，如 `3` 表示 COM3）|
+| `-baud:<rate>` | 值 | 波特率（与 `-signalbaud` 等效）|
+| `-signalbaud:<rate>` | 值 | 波特率（与 `-baud` 等效）|
+| `-ipaddr:<addr>` | 值 | TCP 连接 IP 地址 |
+| `-ipport:<port>` | 值 | TCP 连接端口 |
+| `-jlinkpath:<path>` | 值 | JLink 可执行文件路径 |
+| `-sle` | 开关 | 使用 SLE（星闪）无线连接方式，切换芯片类型为 SLEBS2X |
+| `-address:<addr>` | 值 | SLE 设备蓝牙地址 |
+| `-addresstype:<type>` | 值 | SLE 地址类型 |
+
+#### 固件/目标参数
+
+| 参数 | 格式 | 含义 |
+|---|---|---|
+| `-chiptype:<type>` | 值 | 目标芯片类型 |
+| `-bin:<path>` | 值 | 固件包路径（FWPKG/bin）|
+| `-3x` | 开关 | 指定 SPARTA（3x 系列）芯片 |
+| `-flashboot` | 开关 | 使用 Flash Loader 启动模式 |
+| `-romboot` | 开关 | 使用 ROM 启动模式 |
+
+#### 烧写控制参数
+
+| 参数 | 格式 | 含义 |
+|---|---|---|
+| `-erasemode:<n>` | 值 | 擦除模式（0=normal/按包参数，1=先全擦，2=不擦）|
+| `-onlyeraseall` | 开关 | 仅全片擦除，不烧写 |
+| `-onlyburn:<name>` | 值 | 仅烧写指定名称的分区，支持逗号分隔多个 |
+| `-reset` | 开关 | 烧写成功后复位设备 |
+| `-switchafterloader` | 开关 | 下载 Loader 后切换波特率 |
+| `-packagesize:<n>` | 值 | YMODEM 包大小（字节）：1024/2048/4096/8192 |
+| `-2ms` | 开关 | 打断间隔 2ms（发送中断帧的时间间隔）|
+| `-burninterval:<ms>` | 值 | 自定义打断间隔（毫秒），需在合法范围内 |
+| `-timeout:<ms>` | 值 | 连接超时时间（毫秒）|
+| `-forceread:<ms>` | 值 | 定时读取串口模式，以毫秒为间隔 |
+| `-informal` | 开关 | 非正式（非工厂）烧写模式 |
+
+#### DFU（USB）参数
+
+| 参数 | 格式 | 含义 |
+|---|---|---|
+| `-dfu` | 开关 | 使用 USB DFU 模式（默认 BS25）|
+| `-bs25dfu` | 开关 | 使用 BS25 USB DFU 模式 |
+| `-bs21dfu` | 开关 | 使用 BS21 USB DFU 模式 |
+| `-autodfu` | 开关 | 自动 DFU 模式（非 HID）|
+| `-hiddfu` | 开关 | HID DFU 模式 |
+| `-vid:<id>` | 值 | USB VID（十六进制或十进制）|
+| `-pid:<id>` | 值 | USB PID（十六进制或十进制）|
+| `-devicepathid:<id>` | 值 | USB 设备路径 ID |
+| `-usblocation:<loc>` | 值 | USB 物理位置 |
+| `-usage:<id>` | 值 | HID Usage ID |
+| `-usagepage:<id>` | 值 | HID Usage Page |
+| `-gethiddevice` | 开关 | 获取 HID 设备信息 |
+
+#### eFuse 参数
+
+| 参数 | 格式 | 含义 |
+|---|---|---|
+| `-readefuse` | 开关 | 读取 eFuse |
+| `-startbit:<n>` | 值 | eFuse 起始位 |
+| `-bitwidth:<n>` | 值 | eFuse 位宽 |
+
+#### Flash 导出参数
+
+| 参数 | 格式 | 含义 |
+|---|---|---|
+| `-export` | 开关 | 烧写后导出 Flash 内容 |
+| `-target:<type>` | 值 | 导出目标类型 |
+| `-addr:<address>` | 值 | 导出起始地址 |
+| `-size:<size>` | 值 | 导出数据大小 |
+
+#### 界面/日志参数
+
+| 参数 | 格式 | 含义 |
+|---|---|---|
+| `-console` | 开关 | 附加到控制台输出（重定向 stdout/stdin）|
+| `-show` | 开关 | 显示 GUI 界面 |
+| `-clearlog` | 开关 | 只保留工具自身日志，清除其他 |
+| `-server:<addr>` | 值 | 服务端地址（集成场景）|
+
+### 0.3 hisiflash vs fbb_burntool 完整差距分析
+
+| 功能点 | fbb_burntool 参数 | hisiflash 现状 | 优先级 |
+|---|---|---|---|
+| 端口指定 | `-com:<n>` | ✅ `-p/--port <path>` | — |
+| 固件路径 | `-bin:<path>` | ✅ `flash <firmware>` | — |
+| 芯片类型 | `-chiptype:<type>` | ✅ `-c/--chip` | — |
+| 波特率 | `-signalbaud:<rate>` / `-baud:<rate>` | ✅ `-b/--baud` | — |
+| 擦除模式选择 | `-erasemode:<0\|1\|2>` | ⚠️ 无统一选项，需 `-onlyeraseall` 替代 | P1 |
+| 仅全擦 | `-onlyeraseall` | ✅ `erase --all` | — |
+| 仅烧写指定分区 | `-onlyburn:<name>` | ✅ `flash --filter <names>` | — |
+| 烧写后复位 | `-reset` | ✅ 默认行为 | — |
+| Loader 后切速 | `-switchafterloader` | ✅ `flash --late-baud` | — |
+| 包大小配置 | `-packagesize:<n>` | ❌ 固定 1024 字节 | P2 |
+| 打断间隔配置 | `-burninterval:<ms>` / `-2ms` | ❌ 无 | P2 |
+| 连接超时配置 | `-timeout:<ms>` | ❌ 无 | P2 |
+| 定时读取串口 | `-forceread:<ms>` | ❌ 无 | P3 |
+| TCP/IP 连接 | `-ipaddr` / `-ipport` | ❌ 规划 P2 | P2 |
+| USB DFU | `-dfu` / `-bs25dfu` / `-bs21dfu` | ❌ 规划 P2 | P2 |
+| JLink 调试器 | `-jlinkpath` | ❌ 规划 P3 | P3 |
+| SLE 无线烧写 | `-sle` / `-address` | ❌ 规划 P3 | P3 |
+| eFuse 读取 | `-readefuse` / `-startbit` / `-bitwidth` | ❌ 规划 P3 | P3 |
+| Flash 导出 | `-export` / `-target` / `-addr` / `-size` | ❌ 未规划 | P3 |
+
+> **注:** `-beforereset` 参数在 fbb_burntool 源码中不存在，可能是文档误记。`-erasemode` 整数值：`0`=normal（按包配置擦），`1`=先全擦再烧，`2`=完全不擦。
+
+---
+
 ## 1. 项目基本信息对比
 
 | 特性 | esptool | espflash | fbb_burntool | ws63flash | hisiflash (规划) |
@@ -59,10 +194,12 @@ ws63flash 是通过逆向 BurnTool 实现的 WS63 烧写工具，功能简洁但
 
 | 命令 | esptool | espflash | fbb_burntool | ws63flash | hisiflash |
 |------|---------|----------|--------------|-----------|-----------|
-| 烧写固件 | `write_flash` | `flash` | GUI按钮 | `--flash` | `flash` |
-| 读取Flash | `read_flash` | `read-flash` | ❌ | ❌ | `read` |
-| 擦除全部 | `erase_flash` | `erase-flash` | ✅ | `--erase` | `erase --all` |
+| 烧写固件 | `write_flash` | `flash` | `-bin:<path>` CLI | `--flash` | `flash` |
+| 读取Flash | `read_flash` | `read-flash` | `-export` CLI | ❌ | `read` |
+| 擦除全部 | `erase_flash` | `erase-flash` | `-onlyeraseall` CLI | `--erase` | `erase --all` |
 | 擦除区域 | `erase_region` | `erase-region` | ❌ | ❌ | `erase -a -s` |
+| 擦除模式控制 | ❌ | ❌ | `-erasemode:<0\|1\|2>` | ❌ | ❌（规划 P1）|
+| 分区过滤烧写 | ❌ | ❌ | `-onlyburn:<name>` | ❌ | `flash --filter` |
 | 校验 | `verify_flash` | ❌ | ❌ | ❌ | `flash --verify` |
 | 裸机烧写 | ❌ | ❌ | ❌ | `--write` | `write` |
 | 程序签名烧写 | ❌ | ❌ | ❌ | `--write-program` | `write --sign` |
@@ -89,10 +226,11 @@ ws63flash 是通过逆向 BurnTool 实现的 WS63 烧写工具，功能简洁但
 
 | 命令 | esptool | espflash | fbb_burntool | hisiflash |
 |------|---------|----------|--------------|-----------|
-| 复位 | `--after hard_reset` | `reset` | ✅ | `reset` |
+| 复位 | `--after hard_reset` | `reset` | `-reset` CLI | `reset` |
 | 保持复位 | ❌ | `hold-in-reset` | ❌ | `reset --hold` |
 | 加载到RAM | `load_ram` | ❌ | ❌ | `load-ram` |
 | 运行 | `run` | ❌ | ❌ | `run` |
+| Loader后切速 | ❌ | ❌ | `-switchafterloader` | `flash --late-baud` |
 
 ### 4.5 调试功能
 
@@ -107,8 +245,8 @@ ws63flash 是通过逆向 BurnTool 实现的 WS63 烧写工具，功能简洁但
 
 | 命令 | esptool (espefuse) | espflash | fbb_burntool | hisiflash |
 |------|-------------------|----------|--------------|-----------|
-| 读eFuse | `espefuse.py summary` | 内置 | ✅ | `efuse read` |
-| 写eFuse | `espefuse.py burn_efuse` | ❌ | ✅ | `efuse write` |
+| 读eFuse | `espefuse.py summary` | 内置 | `-readefuse -startbit -bitwidth` CLI | `efuse read` |
+| 写eFuse | `espefuse.py burn_efuse` | ❌ | ✅ GUI | `efuse write` |
 | 安全信息 | `get_security_info` | ❌ | ❌ | `efuse info` |
 | 签名 | `espsecure.py` | ❌ | ❌ | (future) |
 | 加密 | `espsecure.py` | ❌ | ✅ | (future) |
@@ -419,10 +557,15 @@ connect_attempts = 7
 6. **Windows COM 转换** - 自动处理
 
 ### 从 fbb_burntool 借鉴
-1. **多连接方式** - Serial/TCP/USB/JLink
-2. **FWPKG 格式** - 海思固件包
+1. **多连接方式** - Serial（`-com`）/ TCP（`-ipaddr/-ipport`）/ USB DFU（`-dfu`）/ JLink（`-jlinkpath`）/ SLE（`-sle`）
+2. **FWPKG 格式** - 海思固件包（`-bin`）
 3. **加密支持** - AES 加密
 4. **状态机设计** - 烧写流程控制
+5. **擦除模式参数化** - `-erasemode` 分三级（normal/全擦/不擦）
+6. **YMODEM 包大小配置** - `-packagesize` 可调 1024/2048/4096/8192 字节
+7. **打断间隔配置** - `-burninterval/-2ms` 适配不同硬件
+8. **连接超时配置** - `-timeout` 毫秒级控制
+9. **Flash 导出功能** - `-export/-target/-addr/-size`
 
 ## 12. hisiflash 差异化特性 (规划)
 
@@ -463,6 +606,12 @@ connect_attempts = 7
 | **串口 Tab 补全** | hisiflash | 动态补全可用串口 |
 | **输出折叠** | esptool | 隐藏中间输出，只显示结果 |
 | **动态超时** | esptool | 根据数据大小计算超时 |
+| **擦除模式参数** | fbb_burntool | `-erasemode:<0\|1\|2>` 三级：normal/先全擦/不擦 |
+| **YMODEM 包大小配置** | fbb_burntool | `-packagesize:<n>`，支持 1024/2048/4096/8192 |
+| **打断间隔配置** | fbb_burntool | `-burninterval:<ms>` 适配不同硬件时序 |
+| **连接超时配置** | fbb_burntool | `-timeout:<ms>` 毫秒级连接等待 |
+| **TCP/IP 远程连接** | fbb_burntool | `-ipaddr/-ipport` 网络烧写 |
+| **USB DFU 模式** | fbb_burntool | `-dfu/-bs25dfu/-bs21dfu` USB 升级 |
 
 ### 12.3 低优先级 (P3)
 
@@ -474,6 +623,11 @@ connect_attempts = 7
 | **defmt 支持** | espflash | 解析 defmt 日志 |
 | **ELF 符号解析** | espflash | 监控时解析地址为函数名 |
 | **外部日志处理器** | espflash | 管道到外部程序 |
+| **JLink 调试器接入** | fbb_burntool | `-jlinkpath` 通过 JLink 烧写 |
+| **SLE 无线烧写** | fbb_burntool | `-sle/-address` 星闪无线协议 |
+| **eFuse CLI 读写** | fbb_burntool | `-readefuse/-startbit/-bitwidth` |
+| **Flash 导出** | fbb_burntool | `-export/-target/-addr/-size` 读出 Flash 内容 |
+| **定时读取模式** | fbb_burntool | `-forceread:<ms>` 定时轮询串口 |
 
 ## 14. 人体工程学设计原则
 
