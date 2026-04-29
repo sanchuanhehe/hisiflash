@@ -195,41 +195,42 @@ ws63flash 是通过逆向 BurnTool 实现的 WS63 烧写工具，功能简洁但
 | 命令 | esptool | espflash | fbb_burntool | ws63flash | hisiflash |
 |------|---------|----------|--------------|-----------|-----------|
 | 烧写固件 | `write_flash` | `flash` | `-bin:<path>` CLI | `--flash` | `flash` |
-| 读取Flash | `read_flash` | `read-flash` | `-export` CLI | ❌ | `read` |
+| 读取Flash | `read_flash` | `read-flash` | `-export` CLI | ❌ | ❌（规划）|
 | 擦除全部 | `erase_flash` | `erase-flash` | `-onlyeraseall` CLI | `--erase` | `erase --all` |
-| 擦除区域 | `erase_region` | `erase-region` | ❌ | ❌ | `erase -a -s` |
+| 擦除区域 | `erase_region` | `erase-region` | ❌ | ❌ | ❌（规划）|
 | 擦除模式控制 | ❌ | ❌ | `-erasemode:<0\|1\|2>` | ❌ | ❌（规划 P1）|
 | 分区过滤烧写 | ❌ | ❌ | `-onlyburn:<name>` | ❌ | `flash --filter` |
-| 校验 | `verify_flash` | ❌ | ❌ | ❌ | `flash --verify` |
+| CRC 预检（跳过） | `verify_flash` | `--no-verify` | ❌ | ❌ | `flash --skip-verify` |
 | 裸机烧写 | ❌ | ❌ | ❌ | `--write` | `write` |
-| 程序签名烧写 | ❌ | ❌ | ❌ | `--write-program` | `write --sign` |
+| 程序烧写 | ❌ | ❌ | ❌ | `--write-program` | `write-program` |
 
 ### 4.2 信息查询
 
 | 命令 | esptool | espflash | fbb_burntool | hisiflash |
 |------|---------|----------|--------------|-----------|
-| 设备信息 | `chip_id` | `board-info` | 显示在UI | `info board` |
-| Flash ID | `flash_id` | ❌ | ❌ | `info flash` |
-| 镜像信息 | `image_info` | ❌ | ❌ | `info image` |
-| MAC地址 | `read_mac` | ❌ | ❌ | `info mac` |
-| MD5校验 | 内置 | `checksum-md5` | ❌ | `checksum` |
+| 固件包信息 | `image_info` | ❌ | ❌ | `info <firmware>` |
+| 固件包信息（JSON）| ❌ | ❌ | ❌ | `info --json` |
+| 设备信息 | `chip_id` | `board-info` | 显示在UI | ❌（规划）|
+| Flash ID | `flash_id` | ❌ | ❌ | ❌（规划）|
+| MAC地址 | `read_mac` | ❌ | ❌ | ❌（规划）|
+| MD5/CRC校验 | 内置 | `checksum-md5` | ❌ | ❌（规划）|
 
 ### 4.3 镜像处理
 
 | 命令 | esptool | espflash | fbb_burntool | hisiflash |
 |------|---------|----------|--------------|-----------|
-| ELF转镜像 | `elf2image` | 内置 | ❌ | `image convert` |
-| 合并镜像 | `merge_bin` | `save-image` | 合并fwpkg | `image merge` |
-| 分区表 | ❌ | `partition-table` | ❌ | `partition` |
+| ELF转镜像 | `elf2image` | 内置 | ❌ | ❌（规划）|
+| 合并镜像 | `merge_bin` | `save-image` | 合并fwpkg | ❌（规划）|
+| 分区表查看 | ❌ | `partition-table` | ❌ | ❌（规划）|
 
 ### 4.4 设备控制
 
 | 命令 | esptool | espflash | fbb_burntool | hisiflash |
 |------|---------|----------|--------------|-----------|
-| 复位 | `--after hard_reset` | `reset` | `-reset` CLI | `reset` |
-| 保持复位 | ❌ | `hold-in-reset` | ❌ | `reset --hold` |
-| 加载到RAM | `load_ram` | ❌ | ❌ | `load-ram` |
-| 运行 | `run` | ❌ | ❌ | `run` |
+| 复位 | `--after hard_reset` | `reset` | `-reset` CLI | ❌（规划）烧写后自动复位 |
+| 保持复位 | ❌ | `hold-in-reset` | ❌ | ❌（规划）|
+| 加载到RAM | `load_ram` | ❌ | ❌ | ❌（规划）|
+| 运行 | `run` | ❌ | ❌ | ❌（规划）|
 | Loader后切速 | ❌ | ❌ | `-switchafterloader` | `flash --late-baud` |
 
 ### 4.5 调试功能
@@ -237,19 +238,19 @@ ws63flash 是通过逆向 BurnTool 实现的 WS63 烧写工具，功能简洁但
 | 命令 | esptool | espflash | fbb_burntool | hisiflash |
 |------|---------|----------|--------------|-----------|
 | 串口监控 | ❌ | `monitor` | 简单日志 | `monitor` |
-| 读内存 | `read_mem` | ❌ | ❌ | `mem read` |
-| 写内存 | `write_mem` | ❌ | ❌ | `mem write` |
-| 导出内存 | `dump_mem` | ❌ | ❌ | `mem dump` |
+| 读内存 | `read_mem` | ❌ | ❌ | ❌（规划）|
+| 写内存 | `write_mem` | ❌ | ❌ | ❌（规划）|
+| 导出内存 | `dump_mem` | ❌ | ❌ | ❌（规划）|
 
 ### 4.6 安全功能
 
 | 命令 | esptool (espefuse) | espflash | fbb_burntool | hisiflash |
 |------|-------------------|----------|--------------|-----------|
-| 读eFuse | `espefuse.py summary` | 内置 | `-readefuse -startbit -bitwidth` CLI | `efuse read` |
-| 写eFuse | `espefuse.py burn_efuse` | ❌ | ✅ GUI | `efuse write` |
-| 安全信息 | `get_security_info` | ❌ | ❌ | `efuse info` |
-| 签名 | `espsecure.py` | ❌ | ❌ | (future) |
-| 加密 | `espsecure.py` | ❌ | ✅ | (future) |
+| 读eFuse | `espefuse.py summary` | 内置 | `-readefuse -startbit -bitwidth` CLI | ❌（规划 P3）|
+| 写eFuse | `espefuse.py burn_efuse` | ❌ | ✅ GUI | ❌（规划 P3）|
+| 安全信息 | `get_security_info` | ❌ | ❌ | ❌（规划）|
+| 签名 | `espsecure.py` | ❌ | ❌ | ❌（规划）|
+| 加密 | `espsecure.py` | ❌ | ✅ | ❌（规划）|
 
 ## 5. 固件格式支持对比
 
@@ -363,7 +364,7 @@ ws63flash 是通过逆向 BurnTool 实现的 WS63 烧写工具，功能简洁但
 |------|---------|----------|-----------|------------------|
 | **进度显示** | 文本百分比 `[=>  ] 75%` | 彩色进度条 | 原地更新百分比 | 彩色进度条 ✅ |
 | **颜色输出** | 基础 ANSI | ✅ 丰富 (crossterm) | ❌ | ✅ 丰富 |
-| **表格输出** | ❌ | ✅ (comfy-table) | 简单 ASCII | ✅ (comfy-table) |
+| **表格输出** | ❌ | ✅ (comfy-table) | 简单 ASCII | ❌ |
 | **输出折叠** | ✅ Stage 折叠 | ❌ | ❌ | ✅ P2 |
 | **详细模式** | `-v` | `RUST_LOG=debug` | `-v/-vv/-vvv` | `-v/-vv/-vvv` ✅ |
 | **静默模式** | `-q` | ❌ | ❌ | `-q/--quiet` ✅ |
@@ -382,18 +383,18 @@ ws63flash 是通过逆向 BurnTool 实现的 WS63 烧写工具，功能简洁但
 
 | 特性 | esptool | espflash | ws63flash | hisiflash (规划) |
 |------|---------|----------|-----------|------------------|
-| **芯片自动检测** | ✅ Magic 值 | ✅ | ❌ 需指定 | ✅ P1 |
-| **Flash 大小检测** | ✅ JEDEC ID | ✅ | ❌ | ✅ P2 |
-| **USB VID/PID 过滤** | ✅ `--port-filter` | ✅ 内置已知设备 | ❌ | ✅ P0 |
-| **串口自动排序** | ✅ Espressif 优先 | ✅ 已知设备优先 | ❌ | ✅ 海思设备优先 |
-| **macOS tty 过滤** | ✅ | ✅ 过滤 /dev/tty.* | ❌ | ✅ |
-| **Windows COM 转换** | ❌ | ❌ | ✅ COM→/dev/ttyS | ✅ |
+| **芯片自动检测** | ✅ Magic 值 | ✅ | ❌ 需指定 | ✅ 从文件名推断 |
+| **Flash 大小检测** | ✅ JEDEC ID | ✅ | ❌ | ❌ P2 |
+| **USB VID/PID 过滤** | ✅ `--port-filter` | ✅ 内置已知设备 | ❌ | ✅ 海思设备优先 |
+| **串口自动排序** | ✅ Espressif 优先 | ✅ 已知设备优先 | ❌ | ✅ 已知设备优先 |
+| **macOS tty 过滤** | ✅ | ✅ 过滤 /dev/tty.* | ❌ | ❌ P2 |
+| **Windows COM 转换** | ❌ | ❌ | ✅ COM→/dev/ttyS | ❌（原生路径格式）|
 
 ### 9.4 错误处理与提示
 
 | 特性 | esptool | espflash | ws63flash | hisiflash (规划) |
 |------|---------|----------|-----------|------------------|
-| **错误美化** | 基础 | ✅ miette fancy | 基础 perror | ✅ miette |
+| **错误美化** | 基础 | ✅ miette fancy | 基础 perror | ✅ anyhow+thiserror |
 | **故障排除链接** | ✅ 链接到文档 | ❌ | ❌ | ✅ P2 |
 | **Linux 权限提示** | ✅ dialout 提示 | ❌ | ❌ | ✅ |
 | **建议修复操作** | ❌ | ❌ | ❌ | ✅ P2 |
@@ -421,20 +422,19 @@ ESPTOOL_FF, ESPTOOL_FM, ESPTOOL_FS, ESPTOOL_CONNECT_ATTEMPTS
 ESPFLASH_PORT, ESPFLASH_BAUD, MONITOR_BAUD, ESPFLASH_SKIP_UPDATE_CHECK
 ```
 
-**hisiflash 环境变量 (规划):**
+**hisiflash 环境变量 (已实现):**
 ```bash
-HISIFLASH_PORT, HISIFLASH_BAUD, HISIFLASH_CHIP, HISIFLASH_BEFORE, HISIFLASH_AFTER
-HISIFLASH_CONFIG, HISIFLASH_LOG_LEVEL
+HISIFLASH_PORT, HISIFLASH_BAUD, HISIFLASH_CHIP, HISIFLASH_LANG, HISIFLASH_NON_INTERACTIVE
 ```
 
 ### 9.6 Shell 补全与 CLI 辅助
 
 | 特性 | esptool | espflash | ws63flash | hisiflash (规划) |
 |------|---------|----------|-----------|------------------|
-| **Shell 补全** | ❌ | ✅ Bash/Zsh/Fish/PowerShell | ❌ | ✅ P1 |
-| **串口 Tab 补全** | ❌ | ❌ | ❌ | ✅ P2 |
-| **波特率补全** | ✅ | ❌ | ✅ 列出可用 | ✅ |
-| **芯片名补全** | ❌ | ❌ | N/A | ✅ P2 |
+| **Shell 补全** | ❌ | ✅ Bash/Zsh/Fish/PowerShell | ❌ | ✅ completions 子命令 |
+| **串口 Tab 补全** | ❌ | ❌ | ❌ | ❌ P2 |
+| **波特率补全** | ✅ | ❌ | ✅ 列出可用 | ❌ |
+| **芯片名补全** | ❌ | ❌ | N/A | ✅（ValueEnum 自动）|
 | **@ 文件参数** | ✅ `@args.txt` | ❌ | ❌ | ✅ P3 |
 
 ### 9.7 数值解析
@@ -443,17 +443,17 @@ HISIFLASH_CONFIG, HISIFLASH_LOG_LEVEL
 |------|---------|----------|-----------|------------------|
 | **十六进制** | ✅ 0x | ✅ 0x/0X | ✅ 0x | ✅ |
 | **下划线分隔** | ❌ | ✅ `0x12_34` | ❌ | ✅ |
-| **大小后缀** | ✅ k/M | ✅ k/M | ❌ | ✅ k/M/G |
-| **all 关键字** | ❌ | ✅ `--size all` | ❌ | ✅ |
+| **大小后缀** | ✅ k/M | ✅ k/M | ❌ | ❌ P2 |
+| **all 关键字** | ❌ | ✅ `--size all` | ❌ | ❌ P2 |
 
 ### 9.8 烧写后操作
 
 | 特性 | esptool | espflash | ws63flash | hisiflash (规划) |
 |------|---------|----------|-----------|------------------|
-| **烧写后监控** | ❌ | ✅ `-M/--monitor` | ❌ | ✅ P1 |
-| **烧写后验证** | ✅ 内置 | ✅ `--no-verify` 禁用 | ❌ | ✅ `--verify` |
-| **校验和跳过** | ❌ | ✅ 匹配则跳过 | ❌ | ✅ P2 |
-| **自动复位** | ✅ `--after` | ✅ 默认 | ✅ | ✅ |
+| **烧写后监控** | ❌ | ✅ `-M/--monitor` | ❌ | ✅ `flash --monitor` |
+| **烧写后验证** | ✅ 内置 | ✅ `--no-verify` 禁用 | ❌ | ⚠️ `--skip-verify` 禁用 CRC 预检（非读回验证）|
+| **校验和跳过** | ❌ | ✅ 匹配则跳过 | ❌ | ❌ P2 |
+| **自动复位** | ✅ `--after` | ✅ 默认 | ✅ | ✅ 烧写后自动复位 |
 | **保持 stub** | ✅ `--after no_reset_stub` | ❌ | N/A | N/A |
 
 ### 9.9 串口监控功能
@@ -470,10 +470,10 @@ HISIFLASH_CONFIG, HISIFLASH_LOG_LEVEL
 
 | 特性 | esptool | espflash | ws63flash | hisiflash (规划) |
 |------|---------|----------|-----------|------------------|
-| **连接重试** | ✅ 7次默认 | ✅ | ❌ | ✅ 可配置 |
-| **可配置重试次数** | ✅ 环境变量 | ❌ | ❌ | ✅ |
-| **写块重试** | ✅ 3次 | ❌ | ❌ | ✅ |
-| **动态超时** | ✅ 按大小计算 | ❌ | 固定超时 | ✅ |
+| **连接重试** | ✅ 7次默认 | ✅ | ❌ | ✅ 7次（硬编码）|
+| **可配置重试次数** | ✅ 环境变量 | ❌ | ❌ | ❌ P2 |
+| **写块重试** | ✅ 3次 | ❌ | ❌ | ✅ 3次（硬编码）|
+| **动态超时** | ✅ 按大小计算 | ❌ | 固定超时 | ❌ P2 |
 | **自定义复位序列** | ✅ 配置文件 | ❌ | ❌ | ✅ P3 |
 
 **esptool 超时配置:**
@@ -507,18 +507,18 @@ connect_attempts = 7
 
 ## 10. 功能对比汇总
 
-### 9.1 基础用户体验
+### 10.1 基础用户体验
 
 | 特性 | esptool | espflash | ws63flash | hisiflash |
 |------|---------|----------|-----------|-----------|
 | 进度显示 | 文本百分比 | 彩色进度条 | 百分比 | 彩色进度条 |
 | 颜色输出 | 基础 | ✅ 丰富 | ❌ | ✅ 丰富 |
-| 错误提示 | 基础+链接 | 友好 | 基础 | 友好+建议 |
-| 自动检测芯片 | ✅ | ✅ | ❌ | ✅ |
+| 错误提示 | 基础+链接 | 友好 | 基础 | 友好（anyhow）|
+| 自动检测芯片 | ✅ | ✅ | ❌ | ✅（文件名推断）|
 | 自动检测串口 | ✅ | ✅ | ❌ | ✅ |
-| Shell补全 | ❌ | ✅ | ❌ | ✅ |
-| 配置文件 | ✅ | ✅ | ❌ | ✅ |
-| 环境变量 | ✅ 完整 | ✅ 基础 | ❌ | ✅ 完整 |
+| Shell补全 | ❌ | ✅ | ❌ | ✅ completions |
+| 配置文件 | ✅ | ✅ | ❌ | ✅ TOML |
+| 环境变量 | ✅ 完整 | ✅ 基础 | ❌ | ✅ PORT/BAUD/CHIP/LANG/NON_INTERACTIVE |
 
 ## 11. 值得借鉴的设计
 
@@ -651,7 +651,7 @@ connect_attempts = 7
 ### 13.4 可脚本化
 - 非交互模式支持 CI/CD
 - 环境变量覆盖所有关键参数
-- 退出码规范 (0=成功, 1=错误, 2=用户中断)
+- 退出码规范 (0=成功, 1=运行时错误, 2=用法错误, 3=配置错误, 130=Ctrl-C/中断)
 
 ### 13.5 可调试
 - 分级详细模式 (-v/-vv/-vvv)
